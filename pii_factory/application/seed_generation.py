@@ -5,7 +5,12 @@ from typing import Dict, List, Protocol, Sequence
 
 from .context_catalog import ALL_LABELS, compatible_context_frames
 from .content_vocabulary import build_content_seeds
-from .entity_variants import FakerEntityProvider, VietnameseAddressProvider, VIETNAMESE_ADMINISTRATIVE_AREAS
+from .entity_variants import (
+    FakerEntityProvider,
+    GeneratedEntityValue,
+    VietnameseAddressProvider,
+    VIETNAMESE_ADMINISTRATIVE_AREAS,
+)
 from .hard_negative_base import DecoyStrategy, digits as _digits, strategy as _strategy
 from .hard_negative_variants import ADDITIONAL_HARD_NEGATIVE_STRATEGIES
 from ..domain.models import (
@@ -42,7 +47,8 @@ _ALL_LABELS = ALL_LABELS
 
 
 SEMANTIC_ROLES: Dict[str, str] = {
-    "ADDRESS": "service_location", "DATE": "appointment_date", "TIME": "appointment_time",
+    "ADDRESS": "street_address", "LOCATION": "administrative_location",
+    "ZIP_CODE": "postal_code", "DATE": "appointment_date", "TIME": "appointment_time",
     "EMAIL": "contact_email", "PHONE": "contact_phone", "PERSON": "requester_name",
     "IP": "device_ip", "URL": "support_portal", "TICKET_ID": "support_ticket_id",
     "EMPLOYEE_ID": "employee_record_id", "NATIONAL_ID": "identity_document_number",
@@ -352,9 +358,16 @@ class PositiveSeedFactory:
     def _entities(self, task: GenerationTask, rng: random.Random) -> List[PositiveEntitySeed]:
         entities: List[PositiveEntitySeed] = []
         seen: set[str] = set()
+        linked_values: Dict[str, GeneratedEntityValue] = {}
+        if {"ADDRESS", "LOCATION"}.issubset(task.focus_labels):
+            address, location = self.provider.generate_address_location_pair(rng)
+            linked_values = {"ADDRESS": address, "LOCATION": location}
         for label in task.focus_labels:
             for _ in range(10):
-                generated = self.provider.generate_with_variant(label, rng)
+                generated = linked_values.pop(
+                    label,
+                    None,
+                ) or self.provider.generate_with_variant(label, rng)
                 value = generated.value
                 if value.strip().casefold() not in seen:
                     seen.add(value.strip().casefold())

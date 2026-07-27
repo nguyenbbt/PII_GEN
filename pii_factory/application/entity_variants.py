@@ -24,6 +24,19 @@ VIETNAMESE_ADMINISTRATIVE_AREAS: Dict[str, Dict[str, Sequence[str]]] = {
 }
 
 STREETS = ("Hoa Phượng", "Nguyễn Du", "Lê Lợi", "Trần Hưng Đạo", "Hoàng Diệu")
+VIETNAMESE_SURNAMES = (
+    "Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Huỳnh", "Phan", "Vũ",
+    "Võ", "Đặng", "Bùi", "Đỗ", "Hồ", "Ngô", "Dương", "Lý",
+)
+VIETNAMESE_MIDDLE_NAMES = (
+    "Văn", "Thị", "Đức", "Ngọc", "Minh", "Quốc", "Thanh", "Hải",
+    "Gia", "Hữu", "Khánh", "Xuân",
+)
+VIETNAMESE_GIVEN_NAMES = (
+    "An", "Bình", "Bảo", "Chi", "Dung", "Giang", "Hạnh", "Hiếu",
+    "Huy", "Khang", "Lan", "Linh", "Mai", "Nam", "Phương", "Quân",
+    "Trang", "Tú", "Uyên", "Yến",
+)
 
 
 @dataclass(frozen=True)
@@ -33,17 +46,44 @@ class GeneratedEntityValue:
 
 
 class VietnameseAddressProvider:
-    def generate_with_variant(self, rng: random.Random) -> GeneratedEntityValue:
+    def generate_pair_with_variants(
+        self,
+        rng: random.Random,
+    ) -> tuple[GeneratedEntityValue, GeneratedEntityValue]:
+        """Build one full address while preserving taxonomy span boundaries."""
         city = rng.choice(tuple(VIETNAMESE_ADMINISTRATIVE_AREAS))
         district = rng.choice(tuple(VIETNAMESE_ADMINISTRATIVE_AREAS[city]))
         ward = rng.choice(tuple(VIETNAMESE_ADMINISTRATIVE_AREAS[city][district]))
-        street = f"{rng.randint(1, 999)} đường {rng.choice(STREETS)}, {ward}, {district}, {city}"
-        variant = rng.choice(("street", "apartment", "building"))
-        if variant == "apartment":
+        street = f"{rng.randint(1, 999)} đường {rng.choice(STREETS)}"
+        address_variant = rng.choice(("street", "apartment", "building", "room"))
+        if address_variant == "apartment":
             street = f"Căn hộ {rng.choice('ABCDEFGH')}{rng.randint(1, 40):02d}, {street}"
-        elif variant == "building":
+        elif address_variant == "building":
             street = f"Tòa {rng.choice('ABCDEFGH')}, {street}"
-        return GeneratedEntityValue(street, variant)
+        elif address_variant == "room":
+            street = f"Phòng {rng.randint(101, 1608)}, {street}"
+
+        location_variant = rng.choice(("city", "district_city", "ward_district_city"))
+        locations = {
+            "city": city,
+            "district_city": f"{district}, {city}",
+            "ward_district_city": f"{ward}, {district}, {city}",
+        }
+        return (
+            GeneratedEntityValue(street, address_variant),
+            GeneratedEntityValue(locations[location_variant], location_variant),
+        )
+
+    def generate_with_variant(self, rng: random.Random) -> GeneratedEntityValue:
+        address, _ = self.generate_pair_with_variants(rng)
+        return address
+
+    def generate_location_with_variant(
+        self,
+        rng: random.Random,
+    ) -> GeneratedEntityValue:
+        _, location = self.generate_pair_with_variants(rng)
+        return location
 
     def generate(self, rng: random.Random) -> str:
         return self.generate_with_variant(rng).value
@@ -103,6 +143,12 @@ class FakerEntityProvider:
         except KeyError as exc:
             raise ValueError(f"no Faker provider registered for label {label}") from exc
 
+    def generate_address_location_pair(
+        self,
+        rng: random.Random,
+    ) -> tuple[GeneratedEntityValue, GeneratedEntityValue]:
+        return self.addresses.generate_pair_with_variants(rng)
+
     def _focus_value(
         self,
         label: str,
@@ -112,10 +158,20 @@ class FakerEntityProvider:
     ) -> GeneratedEntityValue | None:
         variant = rng.choice(("a", "b", "c"))
         if label == "PERSON":
-            values = {"a": faker.name, "b": lambda: f"{faker.last_name()} {faker.first_name()}",
-                      "c": lambda: f"{faker.last_name()} {faker.first_name()} {faker.first_name()}"}
-            names = {"a": "full_name", "b": "family_given", "c": "family_middle_given"}
-            return GeneratedEntityValue(values[variant]().replace("\n", " "), names[variant])
+            surname = rng.choice(VIETNAMESE_SURNAMES)
+            given_name = rng.choice(VIETNAMESE_GIVEN_NAMES)
+            middle_names = rng.sample(VIETNAMESE_MIDDLE_NAMES, 2)
+            values = {
+                "a": f"{surname} {given_name}",
+                "b": f"{surname} {middle_names[0]} {given_name}",
+                "c": f"{surname} {middle_names[0]} {middle_names[1]} {given_name}",
+            }
+            names = {
+                "a": "family_given",
+                "b": "family_middle_given",
+                "c": "family_double_middle_given",
+            }
+            return GeneratedEntityValue(values[variant], names[variant])
         if label == "PHONE":
             compact = rng.choice(("032", "037", "056", "076", "091")) + digits(7)
             values = {"a": compact, "b": f"{compact[:4]} {compact[4:7]} {compact[7:]}",
@@ -129,11 +185,7 @@ class FakerEntityProvider:
         if label == "ADDRESS":
             return self.addresses.generate_with_variant(rng)
         if label == "LOCATION":
-            city = rng.choice(tuple(VIETNAMESE_ADMINISTRATIVE_AREAS))
-            district = rng.choice(tuple(VIETNAMESE_ADMINISTRATIVE_AREAS[city]))
-            ward = rng.choice(tuple(VIETNAMESE_ADMINISTRATIVE_AREAS[city][district]))
-            return GeneratedEntityValue({"a": city, "b": f"{district}, {city}", "c": f"{ward}, {district}, {city}"}[variant],
-                                        {"a": "city", "b": "district_city", "c": "ward_district_city"}[variant])
+            return self.addresses.generate_location_with_variant(rng)
         if label == "DATE":
             day, month, year = rng.randint(1, 28), rng.randint(1, 12), rng.randint(2020, 2035)
             return GeneratedEntityValue({"a": f"{day:02d}/{month:02d}/{year}", "b": f"{year}-{month:02d}-{day:02d}",

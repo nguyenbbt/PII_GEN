@@ -194,8 +194,22 @@ class SeedPackValidator:
             except ValueError:
                 return False
         if label == "ADDRESS":
-            cities = tuple(VIETNAMESE_ADMINISTRATIVE_AREAS)
-            return " đường " in value and "phường" in value and any(value.endswith(city) for city in cities)
+            normalized = value.casefold()
+            administrative_markers = (
+                "phường", "quận", "huyện", "tỉnh",
+                *(city.casefold() for city in VIETNAMESE_ADMINISTRATIVE_AREAS),
+            )
+            has_street_detail = bool(re.search(
+                r"(?:^|,\s*)"
+                r"(?:căn hộ\s+[A-Z]\d+,\s*|tòa\s+\S+,\s*|phòng\s+\d+,\s*)?"
+                r"\d+\s+đường\s+\S+",
+                value,
+                re.IGNORECASE,
+            ))
+            return (
+                has_street_detail
+                and not any(marker in normalized for marker in administrative_markers)
+            )
         if label in {"CARD_NUMBER", "NATIONAL_ID", "BANK_ACCOUNT", "TIN", "ZIP_CODE", "CVV", "PIN"}:
             return value.isdigit()
         return bool(value.strip())

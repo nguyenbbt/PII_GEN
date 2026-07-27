@@ -13,6 +13,50 @@ FOCUS_LABELS = (
 
 
 class EntityVariantTests(unittest.TestCase):
+    def test_person_provider_emits_only_natural_vietnamese_names(self) -> None:
+        provider = FakerEntityProvider("vi_VN")
+
+        values = [
+            provider.generate_with_variant("PERSON", random.Random(seed)).value
+            for seed in range(200)
+        ]
+
+        self.assertTrue(all(2 <= len(value.split()) <= 4 for value in values))
+        self.assertTrue(all(
+            len({part.casefold() for part in value.split()}) == len(value.split())
+            for value in values
+        ))
+        self.assertFalse(any(
+            forbidden.casefold() in value.casefold()
+            for value in values
+            for forbidden in ("John", "Jane", "Smith")
+        ))
+
+    def test_address_and_location_providers_keep_taxonomy_boundaries(self) -> None:
+        provider = FakerEntityProvider("vi_VN")
+
+        addresses = [
+            provider.generate_with_variant("ADDRESS", random.Random(seed)).value
+            for seed in range(100)
+        ]
+        locations = [
+            provider.generate_with_variant("LOCATION", random.Random(seed)).value
+            for seed in range(100)
+        ]
+
+        self.assertTrue(all(
+            any(marker in value.casefold() for marker in ("đường", "căn hộ", "tòa", "phòng"))
+            for value in addresses
+        ))
+        self.assertTrue(all(
+            not any(marker in value.casefold() for marker in ("phường", "quận", "huyện"))
+            for value in addresses
+        ))
+        self.assertTrue(all(
+            any(marker in value.casefold() for marker in ("phường", "quận", "huyện", "hà nội", "đà nẵng", "hồ chí minh"))
+            for value in locations
+        ))
+
     def test_focus_labels_have_multiple_reproducible_format_variants(self) -> None:
         provider = FakerEntityProvider("vi_VN")
 

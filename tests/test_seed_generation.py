@@ -125,8 +125,34 @@ class SeedGenerationTests(unittest.TestCase):
 
         self.assertEqual(first, repeated)
         self.assertNotEqual(first, different)
-        self.assertIn(" đường ", first)
-        self.assertIn("phường", first)
+        self.assertTrue(any(
+            marker in first.casefold()
+            for marker in ("đường", "căn hộ", "tòa", "phòng")
+        ))
+        self.assertNotIn("phường", first.casefold())
+        self.assertNotIn("quận", first.casefold())
+
+    def test_full_address_is_split_into_linked_address_location_and_zip_seeds(self) -> None:
+        labels = [
+            TaxonomyLabel(code=code, definition=code)
+            for code in ("ADDRESS", "LOCATION", "ZIP_CODE")
+        ]
+        pack = PositiveSeedFactory(self.provider, self.selector).build(
+            task("positive", [label.code for label in labels]),
+            labels,
+            random.Random(42),
+        )
+        seeds = {seed.label: seed for seed in pack.positive_entities}
+
+        self.assertEqual(set(seeds), {"ADDRESS", "LOCATION", "ZIP_CODE"})
+        self.assertNotRegex(seeds["ADDRESS"].value.casefold(), r"phường|quận|huyện")
+        self.assertRegex(
+            seeds["LOCATION"].value.casefold(),
+            r"phường|quận|huyện|hà nội|đà nẵng|hồ chí minh",
+        )
+        self.assertRegex(seeds["ZIP_CODE"].value, r"^\d{6}$")
+        self.assertEqual(seeds["ADDRESS"].semantic_role, "street_address")
+        self.assertEqual(seeds["LOCATION"].semantic_role, "administrative_location")
 
     def test_unknown_label_routes_to_context_scope(self) -> None:
         with self.assertRaises(ContextSelectionError) as captured:
