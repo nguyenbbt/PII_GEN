@@ -535,6 +535,8 @@ class Pipeline:
                 if deterministic_route == "REJECTED":
                     self._reject_task(run, task, "TEXT", validation.issues)
                     return None
+                if deterministic_route == "REGENERATE":
+                    raise OutputValidationError(validation)
                 verifier_enabled = run.config.verifier.enabled
                 if not verifier_enabled:
                     if deterministic_route in {"REGENERATE", "FIXABLE"}:

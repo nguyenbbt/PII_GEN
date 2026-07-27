@@ -244,6 +244,7 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertEqual(verified.tagged_text, candidate().tagged_text)
         self.assertEqual(client.repair_messages, [])
         system_prompt = client.judge_messages[0][0]["content"]
+        compact_system_prompt = " ".join(system_prompt.split())
         user_payload = json.loads(client.judge_messages[0][1]["content"])
         self.assertIn("untrusted data", system_prompt)
         self.assertIn("deterministic_metrics", system_prompt)
@@ -254,8 +255,31 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertIn("unnatural", system_prompt)
         self.assertIn("at most 5 issues", system_prompt)
         self.assertIn("low, medium, high, or critical", system_prompt)
-        self.assertIn("minor, major, warning, error", system_prompt)
-        self.assertEqual(user_payload["candidate"]["task_id"], "task-1")
+        self.assertIn(
+            "minor, major, warning, error",
+            compact_system_prompt,
+        )
+        self.assertEqual(
+            set(user_payload["candidate"]),
+            {"tagged_text", "entities"},
+        )
+        self.assertNotIn("run_id", user_payload["task"])
+        self.assertNotIn("random_seed", user_payload["task"])
+        self.assertNotIn("token_usage", user_payload["candidate"])
+        self.assertNotIn("output_hash", user_payload["candidate"])
+        self.assertLess(len(system_prompt), 3500)
+        legacy_envelope = {
+            "task": task().dict(),
+            "seed_pack": seed_pack().dict(),
+            "taxonomy_context": self.taxonomy_context.dict(),
+            "deterministic_issues": [],
+            "candidate": candidate().dict(),
+        }
+        legacy_size = len(
+            json.dumps(legacy_envelope, ensure_ascii=False, default=str)
+        )
+        compact_size = len(client.judge_messages[0][1]["content"])
+        self.assertLess(compact_size, legacy_size * 0.75)
         self.assertTrue(
             user_payload["deterministic_metrics"]["word_range_satisfied"]
         )

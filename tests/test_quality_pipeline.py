@@ -20,6 +20,57 @@ from pii_factory.domain.models import (
 
 
 class QualityFirstPipelineTests(unittest.TestCase):
+    def test_regenerate_deterministic_failure_skips_paid_verifier(self) -> None:
+        class ShortGenerator:
+            @staticmethod
+            def generate(messages):
+                payload = json.loads(
+                    messages[-1]["content"].split("```json\n", 1)[1].split(
+                        "\n```", 1
+                    )[0]
+                )
+                seed = payload["positive_entities"][0]
+                return (
+                    f"<{seed['label']}>{seed['value']}</{seed['label']}>.",
+                    [{"label": seed["label"], "value": seed["value"]}],
+                    10,
+                    5,
+                    15,
+                )
+
+        class VerifierMustNotRun:
+            @staticmethod
+            def judge(messages):
+                raise AssertionError(
+                    "deterministic REGENERATE must not call the paid verifier"
+                )
+
+            @staticmethod
+            def repair(messages):
+                raise AssertionError("repair must not run")
+
+        with TemporaryDirectory() as directory:
+            pipeline, repository, events = build_pipeline(
+                offline=True,
+                output_directory=Path(directory),
+            )
+            pipeline.enforce_quality_targets = True
+            pipeline.generator.client = ShortGenerator()
+            pipeline.verifier.client = VerifierMustNotRun()
+            run = pipeline.create_run(self._positive_person_request(
+                max_regenerate_attempts=0,
+                max_task_replacements=0,
+                verifier={"enabled": True},
+            ))
+
+            results = pipeline.generate_pending(run.run_id, 1)
+
+            self.assertEqual(results, [])
+            self.assertEqual(repository.get_run(run.run_id).status, "FAILED")
+            event_types = [event.event_type for event in events.list_events()]
+            self.assertIn("data.generation.rejected", event_types)
+            self.assertNotIn("data.verification.judged", event_types)
+
     def test_explicit_verifier_switch_runs_judge_when_legacy_quality_flag_is_false(self) -> None:
         with TemporaryDirectory() as directory:
             pipeline, _, _ = build_pipeline(
