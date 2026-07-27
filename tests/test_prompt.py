@@ -50,7 +50,7 @@ class DataGeneratorPromptTests(unittest.TestCase):
 
         messages = build_messages(request)
 
-        self.assertEqual(PROMPT_VERSION, "data-generator.v10.0.0")
+        self.assertEqual(PROMPT_VERSION, "data-generator.v11.0.0")
         self.assertEqual(messages[0], {"role": "system", "content": SYSTEM_PROMPT})
         self.assertNotIn("task-1", messages[0]["content"])
         self.assertIn("# Generation Request", messages[1]["content"])
@@ -182,7 +182,8 @@ class DataGeneratorPromptTests(unittest.TestCase):
 
         self.assertEqual(envelope["required_entity_count"], 5)
         self.assertIn("260 and 400 words", rules)
-        self.assertIn("10 to 14", rules)
+        self.assertIn("330 whitespace-separated words", rules)
+        self.assertNotIn("10 to 14 connected content units", rules)
         self.assertIn("multiple sentences", rules)
         self.assertIn("comma-separated", rules)
         self.assertIn("street-level", rules)

@@ -20,7 +20,7 @@ from ..domain.models import (
 from ..ports import VerifierClient
 
 
-JUDGE_PROMPT_VERSION = "verifier-judge.v2.0.0"
+JUDGE_PROMPT_VERSION = "verifier-judge.v2.2.0"
 REPAIR_PROMPT_VERSION = "verifier-repair.v1.0.0"
 
 _JUDGE_SYSTEM_PROMPT = f"""You are an independent quality judge for synthetic PII NER data.
@@ -33,10 +33,16 @@ provided in the JSON envelope.
 Evaluate every candidate against all of these gates:
 - Treat deterministic_issues as binding evidence. PASS is forbidden when that array
   is non-empty; route the candidate according to the issue severity.
-- Count clean-text words after ignoring XML-like annotation tags. The count must be
-  within task.length_target.min_words and task.length_target.max_words. For chat,
-  also enforce the requested turn range; for contract, enforce the requested
-  connected content-unit range.
+- Treat deterministic_metrics.clean_word_count and word_range_satisfied as the
+  authoritative length measurement; do not estimate or recount words. For chat,
+  also enforce the supplied chat_turn_count and chat_turn_range_satisfied values.
+  For contract, assess realistic structure and coherence but do not invent a
+  numeric content-unit count from clauses, fields, sentences, or paragraphs.
+- The deterministic gate already owns exact length, entity count, seed presence,
+  tag syntax, and metadata agreement. When its issues array is empty and its metric
+  is satisfied, never report length_out_of_range or entity_count_mismatch. Judge
+  semantic role fit, naturalness, coherence, boundary meaning, decoy clarity, and
+  few-shot imitation instead.
 - Every positive seed must appear verbatim once with its assigned label, and the
   entity count must equal the seed contract. Required entities must be distributed
   naturally through the same event, never dumped into a comma-separated inventory.
@@ -171,14 +177,19 @@ class VerifierService:
         revalidate: Callable[[GenerationCandidate], DeterministicValidationResult],
         deterministic_issues: Sequence[VerificationIssue] = (),
     ) -> tuple[GenerationCandidate, VerificationTrace]:
-        initial = self.client.judge(
-            self._judge_messages(
-                candidate=candidate,
-                task=task,
-                seed_pack=seed_pack,
-                taxonomy_context=taxonomy_context,
-                deterministic_issues=deterministic_issues,
-            )
+        metrics = self._quality_metrics(candidate, task, seed_pack)
+        initial = self._reconcile_authoritative_metrics(
+            self.client.judge(
+                self._judge_messages(
+                    candidate=candidate,
+                    task=task,
+                    seed_pack=seed_pack,
+                    taxonomy_context=taxonomy_context,
+                    deterministic_issues=deterministic_issues,
+                )
+            ),
+            metrics=metrics,
+            deterministic_issues=deterministic_issues,
         )
         if initial.status == "PASS":
             return candidate, VerificationTrace(initial_judge=initial, outcome="PASS")
@@ -259,14 +270,22 @@ class VerifierService:
                 ),
             )
 
-        final = self.client.judge(
-            self._judge_messages(
-                candidate=repaired_candidate,
-                task=task,
-                seed_pack=seed_pack,
-                taxonomy_context=taxonomy_context,
-                deterministic_issues=(),
-            )
+        final = self._reconcile_authoritative_metrics(
+            self.client.judge(
+                self._judge_messages(
+                    candidate=repaired_candidate,
+                    task=task,
+                    seed_pack=seed_pack,
+                    taxonomy_context=taxonomy_context,
+                    deterministic_issues=(),
+                )
+            ),
+            metrics=self._quality_metrics(
+                repaired_candidate,
+                task,
+                seed_pack,
+            ),
+            deterministic_issues=(),
         )
         if final.status != "PASS":
             status = "REJECTED" if final.status == "REJECTED" else "REGENERATE"
@@ -301,6 +320,11 @@ class VerifierService:
             "seed_pack": seed_pack.dict(),
             "taxonomy_context": taxonomy_context.dict(),
             "deterministic_issues": [issue.dict() for issue in deterministic_issues],
+            "deterministic_metrics": VerifierService._quality_metrics(
+                candidate,
+                task,
+                seed_pack,
+            ),
             "candidate": candidate.dict(),
         }
         return [
@@ -310,6 +334,76 @@ class VerifierService:
                 "content": json.dumps(envelope, ensure_ascii=False, default=str),
             },
         ]
+
+    @staticmethod
+    def _quality_metrics(
+        candidate: GenerationCandidate,
+        task: GenerationTask,
+        seed_pack: SeedPack,
+    ) -> dict[str, int | bool | None]:
+        clean_text = re.sub(
+            r"</?[A-Za-z][A-Za-z0-9_]*>",
+            "",
+            candidate.tagged_text,
+        ).strip()
+        word_count = len(re.findall(r"\S+", clean_text))
+        target = task.length_target
+        is_chat = task.sample_structure.type == "chat"
+        chat_turn_count = (
+            sum(
+                1
+                for line in clean_text.splitlines()
+                if re.match(r"^\s*[^:\n]+:\s*\S", line)
+            )
+            if is_chat
+            else None
+        )
+        return {
+            "clean_word_count": word_count,
+            "word_range_satisfied": (
+                target.min_words <= word_count <= target.max_words
+            ),
+            "chat_turn_count": chat_turn_count,
+            "chat_turn_range_satisfied": (
+                target.min_units <= chat_turn_count <= target.max_units
+                if chat_turn_count is not None
+                else None
+            ),
+            "expected_entity_count": len(seed_pack.positive_entities),
+            "actual_entity_count": len(candidate.entities),
+            "entity_count_satisfied": (
+                len(seed_pack.positive_entities) == len(candidate.entities)
+            ),
+        }
+
+    @staticmethod
+    def _reconcile_authoritative_metrics(
+        decision: VerifierDecision,
+        *,
+        metrics: dict[str, int | bool | None],
+        deterministic_issues: Sequence[VerificationIssue],
+    ) -> VerifierDecision:
+        if deterministic_issues or decision.status == "PASS":
+            return decision
+
+        def contradicted(issue: VerificationIssue) -> bool:
+            issue_type = issue.type.strip().casefold()
+            if issue_type == "length_out_of_range":
+                return bool(metrics["word_range_satisfied"]) and (
+                    metrics["chat_turn_range_satisfied"] is not False
+                )
+            if issue_type == "entity_count_mismatch":
+                return bool(metrics["entity_count_satisfied"])
+            return False
+
+        remaining = [
+            issue for issue in decision.issues if not contradicted(issue)
+        ]
+        if len(remaining) == len(decision.issues):
+            return decision
+        if not remaining:
+            return decision.copy(update={"status": "PASS", "issues": []})
+        return decision.copy(update={"issues": remaining})
 
     @staticmethod
     def _repair_messages(

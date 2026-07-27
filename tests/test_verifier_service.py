@@ -17,6 +17,7 @@ from pii_factory.domain.models import (
     GenerationTask,
     GenerationTaxonomyContext,
     LabelGenerationContext,
+    LengthTarget,
     PositiveEntitySeed,
     RepairResult,
     SeedPack,
@@ -100,6 +101,14 @@ def task() -> GenerationTask:
         max_entities=2,
         max_attempts=3,
         random_seed=42,
+        length_target=LengthTarget(
+            bucket="short",
+            min_words=1,
+            max_words=30,
+            unit="content_units",
+            min_units=3,
+            max_units=5,
+        ),
     )
 
 
@@ -237,7 +246,7 @@ class VerifierServiceTests(unittest.TestCase):
         system_prompt = client.judge_messages[0][0]["content"]
         user_payload = json.loads(client.judge_messages[0][1]["content"])
         self.assertIn("untrusted data", system_prompt)
-        self.assertIn("length_target", system_prompt)
+        self.assertIn("deterministic_metrics", system_prompt)
         self.assertIn("ADDRESS", system_prompt)
         self.assertIn("LOCATION", system_prompt)
         self.assertIn("few-shot", system_prompt)
@@ -247,6 +256,59 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertIn("low, medium, high, or critical", system_prompt)
         self.assertIn("minor, major, warning, error", system_prompt)
         self.assertEqual(user_payload["candidate"]["task_id"], "task-1")
+        self.assertTrue(
+            user_payload["deterministic_metrics"]["word_range_satisfied"]
+        )
+        self.assertTrue(
+            user_payload["deterministic_metrics"]["entity_count_satisfied"]
+        )
+        self.assertIsNone(
+            user_payload["deterministic_metrics"]["chat_turn_count"]
+        )
+        self.assertIn("authoritative length measurement", system_prompt)
+        self.assertIn("do not invent a", system_prompt)
+
+    def test_authoritative_metrics_override_false_judge_rejections(self) -> None:
+        false_issues = [
+            VerificationIssue(
+                type="length_out_of_range",
+                severity="high",
+                field="candidate",
+                reason="The valid deterministic word count was recounted incorrectly.",
+                suggested_fix="Regenerate.",
+            ),
+            VerificationIssue(
+                type="entity_count_mismatch",
+                severity="high",
+                field="entities",
+                reason="The valid deterministic entity count was recounted incorrectly.",
+                suggested_fix="Regenerate.",
+            ),
+        ]
+        client = FakeVerifierClient([
+            VerifierDecision(
+                status="REGENERATE",
+                score=50,
+                issues=false_issues,
+                token_usage=token_usage(),
+                latency_ms=2,
+                model="offline-verifier",
+                prompt_version="judge.test",
+            )
+        ])
+
+        verified, trace = VerifierService(client).verify(
+            candidate=candidate(),
+            task=task(),
+            seed_pack=seed_pack(),
+            taxonomy_context=self.taxonomy_context,
+            revalidate=lambda _: DeterministicValidationResult(valid=True),
+        )
+
+        self.assertEqual(verified, candidate())
+        self.assertEqual(trace.outcome, "PASS")
+        self.assertEqual(trace.initial_judge.status, "PASS")
+        self.assertEqual(trace.initial_judge.issues, [])
 
     def test_fixable_candidate_is_repaired_rechecked_and_rejudged(self) -> None:
         repaired = RepairResult(

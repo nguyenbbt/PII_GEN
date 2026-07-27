@@ -6,7 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from .contracts import DataGenerationRequest
 
-PROMPT_VERSION = "data-generator.v10.0.0"
+PROMPT_VERSION = "data-generator.v11.0.0"
 
 SYSTEM_PROMPT = """# Role
 You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
@@ -199,10 +199,7 @@ def _sample_structure_rules(task: Mapping[str, Any]) -> list[str]:
         return [
             "Write a realistic business or administrative document fragment, not a chat conversation.",
             variant_rule,
-            (
-                f"Use {target['min_units']} to {target['max_units']} connected content units "
-                "such as clauses, fields, paragraphs, or action records in one coherent business process."
-            ),
+            "Use enough connected clauses, fields, paragraphs, or action records to meet the word target in one coherent business process; content units are structural guidance, not a numeric quota.",
         ]
     if structure_type == "chat":
         variant_rule = STRUCTURE_RULES.get(
@@ -228,6 +225,9 @@ def _sample_structure_rules(task: Mapping[str, Any]) -> list[str]:
 def _realization_rules(task: Mapping[str, Any]) -> list[str]:
     profile = task.get("diversity_profile") or {}
     target = _length_target(task)
+    target_words = round(
+        (int(target["min_words"]) + int(target["max_words"])) / 2
+    )
     rules = [
         DIFFICULTY_RULES.get(str(task.get("difficulty", "medium")), DIFFICULTY_RULES["medium"]),
     ]
@@ -248,6 +248,10 @@ def _realization_rules(task: Mapping[str, Any]) -> list[str]:
         (
             f"Write between {target['min_words']} and {target['max_words']} words in clean text "
             "after removing annotation tags; this numeric target overrides any old sentence cap in context metadata."
+        ),
+        (
+            f"Aim for {target_words} whitespace-separated words. Count the clean-text draft before returning "
+            "and expand or trim meaningful business details until it remains inside the required range."
         ),
         "Distribute entity seeds across multiple sentences or turns; never join them into a comma-separated entity inventory.",
         "Avoid a stock opening or sentence skeleton that could be reused across unrelated samples.",
