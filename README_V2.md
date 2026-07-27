@@ -609,6 +609,8 @@ CLI in:
 - accepted sample count;
 - input/output/total tokens;
 - `money_cost`;
+- diagnostics: candidate bị loại, deterministic/Verifier rejection, task replacement,
+  verification outcome và issue-type counts;
 - các formatted sample.
 
 ### 7.4 Chạy online

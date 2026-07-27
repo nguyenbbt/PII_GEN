@@ -77,6 +77,9 @@ class PiiFactoryCliTests(unittest.TestCase):
             self.assertEqual(payload["status"], "COMPLETED")
             self.assertIn("smoke", payload["output_path"].casefold())
             self.assertIn("not a dataset", errors.getvalue().casefold())
+            self.assertEqual(payload["diagnostics"]["generated_candidates"], 1)
+            self.assertEqual(payload["diagnostics"]["discarded_candidates"], 0)
+            self.assertEqual(payload["diagnostics"]["task_replacements"], 0)
 
 
 if __name__ == "__main__":

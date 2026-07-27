@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 import os
 from pathlib import Path
@@ -56,7 +57,7 @@ def main() -> None:
                 file=sys.stderr,
             )
         taxonomy_path = args.taxonomy_json or DEFAULT_TAXONOMY_PATH
-        pipeline, repository, _ = build_pipeline(
+        pipeline, repository, event_bus = build_pipeline(
             offline=args.offline,
             output_directory=args.output_dir,
         )
@@ -102,6 +103,36 @@ def main() -> None:
             (usage.money_cost for usage in pipeline_usages),
             start=0,
         )
+        run_events = [
+            event
+            for event in event_bus.list_events()
+            if event.correlation_id == run.run_id
+        ]
+        event_counts = Counter(event.event_type for event in run_events)
+        issue_counts: Counter[str] = Counter()
+        for event in run_events:
+            if event.event_type == "data.generation.rejected":
+                issues = (
+                    event.payload.get("output_validation", {}).get("issues", [])
+                )
+            elif event.event_type == "data.verification.rejected":
+                issues = event.payload.get("issues", [])
+            else:
+                issues = []
+            issue_counts.update(
+                str(issue.get("type", "unknown"))
+                for issue in issues
+                if isinstance(issue, dict)
+            )
+        verification_outcomes = Counter(
+            result.verification_trace.outcome
+            for result in results
+            if result.verification_trace is not None
+        )
+        generated_candidates = event_counts["data.generated"]
+        accepted_with_verifier = sum(verification_outcomes.values())
+        verifier_rejections = event_counts["data.verification.rejected"]
+        verifier_decisions = accepted_with_verifier + verifier_rejections
         print(json.dumps({
             "taxonomy_version_id": taxonomy.version_id,
             "labels": len(taxonomy.labels),
@@ -114,6 +145,26 @@ def main() -> None:
                 "output_tokens": total_output_tokens,
                 "total_tokens": total_tokens,
                 "money_cost": str(total_money_cost),
+            },
+            "diagnostics": {
+                "generated_candidates": generated_candidates,
+                "discarded_candidates": max(
+                    0,
+                    generated_candidates - len(results),
+                ),
+                "deterministic_rejections": event_counts[
+                    "data.generation.rejected"
+                ],
+                "verifier_rejections": verifier_rejections,
+                "task_replacements": event_counts[
+                    "generation.task.replaced"
+                ],
+                "verification_outcomes": dict(verification_outcomes),
+                "verifier_candidate_pass_rate": (
+                    accepted_with_verifier / verifier_decisions
+                    if verifier_decisions else None
+                ),
+                "rejection_issue_types": dict(issue_counts),
             },
             "samples": [
                 result.formatted_sample.dict()
