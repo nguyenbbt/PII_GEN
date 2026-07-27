@@ -201,14 +201,18 @@ class SeedPackValidator:
                 *(city.casefold() for city in VIETNAMESE_ADMINISTRATIVE_AREAS),
             )
             has_street_detail = bool(re.search(
-                r"(?:^|,\s*)"
-                r"(?:căn hộ\s+[A-Z]\d+,\s*|tòa\s+\S+,\s*|phòng\s+\d+,\s*)?"
-                r"\d+\s+đường\s+\S+",
+                r"\b\d+\s+đường\s+\S+",
+                value,
+                re.IGNORECASE,
+            ))
+            has_premise_detail = bool(re.search(
+                r"\b(?:căn hộ|phòng)\s+[A-Z0-9-]+"
+                r"|\btòa(?:\s+nhà)?\s+[\w-]+",
                 value,
                 re.IGNORECASE,
             ))
             return (
-                has_street_detail
+                (has_street_detail or has_premise_detail)
                 and not any(marker in normalized for marker in administrative_markers)
             )
         if label in {"CARD_NUMBER", "NATIONAL_ID", "BANK_ACCOUNT", "TIN", "ZIP_CODE", "CVV", "PIN"}:

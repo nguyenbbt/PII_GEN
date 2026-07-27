@@ -40,6 +40,36 @@ class DeterministicValidatorTests(unittest.TestCase):
         self.assertFalse(result.valid)
         self.assertIn("mixed_locale", {issue.type for issue in result.issues})
 
+    def test_seed_validator_accepts_standalone_street_level_address_components(self) -> None:
+        for value in (
+            "Căn hộ A12, Tòa nhà Bình Minh",
+            "Phòng 804, Tòa B",
+            "125 đường Lê Lợi",
+        ):
+            with self.subTest(value=value):
+                pack = SeedPack(
+                    task_id="valid-address",
+                    sample_type="positive",
+                    context_frame=frame(),
+                    positive_entities=[
+                        PositiveEntitySeed(
+                            label="ADDRESS",
+                            value=value,
+                            semantic_role="street_address",
+                        )
+                    ],
+                )
+                result = SeedPackValidator(
+                    HardNegativeConfig(),
+                    self.config,
+                ).validate(
+                    pack,
+                    ["ADDRESS"],
+                    [TaxonomyLabel(code="ADDRESS", definition="address")],
+                )
+
+                self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
+
     def test_output_rejects_modified_positive_seed_and_wrong_tag(self) -> None:
         pack = SeedPack(
             task_id="positive-1", sample_type="positive", context_frame=frame(),
