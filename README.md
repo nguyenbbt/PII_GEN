@@ -11,10 +11,11 @@ POST /api/v1/runs
   → Run Orchestrator
   → Coverage Controller
   → DiversityPlanner (seeded quota + balanced context)
-  → SampleTypeRouter + Faker/controlled seed factories
+  → SampleTypeRouter + multilingual Value Bank
   → SeedPackValidator + ContextFrameSelector
   → JSON Taxonomy Context Selector
-  → Data Generator (Azure OpenAI)
+  → Data Generator (Azure OpenAI placeholder skeleton)
+  → Python placeholder binding (Value Bank values)
   → technical DeterministicOutputValidator + FewShotImitationGuard
   → optional NoveltyGuard + LLM Judge/Repair
   → OutputFormatter
@@ -22,6 +23,12 @@ POST /api/v1/runs
 ```
 
 Hard-negative mặc định chạy theo mode `decoy_only`: hệ thống chọn ngẫu nhiên đúng một mã trong `focus_labels`, tạo decoy theo registry phủ đủ 44 mã của taxonomy, không tạo positive entity và yêu cầu output `entities: []`. Chỉ mã nhãn chính xác từ taxonomy snapshot được chấp nhận; tài liệu PDF hard-negative chỉ cung cấp nguyên tắc thiết kế ví dụ, không cung cấp label cho code.
+
+Positive entity value được lấy từ `PII_Value_Bank/{vi,en,de}_pii_value_pools.json`
+theo `RunConfig.language` và taxonomy class. LLM chỉ viết nội dung cùng placeholder
+như `[PERSON_1]`; Python chèn value trước validator và formatter. Cấu hình thư mục
+qua `value_bank.path` trong run config. Xem chi tiết tại
+[README_V2.md](README_V2.md#34-value-bank-và-seed-generation).
 
 - Tài liệu kiến trúc tổng thể: [README_V2.md](README_V2.md)
 - Hướng dẫn chi tiết pipeline đã triển khai: [README_V2.md](README_V2.md)

@@ -8,6 +8,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Dict, List
 from uuid import uuid4
 
+from data_generator_worker.placeholders import replace_entity_placeholders
 from data_generator_worker.prompt import PROMPT_VERSION, build_prompt_messages
 
 from ..domain.models import (
@@ -48,6 +49,7 @@ from .seed_generation import (
 )
 from .taxonomy_service import TaxonomyService
 from .validators import DeterministicOutputValidator, SeedPackValidator
+from .value_bank import ValueBankError
 from .verification import (
     DeterministicIssueRouter,
     VerificationRoutingError,
@@ -271,6 +273,13 @@ class DataGenerator:
             tagged_text, raw_entities, input_tokens, output_tokens, total_tokens = self.client.generate(
                 self._messages(request)
             )
+            tagged_text, raw_entities = replace_entity_placeholders(
+                tagged_text=tagged_text,
+                entities=raw_entities,
+                positive_entities=[
+                    entity.dict() for entity in request.seed_pack.positive_entities
+                ],
+            )
         except ValueError as exc:
             raise OutputValidationError(DeterministicValidationResult(
                 valid=False,
@@ -364,11 +373,18 @@ class Pipeline:
         self, task: GenerationTask, taxonomy: List[TaxonomyLabel], run: Run
     ) -> tuple[SeedPack, DeterministicValidationResult]:
         rng = random.Random(task.random_seed)
-        router = build_sample_type_router(run.config.faker, run.config.hard_negative)
+        router = build_sample_type_router(
+            run.config.value_bank,
+            run.config.hard_negative,
+        )
         validator = SeedPackValidator(run.config.hard_negative, run.config.validation)
         last_issues: List[ValidationIssue] = []
         last_scope = "SEEDS"
-        for seed_attempt in range(1, run.config.faker.max_seed_pack_attempts + 1):
+        for seed_attempt in range(
+            1,
+            run.config.value_bank.max_seed_pack_attempts + 1,
+        ):
+            terminal_value_bank_error = False
             try:
                 pack = router.build_seed_pack(task, taxonomy, rng)
                 validation = validator.validate(pack, task.focus_labels, taxonomy)
@@ -390,6 +406,16 @@ class Pipeline:
             except UnsupportedDecoyError as exc:
                 last_scope = "SEEDS"
                 last_issues = [ValidationIssue(type="unsupported_decoy", scope="SEEDS", reason=str(exc))]
+            except ValueBankError as exc:
+                last_scope = "SEEDS"
+                last_issues = [
+                    ValidationIssue(
+                        type="value_bank_error",
+                        scope="SEEDS",
+                        reason=str(exc),
+                    )
+                ]
+                terminal_value_bank_error = True
             self.event_bus.publish(EventEnvelope(
                 event_type="seed.rejected", correlation_id=task.run_id,
                 idempotency_key=f"task:{task.task_id}:seed-attempt:{seed_attempt}:rejected",
@@ -398,6 +424,8 @@ class Pipeline:
                     "issues": [issue.dict() for issue in last_issues], "regeneration_scope": last_scope,
                 },
             ))
+            if terminal_value_bank_error:
+                break
         raise SeedPlanningError(last_scope, last_issues)
 
     def generate_pending(self, run_id: str, limit: int) -> List[DataGenerationResult]:
@@ -464,7 +492,10 @@ class Pipeline:
         )
         retry_rng = random.Random(task.random_seed ^ 0x5EED_77)
         retry_router = RegenerationRouter(
-            build_sample_type_router(run.config.faker, run.config.hard_negative),
+            build_sample_type_router(
+                run.config.value_bank,
+                run.config.hard_negative,
+            ),
             ContextFrameSelector(),
         )
         seed_validator = SeedPackValidator(run.config.hard_negative, run.config.validation)

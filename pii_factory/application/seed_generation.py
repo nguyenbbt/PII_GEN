@@ -5,13 +5,13 @@ from typing import Dict, List, Protocol, Sequence
 
 from .context_catalog import ALL_LABELS, compatible_context_frames
 from .content_vocabulary import build_content_seeds
-from .entity_variants import FakerEntityProvider, VietnameseAddressProvider, VIETNAMESE_ADMINISTRATIVE_AREAS
+from .value_bank import ValueBankEntityProvider
 from .hard_negative_base import DecoyStrategy, digits as _digits, strategy as _strategy
 from .hard_negative_variants import ADDITIONAL_HARD_NEGATIVE_STRATEGIES
 from ..domain.models import (
     ContextFrame,
     DecoySeed,
-    FakerConfig,
+    ValueBankConfig,
     GenerationTask,
     HardNegativeConfig,
     PositiveEntitySeed,
@@ -345,7 +345,7 @@ HARD_NEGATIVE_SUPPORT = {label: label in HARD_NEGATIVE_STRATEGIES for label in _
 
 
 class PositiveSeedFactory:
-    def __init__(self, provider: FakerEntityProvider, selector: ContextFrameSelector) -> None:
+    def __init__(self, provider: ValueBankEntityProvider, selector: ContextFrameSelector) -> None:
         self.provider = provider
         self.selector = selector
 
@@ -353,21 +353,21 @@ class PositiveSeedFactory:
         entities: List[PositiveEntitySeed] = []
         seen: set[str] = set()
         for label in task.focus_labels:
-            for _ in range(10):
-                generated = self.provider.generate_with_variant(label, rng)
-                value = generated.value
-                if value.strip().casefold() not in seen:
-                    seen.add(value.strip().casefold())
-                    task.diversity_profile.entity_format_variants[label] = generated.format_variant
-                    entities.append(PositiveEntitySeed(
-                        label=label,
-                        value=value,
-                        semantic_role=SEMANTIC_ROLES.get(label, "record_field"),
-                        format_variant=generated.format_variant,
-                    ))
-                    break
-            else:
-                raise ValueError(f"could not generate a unique Faker value for {label}")
+            generated = self.provider.generate_with_variant(
+                label,
+                task.language,
+                rng,
+                excluded_values=seen,
+            )
+            value = generated.value
+            seen.add(value.strip().casefold())
+            task.diversity_profile.entity_format_variants[label] = generated.format_variant
+            entities.append(PositiveEntitySeed(
+                label=label,
+                value=value,
+                semantic_role=SEMANTIC_ROLES.get(label, "record_field"),
+                format_variant=generated.format_variant,
+            ))
         return entities
 
     def build(self, task: GenerationTask, taxonomy: Sequence[TaxonomyLabel], rng: random.Random) -> SeedPack:
@@ -382,7 +382,7 @@ class PositiveSeedFactory:
 
 
 class PureNegativeContentFactory:
-    """Builds safe vocabulary only; this factory intentionally never owns a Faker provider."""
+    """Builds safe vocabulary only; it does not need an entity-value provider."""
 
     def __init__(self, selector: ContextFrameSelector) -> None:
         self.selector = selector
@@ -402,7 +402,7 @@ class PureNegativeContentFactory:
 class HardNegativeSeedFactory:
     def __init__(
         self,
-        provider: FakerEntityProvider,
+        provider: ValueBankEntityProvider,
         selector: ContextFrameSelector,
         config: HardNegativeConfig,
     ) -> None:
@@ -474,9 +474,12 @@ class SampleTypeRouter:
         return self.factories[SampleType(task.sample_type)].build(task, taxonomy, rng)
 
 
-def build_sample_type_router(faker_config: FakerConfig, hard_negative: HardNegativeConfig) -> SampleTypeRouter:
+def build_sample_type_router(
+    value_bank_config: ValueBankConfig,
+    hard_negative: HardNegativeConfig,
+) -> SampleTypeRouter:
     selector = ContextFrameSelector()
-    provider = FakerEntityProvider(faker_config.locale)
+    provider = ValueBankEntityProvider(value_bank_config.path)
     return SampleTypeRouter(
         PositiveSeedFactory(provider, selector),
         PureNegativeContentFactory(selector),

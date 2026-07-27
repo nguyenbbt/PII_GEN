@@ -6,12 +6,11 @@ from pii_factory.application.seed_generation import (
     HARD_NEGATIVE_SUPPORT,
     ContextFrameSelector,
     ContextSelectionError,
-    FakerEntityProvider,
     HardNegativeSeedFactory,
     PositiveSeedFactory,
     PureNegativeContentFactory,
-    VietnameseAddressProvider,
 )
+from pii_factory.application.value_bank import ValueBankEntityProvider
 from pii_factory.application.validators import SeedPackValidator
 from pii_factory.bootstrap import build_pipeline
 from pii_factory.domain.models import (
@@ -33,7 +32,7 @@ def task(sample_type: str, labels: list[str]) -> GenerationTask:
 
 class SeedGenerationTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.provider = FakerEntityProvider("vi_VN")
+        self.provider = ValueBankEntityProvider("PII_Value_Bank")
         self.selector = ContextFrameSelector()
         self.hard_config = HardNegativeConfig()
         self.validator = SeedPackValidator(self.hard_config, ValidationConfig())
@@ -117,16 +116,14 @@ class SeedGenerationTests(unittest.TestCase):
             pack, ["DATE"], taxonomy
         ).valid)
 
-    def test_vietnamese_address_is_reproducible_and_hierarchically_valid(self) -> None:
-        provider = VietnameseAddressProvider()
-        first = provider.generate(random.Random(101))
-        repeated = provider.generate(random.Random(101))
-        different = provider.generate(random.Random(202))
+    def test_vietnamese_address_from_bank_is_reproducible(self) -> None:
+        first = self.provider.generate("ADDRESS", "vi", random.Random(101))
+        repeated = self.provider.generate("ADDRESS", "vi", random.Random(101))
+        different = self.provider.generate("ADDRESS", "vi", random.Random(202))
 
         self.assertEqual(first, repeated)
         self.assertNotEqual(first, different)
-        self.assertIn(" đường ", first)
-        self.assertIn("phường", first)
+        self.assertIn(first, self.provider.values_for("vi", "ADDRESS"))
 
     def test_unknown_label_routes_to_context_scope(self) -> None:
         with self.assertRaises(ContextSelectionError) as captured:

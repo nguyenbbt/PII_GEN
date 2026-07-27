@@ -9,6 +9,7 @@ from .config import Settings
 from .contracts import DataGenerationRequest, DataGenerationResult, EventEnvelope, GeneratedEntity, GenerationQuery
 from .cost import CostCalculator
 from .llm_client import LLMClient
+from .placeholders import replace_entity_placeholders
 from .prompt import PROMPT_VERSION, build_messages
 from .validation import validate_generated_output, validate_seeded_contract
 
@@ -53,13 +54,20 @@ class DataGeneratorWorker:
 
         started = time.perf_counter()
         completion = self.llm.generate(build_messages(request))
+        tagged_text, raw_entities = replace_entity_placeholders(
+            tagged_text=completion.tagged_text,
+            entities=completion.entities,
+            positive_entities=[
+                vars(seed) for seed in request.seed_pack.positive_entities
+            ],
+        )
         latency_ms = round((time.perf_counter() - started) * 1000)
         token_usage = self.cost_calculator.calculate(
             completion.input_tokens, completion.output_tokens, completion.total_tokens
         )
         validated_entities = validate_generated_output(
-            tagged_text=completion.tagged_text,
-            entities=completion.entities,
+            tagged_text=tagged_text,
+            entities=raw_entities,
             allowed_labels=request.task.focus_labels,
             required_labels=request.task.focus_labels,
             sample_type=(
@@ -71,7 +79,7 @@ class DataGeneratorWorker:
             max_entities=request.task.max_entities,
         )
         validate_seeded_contract(
-            tagged_text=completion.tagged_text,
+            tagged_text=tagged_text,
             entities=validated_entities,
             positive_entities=[vars(seed) for seed in request.seed_pack.positive_entities],
             decoys=[vars(decoy) for decoy in request.seed_pack.decoys],
@@ -94,12 +102,12 @@ class DataGeneratorWorker:
             context_frame_id=request.seed_pack.context_frame.frame_id,
             generation_query=query,
             entities=[GeneratedEntity(**entity) for entity in validated_entities],
-            tagged_text=completion.tagged_text,
+            tagged_text=tagged_text,
             token_usage=token_usage,
             latency_ms=latency_ms,
             model=self.settings.effective_generator_model,
             prompt_version=PROMPT_VERSION,
-            output_hash=hashlib.sha256(completion.tagged_text.encode("utf-8")).hexdigest(),
+            output_hash=hashlib.sha256(tagged_text.encode("utf-8")).hexdigest(),
             taxonomy_context_used=dict(request.taxonomy_context),
             diversity_profile=dict(request.task.diversity_profile),
         )

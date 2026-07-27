@@ -5,8 +5,9 @@ from dataclasses import asdict
 from typing import Any, Mapping, Sequence
 
 from .contracts import DataGenerationRequest
+from .placeholders import placeholder_entities
 
-PROMPT_VERSION = "data-generator.v9.0.0"
+PROMPT_VERSION = "data-generator.v10.0.0"
 
 SYSTEM_PROMPT = """# Role
 You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
@@ -21,9 +22,10 @@ You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
 2. Use only tags listed in `allowed_labels`, in exact form `<LABEL>value</LABEL>`.
 3. Never nest, overlap, or emit empty tags.
 4. Every tagged span must have exactly one matching object in `entities`, and vice versa.
-5. Keep punctuation outside tags unless it is part of the supplied seed.
+5. Keep punctuation outside tags unless it is part of the supplied placeholder.
 6. Do not calculate offsets.
-7. Never expose real personal data; all supplied values are synthetic.
+7. Never invent entity values. Positive entity values are opaque placeholders
+   that application code replaces after generation.
 
 # Few-Shot Use Policy
 - Examples under `taxonomy_guidance.focus_label.examples` teach label meaning,
@@ -31,7 +33,7 @@ You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
 - Do not copy or closely paraphrase an example's scenario, actors, organization,
   action, object, opening phrase, clause order, wording, or sentence structure.
 - Build the sample from the validated seed pack and requested sample structure.
-  Supplied entity values may remain identical only when the seed contract requires it.
+  Preserve supplied positive placeholders exactly; application code owns value insertion.
 - Before returning, compare the draft with every supplied example and rewrite it
   when a reader could recognize the example as its template.
 
@@ -44,15 +46,16 @@ Return one valid JSON object only, with exactly these keys and no Markdown fence
 }
 
 # Mandatory Self-Check
-Internally reject and rewrite the draft if any required seed is missing or modified, a decoy is tagged,
+Internally reject and rewrite the draft if any required placeholder is missing or modified, a decoy is tagged,
 any decoy occurrence lacks at least one `required_context_cue` copied unchanged in the same sentence,
 a decoy is attached as a disclaimer instead of participating in the event, an unrelated sentence exists only to
 mention a seed, or the text does not describe one coherent event/document. Return only the final JSON.
 """
 
 POSITIVE_RULES = [
-    "Use exactly every item in positive_entities and tag it with its specified label.",
-    "Preserve every provided value character-for-character; do not normalize, translate, or correct it.",
+    "Use exactly every placeholder in positive_entities and tag it with its specified label.",
+    "Preserve every placeholder character-for-character; do not normalize, translate, replace, or correct it.",
+    "Return the same placeholder as the matching entities[].value; never invent the final entity value.",
     "Do not invent additional PII.",
     "Do not append unrelated sentences merely to include seed values.",
 ]
@@ -75,7 +78,7 @@ HARD_NEGATIVE_DECOY_ONLY_RULES = [
 ]
 
 HARD_NEGATIVE_MIXED_RULES = [
-    "Use and correctly tag every item in positive_entities exactly once without changing any character.",
+    "Use and correctly tag every placeholder in positive_entities exactly once without changing any character.",
     "Use every decoy exactly once and leave it untagged.",
     "Place each decoy in its semantic_type role and copy at least one required_context_cue unchanged into the same sentence.",
     "The local context must clearly show that the decoy is not an entity of target_label.",
@@ -260,7 +263,9 @@ def build_prompt_messages(
         "seed_pack_id": seed_pack.get("seed_pack_id"),
         "hard_negative_mode": hard_negative_mode,
         "allowed_labels": focus_labels,
-        "positive_entities": list(seed_pack.get("positive_entities", [])),
+        "positive_entities": placeholder_entities(
+            list(seed_pack.get("positive_entities", []))
+        ),
         "decoys": list(seed_pack.get("decoys", [])),
         "content_seeds": seed_pack.get("content_seeds"),
         "context_frame": seed_pack.get("context_frame"),

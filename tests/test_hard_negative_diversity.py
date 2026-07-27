@@ -4,9 +4,9 @@ import unittest
 from pii_factory.application.seed_generation import (
     HARD_NEGATIVE_STRATEGIES,
     ContextFrameSelector,
-    FakerEntityProvider,
     HardNegativeSeedFactory,
 )
+from pii_factory.application.value_bank import ValueBankEntityProvider
 from pii_factory.application.validators import SeedPackValidator
 from pii_factory.domain.models import GenerationTask, HardNegativeConfig, TaxonomyLabel, ValidationConfig
 
@@ -27,7 +27,11 @@ class HardNegativeDiversityTests(unittest.TestCase):
 
     def test_seeded_selection_covers_all_registered_focus_strategies(self) -> None:
         config = HardNegativeConfig()
-        factory = HardNegativeSeedFactory(FakerEntityProvider(), ContextFrameSelector(), config)
+        factory = HardNegativeSeedFactory(
+            ValueBankEntityProvider(),
+            ContextFrameSelector(),
+            config,
+        )
         validator = SeedPackValidator(config, ValidationConfig())
 
         for label in FOCUS_LABELS:

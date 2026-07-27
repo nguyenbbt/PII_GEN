@@ -50,7 +50,7 @@ class DataGeneratorPromptTests(unittest.TestCase):
 
         messages = build_messages(request)
 
-        self.assertEqual(PROMPT_VERSION, "data-generator.v9.0.0")
+        self.assertEqual(PROMPT_VERSION, "data-generator.v10.0.0")
         self.assertEqual(messages[0], {"role": "system", "content": SYSTEM_PROMPT})
         self.assertNotIn("task-1", messages[0]["content"])
         self.assertIn("# Generation Request", messages[1]["content"])
@@ -127,6 +127,11 @@ class DataGeneratorPromptTests(unittest.TestCase):
         rules = " ".join(envelope["sample_type_rules"])
         instance_rules = " ".join(envelope["hard_negative_instance_rules"])
 
+        self.assertEqual(
+            envelope["positive_entities"][0]["value"],
+            "[CARD_ISSUER_1]",
+        )
+        self.assertNotIn('"value": "Visa"', messages[1]["content"])
         self.assertIn("assigned taxonomy label", rules)
         self.assertIn("travel visa", rules)
         self.assertIn("bank-card network", rules)

@@ -30,7 +30,7 @@ class PipelineSeedStrategyTests(unittest.TestCase):
         run = pipeline.create_run(CreateRunRequest(taxonomy=taxonomy, config=fixed_config(sample_type)))
         return pipeline, repository, events, run
 
-    def test_positive_pipeline_uses_faker_seed(self) -> None:
+    def test_positive_pipeline_uses_value_bank_seed(self) -> None:
         pipeline, _, _, run = self._pipeline_for("positive")
         result = pipeline.generate_pending(run.run_id, 1)[0]
         self.assertEqual(result.entities[0].value, result.tagged_text.split("<DATE>")[1].split("</DATE>")[0])

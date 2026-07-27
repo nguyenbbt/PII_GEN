@@ -8,8 +8,8 @@ FastAPI: đọc taxonomy, lập kế hoạch sample, sinh dữ liệu bằng Azu
 deterministic và xuất JSON có offset. NoveltyGuard cùng LLM Judge/Repair là quality
 checks tùy chọn; config mẫu tắt chúng để giảm độ phức tạp và chi phí.
 
-Hệ thống không sử dụng dữ liệu cá nhân thật. Faker và các controlled factory chỉ tạo
-seed tổng hợp; Generator phải dùng seed đã được validate.
+Hệ thống không sử dụng Faker để sinh positive entity. Value được chọn bằng Python
+từ Value Bank ba ngôn ngữ; Generator chỉ viết nội dung và placeholder skeleton.
 
 ## 2. Phạm vi đã triển khai
 
@@ -140,21 +140,35 @@ Mỗi task ban đầu có `slot_no`. Nếu task hết Generator attempt, task th
 
 Run chỉ `COMPLETED` khi mỗi slot có một sample `ACCEPTED`.
 
-### 3.4 Seed generation
+### 3.4 Value Bank và seed generation
 
 `SampleTypeRouter` chọn factory:
 
-- `positive`: tạo positive seed bằng Faker/controlled entity factories;
+- `positive`: lấy positive seed từ Value Bank theo `task.language` và label;
 - `pure_negative`: dùng vocabulary an toàn, không có positive PII;
 - `hard_negative/decoy_only`: chỉ có decoy không gắn tag;
 - `hard_negative/mixed_contrastive`: có positive PII và decoy dễ nhầm.
+
+`ValueBankEntityProvider` đọc lazy và cache file
+`{language}_pii_value_pools.json` trong `value_bank.path`. Ba file hiện tại là
+`vi_pii_value_pools.json`, `en_pii_value_pools.json` và
+`de_pii_value_pools.json`; mỗi file phải có `version: 1`, object
+`entity_values`, class hợp lệ, danh sách không rỗng, item `value` không rỗng và
+`locale` khớp tên file.
+
+Provider dùng đúng instance `random.Random` đã seed bằng `task.random_seed`.
+Duplicate source value được khử trong bộ nhớ, không ghi lại file. Khi một sample có
+nhiều entity cùng class, factory loại các value đã chọn khỏi lần chọn sau để hạn chế
+trùng. Thiếu directory/language/class, class rỗng, JSON lỗi, version sai hoặc locale
+sai đều tạo `value_bank_error` scope `SEEDS` và dừng retry vô ích.
 
 `SeedPackValidator` kiểm tra:
 
 - label thuộc taxonomy;
 - positive value không trùng trong cùng completion;
-- format đặc thù của label;
-- seed không chứa mixed locale/placeholder;
+- seed ngoài Value Bank vẫn qua format/mixed-locale checks cũ;
+- seed từ Value Bank phải mang `format_variant=value_bank`, sau khi file đã được
+  provider validate;
 - decoy strategy tồn tại;
 - decoy không va chạm positive seed hoặc label cấu trúc khác;
 - required/forbidden context cues.
@@ -196,18 +210,26 @@ sample type, seed/decoy, annotation hoặc output contract.
 
 Generator chỉ:
 
-1. xây system/user prompt;
-2. gọi Azure OpenAI;
-3. parse `tagged_text` và `entities`;
-4. tạo `GenerationCandidate`;
-5. tính token/cost của Generator;
-6. phát `data.generated`.
+1. đổi positive value thành placeholder có đánh số theo class;
+2. xây system/user prompt;
+3. gọi Azure OpenAI để viết nội dung/skeleton;
+4. parse `tagged_text` và `entities`;
+5. chèn positive value bằng Python;
+6. tạo `GenerationCandidate`;
+7. tính token/cost của Generator;
+8. phát `data.generated`.
 
 Generator không quyết định candidate có được accept hay không.
 
 Few-shot chỉ dạy ngữ nghĩa label và ranh giới annotation. Prompt version
-`data-generator.v9.0.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
+`data-generator.v10.0.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
 opening phrase, clause order và sentence structure của example.
+
+Ví dụ LLM nhìn thấy `<PERSON>[PERSON_1]</PERSON>` và
+`entities[].value="[PERSON_1]"`. LLM không nhìn thấy value thật. Python thay đồng
+bộ placeholder trong tagged text và metadata trước technical gate. Placeholder lạ
+hoặc chưa resolve bị từ chối. Validator seed/tag hiện hữu vẫn quyết định placeholder
+thiếu, lặp hoặc sai tag có hợp lệ hay không.
 
 Output thô:
 
@@ -430,7 +452,7 @@ Các field chính:
 |---|---|
 | `run_name` | Tên run và thành phần của output filename |
 | `num_samples` | Số sample `ACCEPTED` bắt buộc |
-| `language` | Ngôn ngữ, `vietnamese` được normalize thành `vi` |
+| `language` | Value Bank language: `vi`, `en`, `de`; alias phổ biến được normalize |
 | `minimum_per_label` | Coverage tối thiểu |
 | `batch_size` | Số sample accept tối đa mỗi `generate_pending` |
 | `focus_label` | Anchor label bắt buộc ở mọi sample |
@@ -444,12 +466,29 @@ Các field chính:
 | `max_entities` | Entity limit theo difficulty |
 | `max_regenerate_attempts` | Số lần sinh lại trong cùng task |
 | `max_task_replacements` | Số task thay thế tối đa cho mỗi slot |
-| `faker` | Locale và seed-pack retry |
+| `value_bank` | `path`, seed-pack retry và unseeded-PII policy |
 | `hard_negative` | Mode, decoy count và focus limits |
 | `complexity_limits` | Complexity budget theo sample type |
 | `validation.quality_checks_enabled` | Bật/tắt NoveltyGuard và LLM Verifier; mặc định `false` |
 | `verifier.max_repairs_per_candidate` | Hiện chỉ cho phép `0` hoặc `1` |
 | `random_seed` | Tái lập task/seed selection |
+
+Ví dụ:
+
+```json
+{
+  "language": "vi",
+  "value_bank": {
+    "path": "PII_Value_Bank",
+    "max_seed_pack_attempts": 5,
+    "allow_additional_unseeded_pii": false
+  }
+}
+```
+
+Path tuyệt đối được dùng nguyên trạng; path tương đối được resolve từ working
+directory của process. Config `faker`/`seed_generation` cũ được parse như alias
+migration sang `value_bank`; `locale` cũ bị bỏ qua và không còn runtime Faker.
 
 Trong anchor mode:
 
@@ -642,7 +681,9 @@ Test suite bao phủ:
 - taxonomy JSON và structured context selector;
 - distributions/focus/robin config;
 - contract/chat/custom sample structures;
-- Faker/seed/hard-negative strategies;
+- Value Bank provider/seed/hard-negative strategies;
+- reproducibility theo seed và chống trùng trong sample;
+- placeholder đánh số, replacement và unknown-placeholder rejection;
 - deterministic validators;
 - novelty/diversity;
 - Verifier contract và bốn verdict;
@@ -652,6 +693,7 @@ Test suite bao phủ:
 - replacement task và replacement budget;
 - pipeline cost;
 - Unicode/emoji offsets;
+- offset sau khi chèn Value Bank value;
 - partial/final JSON writer;
 - offline end-to-end.
 - quality checks disabled vẫn giữ technical gate.

@@ -18,7 +18,6 @@ from ..domain.models import (
     ValidationConfig,
     ValidationIssue,
 )
-from .entity_variants import VIETNAMESE_ADMINISTRATIVE_AREAS
 from .seed_generation import HARD_NEGATIVE_STRATEGIES
 
 
@@ -29,6 +28,7 @@ _DATE = re.compile(r"(?<!\d)(?:0?[1-9]|[12]\d|3[01])[/.-](?:0?[1-9]|1[0-2])[/.-]
 _TIME = re.compile(r"(?<!\d)(?:(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?|(?:0?[1-9]|1[0-2]):[0-5]\d\s?(?:AM|PM))(?!\d)", re.IGNORECASE)
 _IP = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 _IDENTIFIER = re.compile(r"\b(?:ACC|USR|EMP|INC|BH)-[A-Z0-9]{5,}\b", re.IGNORECASE)
+_ADDRESS = re.compile(r"(?=.*\d)(?=.*[^\W\d_]).*\s+.*", re.UNICODE)
 _TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9_]*>")
 _MIXED_LOCALE = re.compile(r"JaneHuyện|JohnQuận|SmithPhường|\b(?:County|Street|Avenue|undefined|null|N/A|xxx)\b", re.IGNORECASE)
 
@@ -93,6 +93,7 @@ class SeedPackValidator:
         seen: set[str] = set()
         for seed in positives:
             key = seed.value.strip().casefold()
+            comes_from_value_bank = seed.format_variant == "value_bank"
             if not key:
                 issues.append(self._issue("malformed_seed", "positive seed value is empty", seed.label))
             elif key in seen:
@@ -100,9 +101,13 @@ class SeedPackValidator:
             seen.add(key)
             if seed.label not in taxonomy_labels:
                 issues.append(self._issue("invalid_seed", "seed label is absent from taxonomy", seed.label))
-            if self.config.reject_mixed_locale and _MIXED_LOCALE.search(seed.value):
+            if (
+                not comes_from_value_bank
+                and self.config.reject_mixed_locale
+                and _MIXED_LOCALE.search(seed.value)
+            ):
                 issues.append(self._issue("mixed_locale", "seed contains a mixed-locale or placeholder token", seed.label, seed.value))
-            if not self._valid_format(seed.label, seed.value):
+            if not comes_from_value_bank and not self._valid_format(seed.label, seed.value):
                 issues.append(self._issue("malformed_seed", "seed does not satisfy label format", seed.label, seed.value))
 
         if sample_type == SampleType.HARD_NEGATIVE:
@@ -194,8 +199,7 @@ class SeedPackValidator:
             except ValueError:
                 return False
         if label == "ADDRESS":
-            cities = tuple(VIETNAMESE_ADMINISTRATIVE_AREAS)
-            return " đường " in value and "phường" in value and any(value.endswith(city) for city in cities)
+            return _ADDRESS.fullmatch(value) is not None
         if label in {"CARD_NUMBER", "NATIONAL_ID", "BANK_ACCOUNT", "TIN", "ZIP_CODE", "CVV", "PIN"}:
             return value.isdigit()
         return bool(value.strip())

@@ -3,12 +3,15 @@ import unittest
 
 from pii_factory.application.retry import RegenerationRouter
 from pii_factory.application.seed_generation import ContextFrameSelector, build_sample_type_router
-from pii_factory.domain.models import FakerConfig, GenerationTask, HardNegativeConfig, TaxonomyLabel
+from pii_factory.domain.models import GenerationTask, HardNegativeConfig, TaxonomyLabel, ValueBankConfig
 
 
 class RetryRouterTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.seed_router = build_sample_type_router(FakerConfig(), HardNegativeConfig())
+        self.seed_router = build_sample_type_router(
+            ValueBankConfig(),
+            HardNegativeConfig(),
+        )
         self.router = RegenerationRouter(self.seed_router, ContextFrameSelector())
         self.task = GenerationTask(
             task_id="retry-task", run_id="run", sequence_no=1, language="vi",

@@ -81,7 +81,7 @@ class PromptDiversityTests(unittest.TestCase):
         )
 
         self.assertIn("Biên bản bàn giao thiết bị theo dạng checklist", tagged_text)
-        self.assertIn("<PERSON>Lò Thị Cẩy</PERSON>", tagged_text)
+        self.assertIn("<PERSON>[PERSON_1]</PERSON>", tagged_text)
 
     def test_contract_structure_requests_business_or_administrative_document(self) -> None:
         messages = build_prompt_messages(

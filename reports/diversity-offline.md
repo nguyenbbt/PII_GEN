@@ -7,7 +7,7 @@
 - Samples: 100
 - Random seed: 174
 - Model: `offline-demo`
-- Prompt version: `data-generator.v7.0.0`
+- Prompt version: `data-generator.v10.0.0`
 - Novelty mode during audit: `audit`
 
 ## Results
@@ -16,13 +16,17 @@
 |---|---:|
 | Generated samples | 100/100 |
 | Exact sentence-skeleton duplicate rate | 0.00% |
-| Near-duplicate rate | 6.00% |
+| Near-duplicate rate | 9.00% |
 | Context frames used | 11 |
-| Largest context-frame share | 10.00% |
-| Observed open-ended entity unique ratio | 100% |
+| Largest context-frame share | 17.00% |
+| Lowest observed entity unique ratio | 58.00% (`PERSON`) |
 | Offline synthetic token cost | 0.06000000 USD |
 
-All 44 taxonomy labels have at least three hard-negative strategies across at least two semantic families. The 14 configured focus labels also have multiple Faker format variants where the taxonomy permits meaningful formatting variation.
+All 44 taxonomy labels have at least three hard-negative strategies across at least
+two semantic families. Every positive entity in this audit used the
+`value_bank` format source. Value selection is deterministic for random seed 174;
+the finite bank intentionally permits reuse across different samples but not
+duplicate values inside one sample.
 
 ## Interpretation
 

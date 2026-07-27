@@ -50,8 +50,8 @@
   },
   "max_regenerate_attempts": 2,
   "max_task_replacements": 2,
-  "faker": {
-    "locale": "vi_VN",
+  "value_bank": {
+    "path": "PII_Value_Bank",
     "max_seed_pack_attempts": 5,
     "allow_additional_unseeded_pii": false
   },

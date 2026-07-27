@@ -13,13 +13,14 @@ FastAPI entry point
   → Coverage Controller tạo GenerationTask
   → DiversityPlanner phân bổ context/style theo seeded quota
   → SampleTypeRouter
-      → positive: Faker PositiveSeedFactory
-      → pure_negative: safe vocabulary, không gọi Faker
-      → hard_negative: taxonomy-aware decoy, không gọi Faker ở mode decoy_only
+      → positive: Value Bank PositiveSeedFactory
+      → pure_negative: safe vocabulary, không cần entity provider
+      → hard_negative: taxonomy-aware decoy; mixed mode lấy positive từ Value Bank
   → SeedPackValidator + rule-based ContextFrameSelector
   → JSON Taxonomy Context Selector lấy guidance theo task
   → SampleStructure: contract | chat | custom
-  → Data Generator gọi Azure OpenAI và bắt buộc dùng seed nguyên văn
+  → Data Generator gọi Azure OpenAI để viết nội dung + placeholder skeleton
+  → Python chèn Value Bank value vào placeholder
   → deterministic validation (seed/decoy/tag/metadata/structured PII)
   → data.generated event (raw candidate)
   → optional NoveltyGuard + LLM Judge/Repair khi quality checks bật
@@ -27,7 +28,12 @@ FastAPI entry point
   → gen_data/*.json
 ```
 
-Các payload xuyên suốt luồng là Pydantic models trong [models.py](</D:/Project/Pii llm gen/pii_factory/domain/models.py>). [Taxonomy Service](</D:/Project/Pii llm gen/pii_factory/application/taxonomy_service.py>) version hóa taxonomy và chỉ cung cấp context theo focus labels. Service nghiệp vụ chỉ phụ thuộc Protocol trong [ports.py](</D:/Project/Pii llm gen/pii_factory/ports.py>); `InMemoryRepository` và `InMemoryEventBus` là adapter local có thể thay bằng PostgreSQL/RabbitMQ.
+Các payload xuyên suốt luồng là Pydantic models trong
+[`pii_factory/domain/models.py`](pii_factory/domain/models.py).
+[Taxonomy Service](pii_factory/application/taxonomy_service.py) version hóa taxonomy
+và chỉ cung cấp context theo focus labels. Service nghiệp vụ chỉ phụ thuộc Protocol
+trong [`pii_factory/ports.py`](pii_factory/ports.py); `InMemoryRepository` và
+`InMemoryEventBus` là adapter local có thể thay bằng PostgreSQL/RabbitMQ.
 
 `JsonTaxonomyParser` dùng Pydantic đọc `pii_taxonomy_rules.json`; test xác nhận đủ
 44 label và ba nhóm example cho từng label.
@@ -61,7 +67,7 @@ POST /api/v1/runs
   "optional_constraint_distribution": {"teen_code": 0.05, "light_typo": 0.05, "abbreviation": 0.1},
   "max_entities": {"easy": 2, "medium": 4, "hard": 6},
   "max_regenerate_attempts": 2,
-  "faker": {"locale": "vi_VN", "max_seed_pack_attempts": 5, "allow_additional_unseeded_pii": false},
+  "value_bank": {"path": "PII_Value_Bank", "max_seed_pack_attempts": 5, "allow_additional_unseeded_pii": false},
   "hard_negative": {"mode": "mixed_contrastive", "min_decoys": 1, "max_decoys": 1, "max_focus_labels": 3, "unsupported_label_policy": "rebuild_task"},
   "complexity_limits": {"positive": 4, "pure_negative": 2, "hard_negative": 4},
   "validation": {"quality_checks_enabled": false},
@@ -80,6 +86,12 @@ Sau đó gọi `POST /api/v1/runs/{run_id}/generate?limit=2`. Kết quả có
 seed pack ID mới, `CONTEXT` giữ seed pack/entity nhưng chọn frame mới. Pipeline hiện
 kết thúc tại Python Output Formatter và file JSON; LLM Verifier là quality gate tùy
 chọn.
+
+`value_bank.path` có thể là đường dẫn tuyệt đối hoặc tương đối với working
+directory của process. Với mỗi language, provider đọc file
+`{language}_pii_value_pools.json`, ví dụ `vi_pii_value_pools.json`. Config key
+`faker` cũ chỉ còn được parse như alias migration (field `locale` bị bỏ qua); config
+mới phải dùng `value_bank`.
 
 ## Chạy Azure OpenAI
 

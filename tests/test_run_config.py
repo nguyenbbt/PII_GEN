@@ -82,7 +82,7 @@ class DistributionRunConfigTests(unittest.TestCase):
         self.assertEqual(config.robin_selection.min_per_sample, 2)
         self.assertEqual(config.robin_selection.max_per_sample, 4)
         self.assertEqual(config.max_attempts, 3)
-        self.assertEqual(config.faker.locale, "vi_VN")
+        self.assertEqual(config.value_bank.path, "PII_Value_Bank")
         self.assertEqual(config.hard_negative.max_decoys, 1)
         self.assertEqual(config.hard_negative.mode, "mixed_contrastive")
         self.assertEqual(config.sample_structure.type, "contract")
@@ -276,7 +276,7 @@ class DistributionRunConfigTests(unittest.TestCase):
 
         self.assertEqual(config.hard_negative.unsupported_label_policy, "rebuild_task")
 
-    def test_offline_llm_path_uses_validated_faker_seed_pack(self) -> None:
+    def test_offline_llm_path_uses_validated_value_bank_seed_pack(self) -> None:
         pipeline, _, _ = build_pipeline(offline=True)
         taxonomy = pipeline.taxonomy_service.import_json(
             Path("pii_taxonomy_rules.json")

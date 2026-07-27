@@ -10,8 +10,8 @@ from data_generator_worker.worker import DataGeneratorWorker, InMemoryAttemptSto
 class FakeLLM:
     def generate(self, messages):
         return CompletionResponse(
-            tagged_text="Mình sẽ gọi lúc <TIME>14:30</TIME>.",
-            entities=[{"label": "TIME", "value": "14:30"}],
+            tagged_text="Mình sẽ gọi lúc <TIME>[TIME_1]</TIME>.",
+            entities=[{"label": "TIME", "value": "[TIME_1]"}],
             input_tokens=100,
             output_tokens=50,
             total_tokens=150,
@@ -72,10 +72,10 @@ class DataGeneratorWorkerTests(unittest.TestCase):
         class DuplicateLLM:
             def generate(self, messages):
                 return CompletionResponse(
-                    tagged_text="<PERSON>Nguyễn An</PERSON> dùng tên <USERNAME>Nguyễn An</USERNAME>.",
+                    tagged_text="<PERSON>[PERSON_1]</PERSON> dùng tên <USERNAME>[USERNAME_1]</USERNAME>.",
                     entities=[
-                        {"label": "PERSON", "value": "Nguyễn An"},
-                        {"label": "USERNAME", "value": "nguyễn an"},
+                        {"label": "PERSON", "value": "[PERSON_1]"},
+                        {"label": "USERNAME", "value": "[USERNAME_1]"},
                     ],
                     input_tokens=1, output_tokens=1, total_tokens=2,
                 )
