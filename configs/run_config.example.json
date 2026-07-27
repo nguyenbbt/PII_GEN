@@ -1,6 +1,6 @@
 {
   "run_name": "vi_data_001",
-  "num_samples": 10,
+  "num_samples": 100,
   "language": "vietnamese",
   "minimum_per_label": 1,
   "batch_size": 5,
@@ -78,6 +78,11 @@
   "verifier": {
     "enabled": true,
     "max_repairs_per_candidate": 1
+  },
+  "parallel_generation": {
+    "workers": 10,
+    "shard_size": 10,
+    "max_shard_retries": 2
   },
   "random_seed": 174
 }

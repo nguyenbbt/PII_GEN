@@ -483,6 +483,7 @@ Các field chính:
 | `validation.quality_checks_enabled` | Cờ legacy cho NoveltyGuard; migrate sang Verifier nếu config không có `verifier` |
 | `verifier.enabled` | Bật/tắt LLM Judge/Repair; config mẫu bật |
 | `verifier.max_repairs_per_candidate` | Hiện chỉ cho phép `0` hoặc `1` |
+| `parallel_generation` | Số worker, kích thước shard và số lần retry mỗi shard |
 | `random_seed` | Tái lập task/seed selection |
 
 Trong anchor mode:
@@ -623,6 +624,16 @@ Bỏ `--offline`:
 ```
 
 Online mode gọi Generator và Verifier nên phát sinh chi phí.
+
+Để chạy config theo nhiều shard song song và chỉ publish khi đủ toàn bộ sample:
+
+```powershell
+& '.\.venv\bin\pii-factory-parallel.exe' `
+  --config configs\run_config.example.json
+```
+
+Mỗi shard dùng một `random_seed` độc lập. Runner kiểm tra số lượng, schema, offset
+và duplicate text trước khi ghi một file JSON hợp nhất vào `gen_data`.
 
 ## 8. State và events
 
