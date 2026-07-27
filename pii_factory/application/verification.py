@@ -57,6 +57,13 @@ Do not rewrite the candidate. Return one JSON object with exactly:
 - score: integer from 0 to 100
 - issues: array of objects with type, severity, field, reason, suggested_fix
 
+Every issue severity must be exactly low, medium, high, or critical. Never emit
+minor, major, warning, error, or any synonym.
+
+Return at most 5 issues, merging related findings. Keep each reason under 40 words
+and each suggested_fix under 25 words. Emit compact valid JSON with no Markdown,
+preface, repetition, or additional keys.
+
 PASS requires an empty issues array. FIXABLE is allowed only for low-severity local
 annotation or wording defects that preserve positive seeds, decoys, task intent, and
 sample type. Semantic label errors, missing/extra PII, unclear hard negatives,

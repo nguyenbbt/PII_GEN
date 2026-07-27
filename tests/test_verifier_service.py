@@ -243,6 +243,9 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertIn("few-shot", system_prompt)
         self.assertIn("comma-separated", system_prompt)
         self.assertIn("unnatural", system_prompt)
+        self.assertIn("at most 5 issues", system_prompt)
+        self.assertIn("low, medium, high, or critical", system_prompt)
+        self.assertIn("minor, major, warning, error", system_prompt)
         self.assertEqual(user_payload["candidate"]["task_id"], "task-1")
 
     def test_fixable_candidate_is_repaired_rechecked_and_rejudged(self) -> None:

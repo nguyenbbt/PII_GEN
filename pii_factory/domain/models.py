@@ -648,7 +648,7 @@ class VerificationIssue(Schema):
 class VerifierDecision(Schema):
     status: Literal["PASS", "FIXABLE", "REGENERATE", "REJECTED"]
     score: int = Field(..., ge=0, le=100)
-    issues: List[VerificationIssue] = Field(default_factory=list)
+    issues: List[VerificationIssue] = Field(default_factory=list, max_items=5)
     token_usage: TokenUsage
     latency_ms: int = Field(..., ge=0)
     model: str

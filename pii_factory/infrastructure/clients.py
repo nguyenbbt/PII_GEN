@@ -86,7 +86,7 @@ class AzureOpenAISettings(BaseModel):
     timeout_seconds: float = Field(120, gt=0)
     infrastructure_retries: int = Field(3, ge=0, le=10)
     verifier_temperature: float = Field(0.0, ge=0, le=2)
-    verifier_judge_max_tokens: int = Field(1200, gt=0)
+    verifier_judge_max_tokens: int = Field(4000, gt=0)
     verifier_repair_max_tokens: int = Field(2500, gt=0)
     api_style: Literal["auto", "azure", "openai"] = "auto"
 
@@ -113,7 +113,7 @@ class AzureOpenAISettings(BaseModel):
             ),
             verifier_temperature=float(os.getenv("VERIFIER_TEMPERATURE", "0.0")),
             verifier_judge_max_tokens=int(
-                os.getenv("VERIFIER_JUDGE_MAX_TOKENS", "1200")
+                os.getenv("VERIFIER_JUDGE_MAX_TOKENS", "4000")
             ),
             verifier_repair_max_tokens=int(
                 os.getenv("VERIFIER_REPAIR_MAX_TOKENS", "2500")
