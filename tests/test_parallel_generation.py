@@ -1,7 +1,11 @@
 import unittest
 
 from pii_factory.domain.models import RunConfig
-from pii_factory.parallel import build_shard_configs
+from pii_factory.parallel import (
+    ParallelGenerationError,
+    build_shard_configs,
+    merge_shard_payloads,
+)
 
 
 class ParallelGenerationTests(unittest.TestCase):
@@ -73,6 +77,118 @@ class ParallelGenerationTests(unittest.TestCase):
 
         self.assertEqual([shard.num_samples for shard in shards], [10, 10, 3])
         self.assertEqual([shard.batch_size for shard in shards], [5, 5, 3])
+
+    def test_merge_requires_complete_unique_samples_with_valid_offsets(self) -> None:
+        payloads = [
+            {
+                "status": "COMPLETED",
+                "accepted_samples": 1,
+                "samples": [
+                    {
+                        "entities": [
+                            {
+                                "label": "PERSON",
+                                "start": 4,
+                                "end": 14,
+                                "text": "Lê Minh An",
+                            }
+                        ],
+                        "text": "Chị Lê Minh An đã xác nhận.",
+                    }
+                ],
+                "token_usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "total_tokens": 15,
+                    "money_cost": "0.01",
+                },
+                "diagnostics": {"generated_candidates": 1},
+            },
+            {
+                "status": "COMPLETED",
+                "accepted_samples": 1,
+                "samples": [
+                    {
+                        "entities": [],
+                        "text": "Không có thông tin định danh.",
+                    }
+                ],
+                "token_usage": {
+                    "input_tokens": 20,
+                    "output_tokens": 8,
+                    "total_tokens": 28,
+                    "money_cost": "0.02",
+                },
+                "diagnostics": {"generated_candidates": 2},
+            },
+        ]
+
+        merged = merge_shard_payloads(payloads, expected_samples=2)
+
+        self.assertEqual(len(merged["samples"]), 2)
+        self.assertEqual(merged["token_usage"]["input_tokens"], 30)
+        self.assertEqual(merged["token_usage"]["money_cost"], "0.03")
+        self.assertEqual(
+            merged["diagnostics"]["generated_candidates"],
+            3,
+        )
+
+    def test_merge_rejects_failed_duplicate_or_invalid_shard_output(self) -> None:
+        valid_sample = {
+            "entities": [],
+            "text": "Một văn bản duy nhất.",
+        }
+        cases = (
+            [
+                {
+                    "status": "FAILED",
+                    "accepted_samples": 0,
+                    "samples": [],
+                }
+            ],
+            [
+                {
+                    "status": "COMPLETED",
+                    "accepted_samples": 1,
+                    "samples": [valid_sample],
+                },
+                {
+                    "status": "COMPLETED",
+                    "accepted_samples": 1,
+                    "samples": [valid_sample],
+                },
+            ],
+            [
+                {
+                    "status": "COMPLETED",
+                    "accepted_samples": 1,
+                    "samples": [
+                        {
+                            "entities": [
+                                {
+                                    "label": "PERSON",
+                                    "start": 0,
+                                    "end": 3,
+                                    "text": "Sai",
+                                }
+                            ],
+                            "text": "Đúng offset",
+                        }
+                    ],
+                }
+            ],
+        )
+
+        for payloads in cases:
+            with self.subTest(payloads=payloads):
+                with self.assertRaises(ParallelGenerationError):
+                    merge_shard_payloads(
+                        payloads,
+                        expected_samples=sum(
+                            item.get("accepted_samples", 0)
+                            for item in payloads
+                        ),
+                    )
 
 
 if __name__ == "__main__":
