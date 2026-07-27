@@ -1,0 +1,15 @@
+.venv/
+.env
+.env.local
+.env.*.local
+.agents/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+gen_data/
+*.pem
+*.key

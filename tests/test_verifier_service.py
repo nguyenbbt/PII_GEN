@@ -1,0 +1,343 @@
+from decimal import Decimal
+import json
+import unittest
+
+from pii_factory.application.verification import (
+    DeterministicIssueRouter,
+    VerificationRoutingError,
+    VerifierService,
+)
+from pii_factory.domain.models import (
+    ContextFrame,
+    DeterministicValidationResult,
+    DiversityProfile,
+    GeneratedEntity,
+    GenerationCandidate,
+    GenerationQuery,
+    GenerationTask,
+    GenerationTaxonomyContext,
+    LabelGenerationContext,
+    PositiveEntitySeed,
+    RepairResult,
+    SeedPack,
+    TokenUsage,
+    ValidationIssue,
+    VerificationIssue,
+    VerifierDecision,
+)
+
+
+def token_usage() -> TokenUsage:
+    return TokenUsage(
+        input_tokens=10,
+        output_tokens=5,
+        total_tokens=15,
+        money_cost=Decimal("0.001"),
+    )
+
+
+def issue(severity: str = "low") -> VerificationIssue:
+    return VerificationIssue(
+        type="BOUNDARY",
+        severity=severity,
+        field="tagged_text",
+        reason="Dấu câu nằm trong entity boundary.",
+        suggested_fix="Đưa dấu câu ra ngoài tag.",
+    )
+
+
+def decision(status: str) -> VerifierDecision:
+    issues = [] if status == "PASS" else [
+        issue("critical" if status == "REJECTED" else ("low" if status == "FIXABLE" else "high"))
+    ]
+    return VerifierDecision(
+        status=status,
+        score=98 if status == "PASS" else 60,
+        issues=issues,
+        token_usage=token_usage(),
+        latency_ms=2,
+        model="offline-verifier",
+        prompt_version="judge.test",
+    )
+
+
+def candidate() -> GenerationCandidate:
+    return GenerationCandidate(
+        task_id="task-1",
+        attempt_no=1,
+        seed_pack_id="seed-1",
+        context_frame_id="support",
+        generation_query=GenerationQuery(
+            language="vi",
+            focus_labels=["PERSON"],
+            constraints=[],
+            difficulty="medium",
+            sample_type="positive",
+            max_entities=2,
+        ),
+        entities=[GeneratedEntity(label="PERSON", value="Lò Thị Cẩy")],
+        tagged_text="Chị <PERSON>Lò Thị Cẩy</PERSON> đã gửi hồ sơ.",
+        token_usage=token_usage(),
+        latency_ms=3,
+        model="offline-generator",
+        prompt_version="generator.test",
+        output_hash="hash",
+        seed_validation=DeterministicValidationResult(valid=True),
+        diversity_profile=DiversityProfile(),
+    )
+
+
+def task() -> GenerationTask:
+    return GenerationTask(
+        task_id="task-1",
+        run_id="run-1",
+        sequence_no=1,
+        slot_no=1,
+        language="vi",
+        focus_labels=["PERSON"],
+        difficulty="medium",
+        sample_type="positive",
+        max_entities=2,
+        max_attempts=3,
+        random_seed=42,
+    )
+
+
+def seed_pack() -> SeedPack:
+    return SeedPack(
+        seed_pack_id="seed-1",
+        task_id="task-1",
+        sample_type="positive",
+        positive_entities=[
+            PositiveEntitySeed(
+                label="PERSON",
+                value="Lò Thị Cẩy",
+                semantic_role="customer_name",
+            )
+        ],
+        context_frame=ContextFrame(
+            frame_id="support",
+            domain="support",
+            document_type="note",
+            tone="neutral",
+            max_sentences=2,
+            supported_labels=["PERSON"],
+        ),
+    )
+
+
+class FakeVerifierClient:
+    def __init__(self, decisions, repair_result=None) -> None:
+        self.decisions = list(decisions)
+        self.repair_result = repair_result
+        self.judge_messages = []
+        self.repair_messages = []
+
+    def judge(self, messages):
+        self.judge_messages.append(messages)
+        return self.decisions.pop(0)
+
+    def repair(self, messages):
+        self.repair_messages.append(messages)
+        if self.repair_result is None:
+            raise AssertionError("repair was not expected")
+        return self.repair_result
+
+
+class VerifierServiceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.taxonomy_context = GenerationTaxonomyContext(
+            taxonomy_version_id="taxonomy-v1",
+            sample_type="positive",
+            focus_label=LabelGenerationContext(
+                label="PERSON",
+                definition="Tên của một người.",
+                rule="Gắn toàn bộ họ tên.",
+            ),
+        )
+
+    def test_deterministic_issue_router_distinguishes_quality_routes(self) -> None:
+        cases = (
+            (
+                DeterministicValidationResult(valid=True),
+                "PASS",
+                None,
+            ),
+            (
+                DeterministicValidationResult(
+                    valid=False,
+                    issues=[
+                        ValidationIssue(
+                            type="invalid_output",
+                            scope="TEXT",
+                            reason="Entity metadata differs from tagged spans.",
+                        ),
+                        ValidationIssue(
+                            type="missing_entity_metadata",
+                            scope="TEXT",
+                            reason="Required metadata is missing.",
+                        ),
+                    ],
+                ),
+                "FIXABLE",
+                "low",
+            ),
+            (
+                DeterministicValidationResult(
+                    valid=False,
+                    issues=[
+                        ValidationIssue(
+                            type="decoy_context_unclear",
+                            scope="TEXT",
+                            reason="The hard-negative cue is ambiguous.",
+                        )
+                    ],
+                ),
+                "REGENERATE",
+                "high",
+            ),
+            (
+                DeterministicValidationResult(
+                    valid=False,
+                    issues=[
+                        ValidationIssue(
+                            type="credential_risk",
+                            scope="TEXT",
+                            reason="A credential-like secret was detected.",
+                        )
+                    ],
+                ),
+                "REJECTED",
+                "critical",
+            ),
+        )
+
+        for validation, expected_route, expected_severity in cases:
+            with self.subTest(route=expected_route):
+                route, issues = DeterministicIssueRouter.route(validation)
+                self.assertEqual(route, expected_route)
+                self.assertEqual(
+                    issues[0].severity if issues else None,
+                    expected_severity,
+                )
+
+    def test_pass_candidate_is_returned_without_repair(self) -> None:
+        client = FakeVerifierClient([decision("PASS")])
+        verified, trace = VerifierService(client).verify(
+            candidate=candidate(),
+            task=task(),
+            seed_pack=seed_pack(),
+            taxonomy_context=self.taxonomy_context,
+            revalidate=lambda _: DeterministicValidationResult(valid=True),
+        )
+
+        self.assertEqual(trace.outcome, "PASS")
+        self.assertEqual(verified.tagged_text, candidate().tagged_text)
+        self.assertEqual(client.repair_messages, [])
+        system_prompt = client.judge_messages[0][0]["content"]
+        user_payload = json.loads(client.judge_messages[0][1]["content"])
+        self.assertIn("untrusted data", system_prompt)
+        self.assertEqual(user_payload["candidate"]["task_id"], "task-1")
+
+    def test_fixable_candidate_is_repaired_rechecked_and_rejudged(self) -> None:
+        repaired = RepairResult(
+            tagged_text="Chị <PERSON>Lò Thị Cẩy</PERSON> đã gửi hồ sơ.",
+            entities=[GeneratedEntity(label="PERSON", value="Lò Thị Cẩy")],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        client = FakeVerifierClient(
+            [decision("FIXABLE"), decision("PASS")],
+            repair_result=repaired,
+        )
+
+        verified, trace = VerifierService(client).verify(
+            candidate=candidate(),
+            task=task(),
+            seed_pack=seed_pack(),
+            taxonomy_context=self.taxonomy_context,
+            revalidate=lambda _: DeterministicValidationResult(valid=True),
+        )
+
+        self.assertEqual(trace.outcome, "FIXED")
+        self.assertEqual(trace.repair, repaired)
+        self.assertEqual(trace.final_judge.status, "PASS")
+        self.assertEqual(verified.tagged_text, repaired.tagged_text)
+        self.assertEqual(len(client.judge_messages), 2)
+        self.assertEqual(len(client.repair_messages), 1)
+
+    def test_regenerate_and_rejected_decisions_route_without_repair(self) -> None:
+        for status in ("REGENERATE", "REJECTED"):
+            with self.subTest(status=status):
+                client = FakeVerifierClient([decision(status)])
+                with self.assertRaises(VerificationRoutingError) as raised:
+                    VerifierService(client).verify(
+                        candidate=candidate(),
+                        task=task(),
+                        seed_pack=seed_pack(),
+                        taxonomy_context=self.taxonomy_context,
+                        revalidate=lambda _: DeterministicValidationResult(valid=True),
+                    )
+                self.assertEqual(raised.exception.status, status)
+                self.assertEqual(client.repair_messages, [])
+
+    def test_repair_that_changes_a_positive_seed_is_regenerated(self) -> None:
+        unsafe_repair = RepairResult(
+            tagged_text="Chị <PERSON>Nguyễn An</PERSON> đã gửi hồ sơ.",
+            entities=[GeneratedEntity(label="PERSON", value="Nguyễn An")],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        client = FakeVerifierClient(
+            [decision("FIXABLE")],
+            repair_result=unsafe_repair,
+        )
+
+        with self.assertRaises(VerificationRoutingError) as raised:
+            VerifierService(client).verify(
+                candidate=candidate(),
+                task=task(),
+                seed_pack=seed_pack(),
+                taxonomy_context=self.taxonomy_context,
+                revalidate=lambda _: DeterministicValidationResult(valid=True),
+            )
+
+        self.assertEqual(raised.exception.status, "REGENERATE")
+        self.assertEqual(len(client.judge_messages), 1)
+
+    def test_failed_deterministic_recheck_is_regenerated(self) -> None:
+        repaired = RepairResult(
+            tagged_text=candidate().tagged_text,
+            entities=candidate().entities,
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        client = FakeVerifierClient(
+            [decision("FIXABLE")],
+            repair_result=repaired,
+        )
+
+        with self.assertRaises(VerificationRoutingError) as raised:
+            VerifierService(client).verify(
+                candidate=candidate(),
+                task=task(),
+                seed_pack=seed_pack(),
+                taxonomy_context=self.taxonomy_context,
+                revalidate=lambda _: DeterministicValidationResult(
+                    valid=False,
+                    issues=[],
+                ),
+            )
+
+        self.assertEqual(raised.exception.status, "REGENERATE")
+        self.assertEqual(len(client.judge_messages), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

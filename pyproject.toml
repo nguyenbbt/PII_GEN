@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pii-data-generator-worker"
+version = "0.1.0"
+description = "Configurable synthetic PII generation pipeline with deterministic formatting"
+readme = "README_V2.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi==0.115.12",
+  "Faker==37.3.0",
+  "uvicorn==0.34.2",
+  "pydantic==1.10.21",
+]
+
+[project.optional-dependencies]
+dev = []
+
+[project.scripts]
+data-generator-worker = "data_generator_worker.main:main"
+pii-factory = "pii_factory.main:main"
+
+[tool.setuptools]
+packages = ["data_generator_worker", "pii_factory", "pii_factory.application", "pii_factory.domain", "pii_factory.infrastructure"]
