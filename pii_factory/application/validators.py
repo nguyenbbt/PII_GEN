@@ -11,6 +11,7 @@ from data_generator_worker.validation import extract_occurrence_contexts, valida
 from ..domain.models import (
     DeterministicValidationResult,
     GeneratedEntity,
+    LengthTarget,
     HardNegativeConfig,
     SampleType,
     SeedPack,
@@ -255,6 +256,7 @@ class DeterministicOutputValidator:
         seed_pack: SeedPack,
         focus_labels: Sequence[str],
         max_entities: int,
+        length_target: LengthTarget | None = None,
     ) -> DeterministicValidationResult:
         issues: list[ValidationIssue] = []
         raw_entities = [entity.dict() if isinstance(entity, GeneratedEntity) else entity for entity in entities]
@@ -274,9 +276,22 @@ class DeterministicOutputValidator:
         except ValueError as exc:
             issues.append(ValidationIssue(type="invalid_output", scope="TEXT", reason=str(exc)))
 
+        clean_text = _TAG.sub("", tagged_text).strip()
+        if length_target is not None:
+            word_count = len(re.findall(r"\S+", clean_text))
+            if not length_target.min_words <= word_count <= length_target.max_words:
+                issues.append(ValidationIssue(
+                    type="length_out_of_range",
+                    scope="TEXT",
+                    reason=(
+                        f"clean text has {word_count} words; expected "
+                        f"{length_target.min_words}-{length_target.max_words}"
+                    ),
+                ))
+
         if SampleType(seed_pack.sample_type) == SampleType.PURE_NEGATIVE:
             if self.config.pure_negative_structured_scan:
-                clean = _TAG.sub("", tagged_text)
+                clean = clean_text
                 for label, pattern in self._structured_detectors():
                     match = pattern.search(clean)
                     if match:

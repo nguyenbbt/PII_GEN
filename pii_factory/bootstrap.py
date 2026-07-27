@@ -47,9 +47,12 @@ def build_pipeline(
     generator = DataGenerator(repository, event_bus, client, model, rates)
     verifier = VerifierService(verifier_client)
     formatter = OutputFormatter()
-    writer = JsonDatasetWriter(
+    output_root = Path(
         output_directory or Path(os.getenv("GEN_DATA_DIR", "gen_data"))
     )
+    if offline:
+        output_root /= "offline-smoke"
+    writer = JsonDatasetWriter(output_root)
     return Pipeline(
         orchestrator,
         coverage,
@@ -60,4 +63,5 @@ def build_pipeline(
         taxonomy_service,
         repository,
         event_bus,
+        enforce_quality_targets=not offline,
     ), repository, event_bus

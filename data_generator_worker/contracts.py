@@ -20,6 +20,7 @@ class GenerationTask:
     optional_constraints: list[str] = field(default_factory=list)
     max_attempts: int = 3
     diversity_profile: dict[str, Any] = field(default_factory=dict)
+    length_target: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "GenerationTask":
@@ -38,6 +39,7 @@ class GenerationTask:
             robin_labels=[str(v) for v in value.get("robin_labels", [])],
             optional_constraints=[str(v) for v in value.get("optional_constraints", [])], max_attempts=int(value.get("max_attempts", 3)),
             diversity_profile=dict(value.get("diversity_profile", {})),
+            length_target=dict(value.get("length_target", {})),
         )
 
 
@@ -154,6 +156,7 @@ class GenerationQuery:
     difficulty: str
     sample_type: str
     max_entities: int
+    length_target: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 import io
 import json
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -50,6 +50,7 @@ class PiiFactoryCliTests(unittest.TestCase):
                 encoding="utf-8",
             )
             output = io.StringIO()
+            errors = io.StringIO()
             arguments = [
                 "pii-factory",
                 "--offline",
@@ -66,6 +67,7 @@ class PiiFactoryCliTests(unittest.TestCase):
                     side_effect=AssertionError("server must not start"),
                 ),
                 redirect_stdout(output),
+                redirect_stderr(errors),
             ):
                 main()
 
@@ -73,6 +75,8 @@ class PiiFactoryCliTests(unittest.TestCase):
             self.assertEqual(payload["labels"], 44)
             self.assertEqual(payload["accepted_samples"], 1)
             self.assertEqual(payload["status"], "COMPLETED")
+            self.assertIn("smoke", payload["output_path"].casefold())
+            self.assertIn("not a dataset", errors.getvalue().casefold())
 
 
 if __name__ == "__main__":

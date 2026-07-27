@@ -50,6 +50,11 @@ def main() -> None:
     )
     args = parser.parse_args()
     if args.config or args.taxonomy_json:
+        if args.offline:
+            print(
+                "WARNING: offline output is a smoke-test artifact, not a dataset.",
+                file=sys.stderr,
+            )
         taxonomy_path = args.taxonomy_json or DEFAULT_TAXONOMY_PATH
         pipeline, repository, _ = build_pipeline(
             offline=args.offline,

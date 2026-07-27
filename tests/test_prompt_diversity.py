@@ -137,7 +137,7 @@ class PromptDiversityTests(unittest.TestCase):
 
         self.assertIn("exactly two speakers", rules)
         self.assertIn("customer-support conversation", rules)
-        self.assertIn("2 to 6", rules)
+        self.assertIn("10 to 14", rules)
 
     def test_custom_structure_is_context_only_and_cannot_override_annotation(self) -> None:
         instruction = "Tạo biên bản bàn giao thiết bị theo dạng checklist."

@@ -20,6 +20,22 @@ from pii_factory.domain.models import (
 
 
 class QualityFirstPipelineTests(unittest.TestCase):
+    def test_explicit_verifier_switch_runs_judge_when_legacy_quality_flag_is_false(self) -> None:
+        with TemporaryDirectory() as directory:
+            pipeline, _, _ = build_pipeline(
+                offline=True,
+                output_directory=Path(directory),
+            )
+            run = pipeline.create_run(self._positive_person_request(
+                validation={"quality_checks_enabled": False},
+                verifier={"enabled": True},
+            ))
+
+            result = pipeline.generate_pending(run.run_id, 1)[0]
+
+            self.assertIsNotNone(result.verification_trace)
+            self.assertEqual(result.verification_trace.outcome, "PASS")
+
     def test_disabled_quality_checks_skip_verifier_and_keep_technical_gate(self) -> None:
         class VerifierMustNotRun:
             @staticmethod
@@ -419,7 +435,7 @@ class QualityFirstPipelineTests(unittest.TestCase):
 
             results = pipeline.generate_pending(run.run_id, 2)
 
-            files = list(Path(directory).glob("*.json"))
+            files = list(Path(directory).rglob("*.json"))
             self.assertEqual(len(results), 1)
             self.assertEqual(repository.get_run(run.run_id).status, "FAILED")
             self.assertEqual(len(files), 1)

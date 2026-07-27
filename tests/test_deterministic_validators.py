@@ -9,6 +9,7 @@ from pii_factory.domain.models import (
     DecoySeed,
     GeneratedEntity,
     HardNegativeConfig,
+    LengthTarget,
     PositiveEntitySeed,
     SeedPack,
     TaxonomyLabel,
@@ -53,6 +54,39 @@ class DeterministicValidatorTests(unittest.TestCase):
         )
         self.assertFalse(result.valid)
         self.assertIn("missing_positive_seed", {issue.type for issue in result.issues})
+
+    def test_output_rejects_clean_text_outside_numeric_length_target(self) -> None:
+        pack = SeedPack(
+            task_id="short-positive",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[
+                PositiveEntitySeed(
+                    label="DATE",
+                    value="21/10/2026",
+                    semantic_role="appointment_date",
+                )
+            ],
+        )
+
+        result = self.output.validate(
+            tagged_text="Hẹn <DATE>21/10/2026</DATE>.",
+            entities=[GeneratedEntity(label="DATE", value="21/10/2026")],
+            seed_pack=pack,
+            focus_labels=["DATE"],
+            max_entities=2,
+            length_target=LengthTarget(
+                bucket="short",
+                min_words=80,
+                max_words=120,
+                unit="content_units",
+                min_units=3,
+                max_units=5,
+            ),
+        )
+
+        self.assertFalse(result.valid)
+        self.assertIn("length_out_of_range", {issue.type for issue in result.issues})
 
     def test_pure_negative_rejects_structured_candidates_and_accepts_generic_text(self) -> None:
         pack = SeedPack(

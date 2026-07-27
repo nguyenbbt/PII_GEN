@@ -598,6 +598,16 @@ class GenerationQuery(Schema):
     sample_structure: SampleStructureConfig = Field(
         default_factory=SampleStructureConfig
     )
+    length_target: LengthTarget = Field(
+        default_factory=lambda: LengthTarget(
+            bucket="medium",
+            min_words=150,
+            max_words=230,
+            unit="content_units",
+            min_units=6,
+            max_units=9,
+        )
+    )
     max_entities: int
 
 

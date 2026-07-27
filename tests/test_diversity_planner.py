@@ -108,6 +108,7 @@ class DiversityPlannerTests(unittest.TestCase):
             task.diversity_profile.context_frame_id,
         )
         self.assertEqual(result.diversity_profile, task.diversity_profile)
+        self.assertEqual(result.generation_query.length_target, task.length_target)
 
 
 if __name__ == "__main__":

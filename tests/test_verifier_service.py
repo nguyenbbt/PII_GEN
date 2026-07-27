@@ -237,6 +237,12 @@ class VerifierServiceTests(unittest.TestCase):
         system_prompt = client.judge_messages[0][0]["content"]
         user_payload = json.loads(client.judge_messages[0][1]["content"])
         self.assertIn("untrusted data", system_prompt)
+        self.assertIn("length_target", system_prompt)
+        self.assertIn("ADDRESS", system_prompt)
+        self.assertIn("LOCATION", system_prompt)
+        self.assertIn("few-shot", system_prompt)
+        self.assertIn("comma-separated", system_prompt)
+        self.assertIn("unnatural", system_prompt)
         self.assertEqual(user_payload["candidate"]["task_id"], "task-1")
 
     def test_fixable_candidate_is_repaired_rechecked_and_rejudged(self) -> None:

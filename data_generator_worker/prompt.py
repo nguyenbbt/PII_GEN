@@ -6,7 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from .contracts import DataGenerationRequest
 
-PROMPT_VERSION = "data-generator.v9.0.0"
+PROMPT_VERSION = "data-generator.v10.0.0"
 
 SYSTEM_PROMPT = """# Role
 You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
@@ -24,6 +24,11 @@ You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
 5. Keep punctuation outside tags unless it is part of the supplied seed.
 6. Do not calculate offsets.
 7. Never expose real personal data; all supplied values are synthetic.
+8. Give every supplied seed a distinct grammatical and business role across the
+   document. Never serialize entity seeds as a comma-separated list.
+9. For ADDRESS and LOCATION, follow semantic boundaries: street-level details
+   (house number, street, building, apartment, room) are ADDRESS; administrative
+   places (ward, district, province, city, country) are LOCATION. ZIP_CODE is separate.
 
 # Few-Shot Use Policy
 - Examples under `taxonomy_guidance.focus_label.examples` teach label meaning,
@@ -47,7 +52,8 @@ Return one valid JSON object only, with exactly these keys and no Markdown fence
 Internally reject and rewrite the draft if any required seed is missing or modified, a decoy is tagged,
 any decoy occurrence lacks at least one `required_context_cue` copied unchanged in the same sentence,
 a decoy is attached as a disclaimer instead of participating in the event, an unrelated sentence exists only to
-mention a seed, or the text does not describe one coherent event/document. Return only the final JSON.
+mention a seed, the clean text is outside `length_target`, required entities are presented as a list rather than
+participating in the event, or the text does not describe one coherent event/document. Return only the final JSON.
 """
 
 POSITIVE_RULES = [
@@ -55,6 +61,7 @@ POSITIVE_RULES = [
     "Preserve every provided value character-for-character; do not normalize, translate, or correct it.",
     "Do not invent additional PII.",
     "Do not append unrelated sentences merely to include seed values.",
+    "Distribute the required entities across multiple sentences or turns and give each one a necessary role in the same business process.",
 ]
 
 PURE_NEGATIVE_RULES = [
@@ -71,7 +78,7 @@ HARD_NEGATIVE_DECOY_ONLY_RULES = [
     "Use each decoy as the semantic_type stated in its metadata and copy at least one required_context_cue unchanged into the same sentence as every occurrence.",
     "Make the non-PII role clear through natural business context; do not add meta explanations such as 'this is not PII'.",
     "Do not generate any positive PII, additional lookalikes, or additional identifiers.",
-    "All content must form one short coherent event or document; repetition must serve the event and must never be filler added merely to mention a decoy.",
+    "All content must form one coherent event or document; repetition must serve the event and must never be filler added merely to mention a decoy.",
 ]
 
 HARD_NEGATIVE_MIXED_RULES = [
@@ -92,20 +99,20 @@ HARD_NEGATIVE_MIXED_RULES = [
 ]
 
 DIFFICULTY_RULES = {
-    "easy": "Use one direct sentence with a simple grammatical structure.",
-    "medium": "Use one or two connected clauses with enough context to make every entity role clear.",
-    "hard": "Use a natural multi-clause structure or multiple connected turns while keeping one coherent event.",
+    "easy": "Use direct syntax and explicit local cues while still meeting the full length target.",
+    "medium": "Use connected clauses and supporting details that make every entity role clear.",
+    "hard": "Use a realistic multi-clause structure with cross-references, dependencies, or multiple connected turns while keeping one coherent event.",
 }
 
 STRUCTURE_RULES = {
     "single_sentence": "Realize the sample as one complete sentence.",
     "two_sentence_note": "Realize the sample as a two-sentence operational note.",
     "short_dialogue": "Realize the sample as a short dialogue with explicit speaker turns.",
-    "form_like_record": "Realize the sample as a compact form-like record, not ordinary narrative prose.",
-    "agreement_clause": "Realize the sample as a compact agreement or contract clause.",
-    "administrative_record": "Realize the sample as a compact administrative record.",
+    "form_like_record": "Realize the sample as a structured form-like record, not ordinary narrative prose.",
+    "agreement_clause": "Realize the sample as an agreement or contract section.",
+    "administrative_record": "Realize the sample as a detailed administrative record.",
     "company_notice": "Realize the sample as a company notice or internal business document.",
-    "handover_minutes": "Realize the sample as compact handover or meeting minutes.",
+    "handover_minutes": "Realize the sample as handover or meeting minutes.",
     "friend_chat": "Realize the sample as a natural conversation between two friends.",
     "customer_support_chat": "Realize the sample as a customer-support conversation.",
     "custom_format": "Use the presentation format specified by custom_instruction.",
@@ -115,7 +122,7 @@ REGISTER_RULES = {
     "formal": "Use formal, professional Vietnamese.",
     "neutral": "Use neutral everyday Vietnamese.",
     "informal": "Use natural informal Vietnamese without becoming ambiguous.",
-    "concise_technical": "Use concise technical language appropriate for an operational record.",
+    "concise_technical": "Use precise technical language appropriate for an operational record.",
 }
 
 CONSTRAINT_RULES = {
@@ -126,6 +133,56 @@ CONSTRAINT_RULES = {
 }
 
 
+_WORD_TARGETS = {
+    "short": (80, 120),
+    "medium": (150, 230),
+    "long": (260, 400),
+}
+_CONTRACT_UNITS = {
+    "short": (3, 5),
+    "medium": (6, 9),
+    "long": (10, 14),
+}
+_CHAT_TURNS = {
+    "short": (6, 8),
+    "medium": (10, 14),
+    "long": (16, 22),
+}
+
+
+def _length_target(task: Mapping[str, Any]) -> dict[str, Any]:
+    supplied = task.get("length_target")
+    required_fields = {
+        "bucket", "min_words", "max_words", "unit", "min_units", "max_units",
+    }
+    if isinstance(supplied, Mapping) and required_fields.issubset(supplied):
+        return dict(supplied)
+    profile = task.get("diversity_profile") or {}
+    bucket = str(profile.get("length_bucket", "medium"))
+    if bucket not in _WORD_TARGETS:
+        bucket = "medium"
+    min_words, max_words = _WORD_TARGETS[bucket]
+    structure = task.get("sample_structure") or {}
+    structure_type = str(structure.get("type", "contract"))
+    if structure_type == "chat":
+        min_units, max_units = _CHAT_TURNS[bucket]
+        unit = "turns"
+    elif structure_type == "contract":
+        min_units, max_units = _CONTRACT_UNITS[bucket]
+        unit = "content_units"
+    else:
+        min_units = max_units = 1
+        unit = "words"
+    return {
+        "bucket": bucket,
+        "min_words": min_words,
+        "max_words": max_words,
+        "unit": unit,
+        "min_units": min_units,
+        "max_units": max_units,
+    }
+
+
 def _sample_structure_rules(task: Mapping[str, Any]) -> list[str]:
     structure = task.get("sample_structure")
     if not isinstance(structure, Mapping):
@@ -133,6 +190,7 @@ def _sample_structure_rules(task: Mapping[str, Any]) -> list[str]:
     structure_type = str(structure.get("type", "contract"))
     profile = task.get("diversity_profile") or {}
     variant = str(profile.get("document_structure", ""))
+    target = _length_target(task)
     if structure_type == "contract":
         variant_rule = STRUCTURE_RULES.get(
             variant,
@@ -141,7 +199,10 @@ def _sample_structure_rules(task: Mapping[str, Any]) -> list[str]:
         return [
             "Write a realistic business or administrative document fragment, not a chat conversation.",
             variant_rule,
-            "Use concise professional wording and include only details needed by one coherent business process.",
+            (
+                f"Use {target['min_units']} to {target['max_units']} connected content units "
+                "such as clauses, fields, paragraphs, or action records in one coherent business process."
+            ),
         ]
     if structure_type == "chat":
         variant_rule = STRUCTURE_RULES.get(
@@ -149,7 +210,10 @@ def _sample_structure_rules(task: Mapping[str, Any]) -> list[str]:
             STRUCTURE_RULES["customer_support_chat"],
         )
         return [
-            "Write a realistic chat with exactly two speakers and 2 to 6 alternating message turns.",
+            (
+                "Write a realistic chat with exactly two speakers and "
+                f"{target['min_units']} to {target['max_units']} alternating message turns."
+            ),
             variant_rule,
             "Keep both speakers in one coherent conversation and never introduce a third speaker.",
         ]
@@ -163,6 +227,7 @@ def _sample_structure_rules(task: Mapping[str, Any]) -> list[str]:
 
 def _realization_rules(task: Mapping[str, Any]) -> list[str]:
     profile = task.get("diversity_profile") or {}
+    target = _length_target(task)
     rules = [
         DIFFICULTY_RULES.get(str(task.get("difficulty", "medium")), DIFFICULTY_RULES["medium"]),
     ]
@@ -180,7 +245,11 @@ def _realization_rules(task: Mapping[str, Any]) -> list[str]:
         ),
         f"Write from the perspective of the {profile.get('speaker_role', 'participant')}.",
         f"The communicative intent is {profile.get('intent', 'provide_information')}.",
-        f"Target the {profile.get('length_bucket', 'medium')} length bucket allowed by the context frame.",
+        (
+            f"Write between {target['min_words']} and {target['max_words']} words in clean text "
+            "after removing annotation tags; this numeric target overrides any old sentence cap in context metadata."
+        ),
+        "Distribute entity seeds across multiple sentences or turns; never join them into a comma-separated entity inventory.",
         "Avoid a stock opening or sentence skeleton that could be reused across unrelated samples.",
     ])
     rules.extend(
@@ -198,6 +267,11 @@ def _realization_rules(task: Mapping[str, Any]) -> list[str]:
                 f"Use robin entities {', '.join(robin_labels)} only to support the same event as {focus_label}; "
                 "do not attach them through unrelated clauses."
             )
+    labels = {str(label) for label in task.get("focus_labels", [])}
+    if labels & {"ADDRESS", "LOCATION", "ZIP_CODE"}:
+        rules.append(
+            "Keep street-level ADDRESS, administrative LOCATION, and postal ZIP_CODE spans separate even when they form one full mailing address."
+        )
     return rules
 
 
@@ -261,6 +335,7 @@ def build_prompt_messages(
         "hard_negative_mode": hard_negative_mode,
         "allowed_labels": focus_labels,
         "positive_entities": list(seed_pack.get("positive_entities", [])),
+        "required_entity_count": len(seed_pack.get("positive_entities", [])),
         "decoys": list(seed_pack.get("decoys", [])),
         "content_seeds": seed_pack.get("content_seeds"),
         "context_frame": seed_pack.get("context_frame"),
