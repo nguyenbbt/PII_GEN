@@ -38,7 +38,60 @@ def _successful_response() -> BytesIO:
     )
 
 
+def _malformed_json_response() -> BytesIO:
+    return BytesIO(
+        json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"tagged_text":"unfinished'
+                        }
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                },
+            }
+        ).encode("utf-8")
+    )
+
+
 class AzureOpenAIHttpErrorTests(unittest.TestCase):
+    def test_generator_defaults_to_long_form_completion_budget(self) -> None:
+        settings = AzureOpenAISettings(
+            api_key="top-secret-value",
+            base_url="https://gateway.example",
+        )
+
+        self.assertEqual(settings.max_tokens, 6000)
+
+    def test_generator_retries_malformed_json_as_infrastructure_failure(self) -> None:
+        settings = AzureOpenAISettings(
+            api_key="top-secret-value",
+            base_url="https://gateway.example",
+            infrastructure_retries=1,
+        )
+        with (
+            patch(
+                "pii_factory.infrastructure.clients.urlopen",
+                side_effect=[
+                    _malformed_json_response(),
+                    _successful_response(),
+                ],
+            ) as mocked_urlopen,
+            patch("pii_factory.infrastructure.clients.time.sleep"),
+        ):
+            tagged_text, entities, *_ = AzureOpenAICompletionClient(
+                settings
+            ).generate([{"role": "user", "content": "Return JSON."}])
+
+        self.assertEqual(tagged_text, "test")
+        self.assertEqual(entities, [])
+        self.assertEqual(mocked_urlopen.call_count, 2)
+
     def test_standalone_worker_uses_openai_compatible_gateway_request(self) -> None:
         settings = WorkerSettings(
             api_key="top-secret-value",
@@ -67,6 +120,30 @@ class AzureOpenAIHttpErrorTests(unittest.TestCase):
             request.get_header("Authorization"),
             "Bearer top-secret-value",
         )
+
+    def test_standalone_worker_retries_malformed_json(self) -> None:
+        settings = WorkerSettings(
+            api_key="top-secret-value",
+            base_url="https://gateway.example",
+            infrastructure_retries=1,
+        )
+        with (
+            patch(
+                "data_generator_worker.llm_client.urlopen",
+                side_effect=[
+                    _malformed_json_response(),
+                    _successful_response(),
+                ],
+            ) as mocked_urlopen,
+            patch("data_generator_worker.llm_client.time.sleep"),
+        ):
+            completion = AzureOpenAIClient(settings).generate(
+                [{"role": "user", "content": "Return JSON."}]
+            )
+
+        self.assertEqual(completion.tagged_text, "test")
+        self.assertEqual(completion.entities, [])
+        self.assertEqual(mocked_urlopen.call_count, 2)
 
     def test_generator_sends_configured_model_to_gateway(self) -> None:
         settings = AzureOpenAISettings(

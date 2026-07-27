@@ -29,7 +29,7 @@ class Settings:
     generator_model: str | None = None
     deployment_name: str = "gpt-4o"
     temperature: float = 0.2
-    max_tokens: int = 2500
+    max_tokens: int = 6000
     timeout_seconds: float = 120
     infrastructure_retries: int = 3
     api_style: Literal["auto", "azure", "openai"] = "auto"
@@ -58,7 +58,7 @@ class Settings:
             generator_model=os.getenv("GENERATOR_MODEL") or None,
             deployment_name=os.getenv("DEPLOYMENT_NAME", "gpt-4o"),
             temperature=float(os.getenv("TEMPERATURE", "0.2")),
-            max_tokens=int(os.getenv("MAX_TOKENS", "2500")),
+            max_tokens=int(os.getenv("MAX_TOKENS", "6000")),
             timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "120")),
             infrastructure_retries=int(os.getenv("LLM_INFRA_MAX_RETRIES", "3")),
             api_style=api_style,

@@ -59,7 +59,7 @@ class AzureOpenAIClient:
                         f"Azure OpenAI request failed with HTTP {exc.code}"
                     ) from exc
                 last_error = exc
-            except URLError as exc:
+            except (TypeError, ValueError, URLError) as exc:
                 last_error = exc
             if attempt < self.settings.infrastructure_retries:
                 time.sleep(min(2**attempt, 8))
