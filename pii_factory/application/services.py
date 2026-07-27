@@ -36,7 +36,7 @@ from ..domain.models import (
 from ..ports import CompletionClient, EventBus, RunRepository
 from .formatting import JsonDatasetWriter, OutputFormatter
 from .few_shot_similarity import FewShotImitationGuard
-from .diversity import DiversityPlanner
+from .diversity import DiversityPlanner, resolve_length_target
 from .context_catalog import compatible_context_frames
 from .novelty import NoveltyGuard
 from .retry import RegenerationRouter
@@ -140,7 +140,11 @@ class CoverageController:
 
     def create_tasks(self, run: Run) -> List[GenerationTask]:
         rng = random.Random(run.config.random_seed)
-        diversity_planner = DiversityPlanner(run.config.random_seed)
+        diversity_planner = DiversityPlanner(
+            run.config.random_seed,
+            run.config.sample_length_distribution,
+            run.config.num_samples,
+        )
         tasks: List[GenerationTask] = []
         labels = run.config.label_pool or []
         mandatory_labels = (
@@ -182,6 +186,10 @@ class CoverageController:
                 run, labels, mandatory_labels, sequence_no, max_focus, rng
             )
             selected_robin_labels = focus_labels[1:] if run.config.focus_label else []
+            diversity_profile = diversity_planner.plan(
+                focus_labels,
+                run.config.sample_structure,
+            )
             task = GenerationTask(
                 run_id=run.run_id, sequence_no=sequence_no, language=run.config.language,
                 slot_no=sequence_no,
@@ -190,9 +198,10 @@ class CoverageController:
                 focus_label=run.config.focus_label, robin_labels=selected_robin_labels,
                 optional_constraints=optional_constraints, max_entities=entity_limit,
                 max_attempts=run.config.max_attempts, random_seed=rng.randint(1, 2_147_483_647),
-                diversity_profile=diversity_planner.plan(
-                    focus_labels,
+                diversity_profile=diversity_profile,
+                length_target=resolve_length_target(
                     run.config.sample_structure,
+                    diversity_profile.length_bucket,
                 ),
             )
             self.repository.add_task(task)

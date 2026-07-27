@@ -173,6 +173,7 @@ class ValidationConfig(Schema):
 
 
 class VerifierConfig(Schema):
+    enabled: bool = False
     max_repairs_per_candidate: int = Field(default=1, ge=0, le=1)
 
 
@@ -188,6 +189,9 @@ class RunConfig(Schema):
     robin_selection: RobinSelectionConfig = Field(default_factory=RobinSelectionConfig)
     difficulty_distribution: Dict[str, float] = Field(default_factory=lambda: {"easy": 0.3, "medium": 0.4, "hard": 0.3})
     sample_type_distribution: Dict[str, float] = Field(default_factory=lambda: {"positive": 0.8, "pure_negative": 0.05, "hard_negative": 0.15})
+    sample_length_distribution: Dict[str, float] = Field(
+        default_factory=lambda: {"short": 1 / 3, "medium": 1 / 3, "long": 1 / 3}
+    )
     sample_structure: SampleStructureConfig = Field(default_factory=SampleStructureConfig)
     optional_constraint_distribution: Dict[str, float] = Field(default_factory=dict)
     max_entities: Dict[str, int] = Field(default_factory=lambda: {"easy": 2, "medium": 4, "hard": 6})
@@ -231,6 +235,14 @@ class RunConfig(Schema):
                 **hard_negative,
                 "unsupported_label_policy": "rebuild_task",
             }
+        validation = values.get("validation")
+        if isinstance(validation, dict) and "quality_checks_enabled" in validation:
+            verifier = dict(values.get("verifier") or {})
+            verifier.setdefault(
+                "enabled",
+                bool(validation["quality_checks_enabled"]),
+            )
+            values["verifier"] = verifier
         return values
 
     @validator("language")
@@ -266,6 +278,17 @@ class RunConfig(Schema):
     @validator("sample_type_distribution")
     def validate_sample_type_distribution(cls, distribution: Dict[str, float]) -> Dict[str, float]:
         return cls._validate_distribution(distribution, {"positive", "pure_negative", "hard_negative"}, "sample_type_distribution")
+
+    @validator("sample_length_distribution")
+    def validate_sample_length_distribution(
+        cls,
+        distribution: Dict[str, float],
+    ) -> Dict[str, float]:
+        return cls._validate_distribution(
+            distribution,
+            {"short", "medium", "long"},
+            "sample_length_distribution",
+        )
 
     @validator("optional_constraint_distribution")
     def validate_optional_distribution(cls, distribution: Dict[str, float]) -> Dict[str, float]:
@@ -325,6 +348,11 @@ class RunConfig(Schema):
         if capacities and min(capacities) < minimum_capacity:
             raise ValueError(
                 "focus_label plus robin_selection.min_per_sample exceeds an active task capacity"
+            )
+        maximum_capacity = 1 + selection.max_per_sample
+        if capacities and min(capacities) < maximum_capacity:
+            raise ValueError(
+                "focus_label plus robin_selection.max_per_sample exceeds an active task capacity"
             )
         return values
 
@@ -388,6 +416,26 @@ class DiversityProfile(Schema):
     entity_format_variants: Dict[str, str] = Field(default_factory=dict)
 
 
+class LengthTarget(Schema):
+    bucket: Literal["short", "medium", "long"]
+    min_words: int = Field(..., ge=1)
+    max_words: int = Field(..., ge=1)
+    unit: Literal["content_units", "turns", "words"]
+    min_units: int = Field(..., ge=1)
+    max_units: int = Field(..., ge=1)
+
+    @root_validator
+    def minimums_do_not_exceed_maximums(
+        cls,
+        values: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if values.get("min_words", 1) > values.get("max_words", 1):
+            raise ValueError("length target min_words cannot exceed max_words")
+        if values.get("min_units", 1) > values.get("max_units", 1):
+            raise ValueError("length target min_units cannot exceed max_units")
+        return values
+
+
 class GenerationTask(Schema):
     task_id: str = Field(default_factory=lambda: str(uuid4()))
     run_id: str
@@ -406,6 +454,16 @@ class GenerationTask(Schema):
     max_attempts: int = Field(..., gt=0)
     random_seed: int
     diversity_profile: DiversityProfile = Field(default_factory=DiversityProfile)
+    length_target: LengthTarget = Field(
+        default_factory=lambda: LengthTarget(
+            bucket="medium",
+            min_words=150,
+            max_words=230,
+            unit="content_units",
+            min_units=6,
+            max_units=9,
+        )
+    )
     current_attempt: int = 0
     slot_no: Optional[int] = Field(default=None, gt=0)
     replacement_no: int = Field(default=0, ge=0)
