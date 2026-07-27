@@ -177,6 +177,12 @@ class VerifierConfig(Schema):
     max_repairs_per_candidate: int = Field(default=1, ge=0, le=1)
 
 
+class ParallelGenerationConfig(Schema):
+    workers: int = Field(default=1, ge=1, le=16)
+    shard_size: int = Field(default=10, ge=1, le=100)
+    max_shard_retries: int = Field(default=1, ge=0, le=5)
+
+
 class RunConfig(Schema):
     run_name: str = Field(default="pii-run", min_length=1, max_length=120)
     num_samples: int = Field(..., gt=0, le=100_000)
@@ -203,6 +209,9 @@ class RunConfig(Schema):
     complexity_limits: ComplexityLimits = Field(default_factory=ComplexityLimits)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
     verifier: VerifierConfig = Field(default_factory=VerifierConfig)
+    parallel_generation: ParallelGenerationConfig = Field(
+        default_factory=ParallelGenerationConfig
+    )
 
     @root_validator(pre=True)
     def support_legacy_config(cls, values: Dict[str, Any]) -> Dict[str, Any]:
