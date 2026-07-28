@@ -199,6 +199,8 @@ class RunConfig(Schema):
     sample_length_distribution: Dict[str, float] = Field(
         default_factory=lambda: {"short": 1 / 3, "medium": 1 / 3, "long": 1 / 3}
     )
+    # Deprecated compatibility field. New configs should define
+    # ``sample_structures``; the legacy single value is copied into that pool.
     sample_structure: SampleStructureConfig = Field(default_factory=SampleStructureConfig)
     sample_structures: List[SampleStructureConfig] = Field(default_factory=list)
     optional_constraint_distribution: Dict[str, float] = Field(default_factory=dict)
@@ -218,6 +220,12 @@ class RunConfig(Schema):
     @root_validator(pre=True)
     def support_legacy_config(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         values = dict(values)
+        if "sample_structures" in values and not values["sample_structures"]:
+            raise ValueError("sample_structures cannot be empty")
+        if "sample_structures" not in values:
+            values["sample_structures"] = [
+                values.get("sample_structure") or {"type": "contract"}
+            ]
         if "target_samples" in values and "num_samples" not in values:
             values["num_samples"] = values.pop("target_samples")
         if "difficulty" in values and "difficulty_distribution" not in values:
@@ -677,24 +685,109 @@ class VerificationIssue(Schema):
     severity: Literal["low", "medium", "high", "critical"]
     field: str = Field(..., min_length=1, max_length=100)
     reason: str = Field(..., min_length=1)
-    suggested_fix: str = Field(..., min_length=1)
+    suggested_fix: str = Field(
+        default="Apply the routing decision using the issue reason.",
+        min_length=1,
+    )
+
+    @validator("severity", pre=True)
+    def normalize_severity_case(cls, value: Any) -> Any:
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @validator("suggested_fix", pre=True, always=True)
+    def normalize_missing_suggested_fix(cls, value: Any, values: Dict[str, Any]) -> str:
+        if isinstance(value, str) and value.strip():
+            return value
+        severity = str(values.get("severity") or "").strip().lower()
+        if severity == "low":
+            return "Apply the smallest safe local correction described by the issue reason."
+        if severity == "critical":
+            return "Reject the sample and do not preserve the unsafe content."
+        return "Regenerate the sample so the reported issue no longer occurs."
+
+
+class VerificationEditSegment(Schema):
+    label: str = Field(..., min_length=1, max_length=100)
+    value: str = Field(..., min_length=1)
+
+
+class VerificationEdit(Schema):
+    action: Literal[
+        "add_tag",
+        "split_tag",
+        "adjust_tag_boundary",
+        "remove_tag",
+        "replace_template_artifact",
+        "sync_entities",
+    ]
+    reason: str = Field(..., min_length=1)
+    label: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    value: Optional[str] = Field(default=None, min_length=1)
+    occurrence: Optional[int] = Field(default=None, ge=1)
+    source_label: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    source_value: Optional[str] = Field(default=None, min_length=1)
+    replacement: Optional[str] = None
+    segments: List[VerificationEditSegment] = Field(default_factory=list)
+
+    @validator("action", pre=True)
+    def normalize_action_case(cls, value: Any) -> Any:
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @validator(
+        "label",
+        "value",
+        "source_label",
+        "source_value",
+        pre=True,
+    )
+    def normalize_blank_optional_field(cls, value: Any) -> Any:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @validator("occurrence", pre=True)
+    def normalize_zero_based_occurrence(cls, value: Any) -> Any:
+        """Treat the common LLM index ``0`` as the first occurrence."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        if isinstance(value, bool):
+            return value
+        if value == 0 or (isinstance(value, str) and value.strip() == "0"):
+            return 1
+        return value
+
+    @validator("segments", pre=True)
+    def normalize_null_segments(cls, value: Any) -> Any:
+        return [] if value is None else value
 
 
 class VerifierDecision(Schema):
     status: Literal["PASS", "FIXABLE", "REGENERATE", "REJECTED"]
     score: int = Field(..., ge=0, le=100)
-    issues: List[VerificationIssue] = Field(default_factory=list, max_items=5)
+    issues: List[VerificationIssue] = Field(default_factory=list, max_items=20)
+    edits: List[VerificationEdit] = Field(default_factory=list, max_items=20)
     token_usage: TokenUsage
     latency_ms: int = Field(..., ge=0)
     model: str
     prompt_version: str
 
-    @root_validator
+    @validator("status", pre=True)
+    def normalize_status_case(cls, value: Any) -> Any:
+        return value.strip().upper() if isinstance(value, str) else value
+
+    @validator("issues", "edits", pre=True)
+    def normalize_null_collections(cls, value: Any) -> Any:
+        return [] if value is None else value
+
+    @root_validator(skip_on_failure=True)
     def status_matches_issues(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         status = values.get("status")
         issues: List[VerificationIssue] = values.get("issues") or []
+        edits: List[VerificationEdit] = values.get("edits") or []
         if status == "PASS" and issues:
             raise ValueError("PASS verifier decisions cannot contain issues")
+        if status == "PASS" and edits:
+            raise ValueError("PASS verifier decisions cannot contain edits")
         if status != "PASS" and not issues:
             raise ValueError(f"{status} verifier decisions require at least one issue")
         if status == "FIXABLE" and any(issue.severity != "low" for issue in issues):
@@ -733,9 +826,17 @@ class FormattedEntity(Schema):
         return values
 
 
+class FormattedTokenUsage(Schema):
+    """Token counts exposed with one accepted sample in the final dataset."""
+
+    input_tokens: int = Field(..., ge=0)
+    output_tokens: int = Field(..., ge=0)
+
+
 class FormattedSample(Schema):
     entities: List[FormattedEntity] = Field(default_factory=list)
     text: str = Field(..., min_length=1)
+    token_usage: Optional[FormattedTokenUsage] = None
 
     @root_validator
     def spans_match_text(cls, values: Dict[str, Any]) -> Dict[str, Any]:

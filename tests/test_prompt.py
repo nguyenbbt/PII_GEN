@@ -50,7 +50,7 @@ class DataGeneratorPromptTests(unittest.TestCase):
 
         messages = build_messages(request)
 
-        self.assertEqual(PROMPT_VERSION, "data-generator.v11.2.0")
+        self.assertEqual(PROMPT_VERSION, "data-generator.v11.3.0")
         self.assertEqual(messages[0], {"role": "system", "content": SYSTEM_PROMPT})
         self.assertNotIn("task-1", messages[0]["content"])
         self.assertIn("# Generation Request", messages[1]["content"])
@@ -195,6 +195,40 @@ class DataGeneratorPromptTests(unittest.TestCase):
         self.assertIn("street-level", rules)
         self.assertIn("administrative", rules)
         self.assertNotRegex(rules.casefold(), r"\bcompact\b|\bconcise\b")
+
+    def test_prompt_uses_annotation_labels_and_forbids_human_template_fields(self) -> None:
+        messages = build_prompt_messages(
+            task={
+                "task_id": "annotation-pool",
+                "language": "vi",
+                "focus_labels": ["PERSON"],
+                "annotation_labels": ["PERSON", "PLATE", "TICKET_ID", "JOB_TITLE"],
+                "difficulty": "medium",
+                "sample_type": "positive",
+                "max_entities": 4,
+                "sample_structure": {"type": "custom", "custom_instruction": "Viết email."},
+            },
+            seed_pack={
+                "sample_type": "positive",
+                "positive_entities": [{
+                    "label": "PERSON",
+                    "value": "Mai Huyền",
+                    "semantic_role": "requester",
+                }],
+                "decoys": [],
+            },
+            taxonomy_context={},
+        )
+        envelope = json.loads(
+            messages[1]["content"].split("```json\n", 1)[1].split("\n```", 1)[0]
+        )
+
+        self.assertEqual(
+            envelope["allowed_labels"],
+            ["PERSON", "PLATE", "TICKET_ID", "JOB_TITLE"],
+        )
+        self.assertIn("[Tên Công ty]", messages[0]["content"])
+        self.assertIn("finished prose", messages[0]["content"])
 
 
 if __name__ == "__main__":

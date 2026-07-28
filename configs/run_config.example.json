@@ -39,10 +39,6 @@
     "pure_negative": 0.0,
     "hard_negative": 0.5
   },
-  "sample_structure": {
-    "type": "contract",
-    "custom_instruction": null
-  },
   "sample_structures": [
     {
       "type": "contract"

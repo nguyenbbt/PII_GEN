@@ -4,7 +4,11 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from pii_factory.application.formatting import JsonDatasetWriter, OutputFormatter
-from pii_factory.domain.models import FormattedSample, GeneratedEntity
+from pii_factory.domain.models import (
+    FormattedSample,
+    FormattedTokenUsage,
+    GeneratedEntity,
+)
 
 
 class OutputFormatterTests(unittest.TestCase):
@@ -161,6 +165,30 @@ class JsonDatasetWriterTests(unittest.TestCase):
             self.assertNotIn("..", final_path.name)
             payload = json.loads(final_path.read_text(encoding="utf-8"))
             self.assertEqual(payload, [{"entities": [], "text": "Không chứa PII."}])
+
+    def test_writes_per_sample_input_and_output_token_usage(self) -> None:
+        samples = [
+            FormattedSample(
+                entities=[],
+                text="Không chứa PII.",
+                token_usage=FormattedTokenUsage(
+                    input_tokens=120,
+                    output_tokens=45,
+                ),
+            )
+        ]
+        with TemporaryDirectory() as directory:
+            final_path = JsonDatasetWriter(Path(directory)).finalize(
+                run_name="token-output",
+                run_id="run-token",
+                samples=samples,
+            )
+
+            payload = json.loads(final_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                payload[0]["token_usage"],
+                {"input_tokens": 120, "output_tokens": 45},
+            )
 
 
 if __name__ == "__main__":

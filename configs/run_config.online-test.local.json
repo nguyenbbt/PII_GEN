@@ -37,19 +37,19 @@
     },
     {
       "type": "custom",
-      "custom_instruction": "Viết dưới dạng email nghiệp vụ tự nhiên, có tiêu đề, lời chào, nội dung chính và phần kết phù hợp."
+      "custom_instruction": "Viết dưới dạng email nghiệp vụ tự nhiên."
     },
     {
       "type": "custom",
-      "custom_instruction": "Viết dưới dạng phiếu yêu cầu hoặc ticket hỗ trợ, trình bày bối cảnh, vấn đề và hành động cần thực hiện."
+      "custom_instruction": "Viết dưới dạng phiếu yêu cầu hoặc ticket hỗ trợ."
     },
     {
       "type": "custom",
-      "custom_instruction": "Viết dưới dạng báo cáo sự việc hoặc nhật ký vận hành, có diễn biến và bước xử lý tiếp theo."
+      "custom_instruction": "Viết dưới dạng báo cáo sự việc hoặc nhật ký vận hành."
     },
     {
       "type": "custom",
-      "custom_instruction": "Viết dưới dạng ghi chú hoặc tin nhắn nội bộ tự nhiên giữa các đồng nghiệp, không dùng văn phong hợp đồng."
+      "custom_instruction": "Viết dưới dạng ghi chú hoặc tin nhắn nội bộ tự nhiên."
     }
   ],
   "optional_constraint_distribution": {},

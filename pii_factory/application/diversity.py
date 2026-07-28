@@ -48,19 +48,6 @@ class DiversityPlanner:
         self._structures = _QuotaAxis(
             ("single_sentence", "two_sentence_note", "short_dialogue", "form_like_record"), self._rng
         )
-        self._contract_structures = _QuotaAxis(
-            (
-                "agreement_clause",
-                "administrative_record",
-                "company_notice",
-                "handover_minutes",
-            ),
-            self._rng,
-        )
-        self._chat_structures = _QuotaAxis(
-            ("friend_chat", "customer_support_chat"),
-            self._rng,
-        )
         self._registers = _QuotaAxis(
             ("formal", "neutral", "informal", "concise_technical"), self._rng
         )
@@ -109,13 +96,10 @@ class DiversityPlanner:
             for _ in range(counts[name])
         ]
 
-    def select_sample_structure(
-        self,
-        fallback: SampleStructureConfig,
-    ) -> SampleStructureConfig:
-        """Randomly select a seeded per-sample structure or preserve the legacy preset."""
+    def select_sample_structure(self) -> SampleStructureConfig:
+        """Select only from the configured pool using this planner's seeded RNG."""
         if not self._sample_structures:
-            return fallback
+            raise ValueError("sample_structures must contain at least one configured structure")
         return self._rng.choice(self._sample_structures)
 
     def plan(
@@ -134,17 +118,13 @@ class DiversityPlanner:
         language_register = self._registers.next()
         if sample_structure is not None:
             if sample_structure.type == "contract":
-                document_structure = self._contract_structures.next()
+                document_structure = "contract"
                 language_register = self._rng.choice(
                     ("formal", "neutral", "concise_technical")
                 )
             elif sample_structure.type == "chat":
-                document_structure = self._chat_structures.next()
-                language_register = (
-                    "informal"
-                    if document_structure == "friend_chat"
-                    else "neutral"
-                )
+                document_structure = "chat"
+                language_register = self._rng.choice(("informal", "neutral"))
             else:
                 document_structure = "custom_format"
 

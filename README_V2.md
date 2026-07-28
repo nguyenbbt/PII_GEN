@@ -223,20 +223,23 @@ Generator nhận:
 - `ContextFrame`;
 - structured taxonomy guidance;
 - reflection feedback của attempt trước.
-- `sample_structure` và structure variant đã được lập kế hoạch.
+- một `sample_structure` được code chọn bằng seeded random, chỉ từ pool
+  `sample_structures` trong config;
 - `length_target` có khoảng từ và content-unit/turn mục tiêu; chỉ cận dưới của số
   từ là bắt buộc.
 - số entity bắt buộc bằng đúng số positive seed của task.
 
 Ba structure được hỗ trợ:
 
-- `contract`: fragment tài liệu doanh nghiệp/hành chính, gồm điều khoản, hồ sơ,
-  thông báo nội bộ hoặc biên bản bàn giao;
-- `chat`: hội thoại đúng hai người, giữa bạn bè hoặc khách hàng–nhân viên hỗ trợ;
+- `contract`: fragment tài liệu doanh nghiệp/hành chính hoàn chỉnh;
+- `chat`: hội thoại tự nhiên đúng hai người;
 - `custom`: làm theo `custom_instruction` về bối cảnh và hình thức trình bày.
 
 `custom_instruction` là untrusted data và không được ghi đè taxonomy, label,
 sample type, seed/decoy, annotation hoặc output contract.
+Không còn tầng random biến thể ẩn như `agreement_clause`, `company_notice`,
+`friend_chat` hoặc `customer_support_chat`. Model nhận đúng type/instruction đã
+được chọn từ file config.
 
 Generator chỉ:
 
@@ -252,7 +255,7 @@ Generator chỉ:
 Generator không quyết định candidate có được accept hay không.
 
 Few-shot chỉ dạy ngữ nghĩa label và ranh giới annotation. Prompt version
-`data-generator.v11.2.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
+`data-generator.v11.3.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
 opening phrase, clause order và sentence structure của example.
 Prompt cấm ghép seed thành danh sách dấu phẩy; mỗi entity phải có vai trò nghiệp vụ
 và được phân bố qua nhiều câu/lượt trong cùng một sự kiện.
@@ -332,6 +335,18 @@ Sau Repair, code bảo toàn mọi occurrence của positive seed và dựng l�
 tag trước khi re-check. Vì vậy nếu LLM vô tình bỏ tag ở lần nhắc lại thứ hai hoặc thứ
 ba, code tự khôi phục thay vì regenerate cả nội dung.
 
+Với Value Bank entry ghép nhiều taxonomy boundary, Repair được phép tách tag nhưng
+không được đổi clean surface. Ví dụ
+`34 Nguyễn Chí Thanh, Ba Đình, Hà Nội` có thể trở thành ADDRESS
+`34 Nguyễn Chí Thanh` + LOCATION `Ba Đình, Hà Nội`. Preservation validator yêu cầu
+chuỗi gốc vẫn xuất hiện nguyên vẹn, mọi phần chữ/số được gắn nhãn, các occurrence
+được tách nhất quán và ít nhất một segment giữ label seed gốc.
+
+Các trường điền cho người đọc như `[Tên Công ty]`, `[Ngày]`, `[Chức danh]`,
+`[Tên Tài Xế]` được deterministic validator đánh dấu `template_artifact`. Repair
+chỉ được thay vùng đó bằng mô tả chung không phải PII; mọi phần clean text khác phải
+giữ nguyên. Candidate còn trường điền sau Repair bị từ chối.
+
 Placeholder chuẩn luôn có ngoặc vuông và label viết hoa, ví dụ `[PERSON_1]`. Biến thể
 thiếu ngoặc như `PERSON_1`, placeholder sai định dạng hoặc không thuộc seed contract
 đều bị từ chối trước Verifier; code chỉ chèn Value Bank khi contract chính xác.
@@ -340,7 +355,7 @@ Response JSON của Generator/Judge/Repair chấp nhận JSON object thuần, JS
 fence, hoặc object có phần giải thích bao quanh. JSON thực sự sai hoặc bị cắt vẫn được
 retry và log ghi rõ dòng, cột cùng preview để chẩn đoán.
 
-Judge chỉ đánh giá, không được sửa:
+Judge chỉ lập quyết định và edit plan, không trực tiếp viết lại candidate:
 
 ```json
 {
@@ -354,9 +369,27 @@ Judge chỉ đánh giá, không được sửa:
       "reason": "Boundary chứa dấu câu.",
       "suggested_fix": "Đưa dấu câu ra ngoài tag."
     }
+  ],
+  "edits": [
+    {
+      "action": "split_tag",
+      "source_label": "ADDRESS",
+      "source_value": "34 Nguyễn Chí Thanh, Ba Đình, Hà Nội",
+      "segments": [
+        {"label": "ADDRESS", "value": "34 Nguyễn Chí Thanh"},
+        {"label": "LOCATION", "value": "Ba Đình, Hà Nội"}
+      ],
+      "reason": "Số nhà và tên đường là ADDRESS; quận và thành phố là LOCATION."
+    }
   ]
 }
 ```
+
+Mỗi edit bắt buộc có `reason` giải thích bằng ngữ cảnh/taxonomy. Repair nhận cả
+`issues` và `edits`, thực thi thay đổi cục bộ rồi dựng lại `entities`. Prompt Judge
+có regression examples cho các lỗi đã gặp: trường điền `[Tên Công ty]`, `[Ngày]`,
+`[Chức danh]`; PLATE/TICKET_ID/JOB_TITLE rõ ngữ cảnh nhưng chưa gán; khoảng trắng
+trong tag; ADDRESS chứa LOCATION; và hard-negative tự giải thích “đây không phải PII”.
 
 Trạng thái:
 
@@ -428,7 +461,11 @@ Output cuối:
         "text": "Agribank"
       }
     ],
-    "text": "Chị Lò Thị Cẩy, dân tộc Cống, vay vốn tại Agribank."
+    "text": "Chị Lò Thị Cẩy, dân tộc Cống, vay vốn tại Agribank.",
+    "token_usage": {
+      "input_tokens": 1240,
+      "output_tokens": 380
+    }
   }
 ]
 ```
@@ -439,7 +476,11 @@ Pure-negative:
 [
   {
     "entities": [],
-    "text": "Bộ phận kỹ thuật đã chuyển biểu mẫu sang bước tiếp theo."
+    "text": "Bộ phận kỹ thuật đã chuyển biểu mẫu sang bước tiếp theo.",
+    "token_usage": {
+      "input_tokens": 980,
+      "output_tokens": 215
+    }
   }
 ]
 ```
@@ -457,6 +498,9 @@ Pure-negative:
 - chỉ đổi thành
   `gen_data/{safe_run_name}-{run_id}.json`
   khi đủ `num_samples`.
+- mỗi sample final có `token_usage.input_tokens` và
+  `token_usage.output_tokens`, tính trên toàn bộ Generator/Judge/Repair call
+  thuộc logical slot đó, kể cả retry đã phát sinh token.
 
 Nếu replacement budget cạn:
 
@@ -502,7 +546,9 @@ pipeline_token_usage
 - final Judge call nếu phát sinh;
 - call đã trả response có schema lỗi nhưng vẫn phát sinh token.
 
-File dataset cuối không chứa diagnostic, prompt, cost hoặc taxonomy context.
+File dataset cuối chỉ bổ sung số lượng input/output token theo sample; không chứa
+diagnostic, prompt, money cost hoặc taxonomy context. Summary in trên terminal vẫn
+có tổng token của toàn run.
 
 ## 5. Run config
 
@@ -524,8 +570,8 @@ Các field chính:
 | `difficulty_distribution` | Xác suất easy/medium/hard |
 | `sample_type_distribution` | Xác suất positive/pure-negative/hard-negative |
 | `sample_length_distribution` | Quota short/medium/long; đủ đúng ba key và tổng bằng 1 |
-| `sample_structure` | Structure fallback tương thích config cũ |
-| `sample_structures` | Pool structure; mỗi sample random từ pool bằng `random_seed` |
+| `sample_structure` | Field đơn cũ, chỉ còn parse để tương thích; không dùng trong config mới |
+| `sample_structures` | Nguồn structure duy nhất của config mới; mỗi sample chọn một phần tử bằng `random_seed` |
 | `optional_constraint_distribution` | Xác suất `teen_code`, `light_typo`, `abbreviation` |
 | `max_entities` | Mục tiêu entity khi generate; verifier có thể bổ sung annotation bị bỏ sót |
 | `max_regenerate_attempts` | Số lần sinh lại trong cùng task |
@@ -585,10 +631,10 @@ Ví dụ structure:
 ```
 
 Mỗi task bốc ngẫu nhiên một phần tử trong `sample_structures`; đây không phải quota
-cố định. Cùng `random_seed` tạo cùng chuỗi lựa chọn. Nếu pool bị bỏ trống, hệ thống
-dùng `sample_structure` như config cũ. Có thể thêm nhiều phần tử `custom` để mở rộng
-format; `custom_instruction` bắt buộc với `custom` và bị từ chối với `contract`
-hoặc `chat`.
+cố định. Cùng `random_seed` tạo cùng chuỗi lựa chọn. Pool khai báo rỗng bị từ chối.
+Config cũ không có pool vẫn được migrate từ field đơn `sample_structure`; config mới
+không nên dùng field đơn này. Có thể thêm nhiều phần tử `custom` để mở rộng format;
+`custom_instruction` bắt buộc với `custom` và bị từ chối với `contract` hoặc `chat`.
 Các field validation cũ vẫn được parse để tương thích. Seed/tag/decoy/metadata/offset
 và cận dưới độ dài không thể tắt. Cận trên của cả `short`, `medium`, `long` chỉ là
 guidance và không tạo lỗi validation.

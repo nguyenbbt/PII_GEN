@@ -2,11 +2,160 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 
 _ENTITY_TAG = re.compile(r"<([A-Z][A-Z0-9_]*)>(.*?)</\1>", re.DOTALL)
 _ANY_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9_]*>")
+_TEMPLATE_ARTIFACT = re.compile(
+    r"\[(?P<field>(?:"
+    r"Tên|Ngày|Chức\s+danh|Địa\s+chỉ|Số|Công\s+ty|Khách\s+hàng|"
+    r"Đại\s+diện|Tài\s+xế|Name|Date|Title|Company|Customer|Address|"
+    r"Datum|Firma|Kunde|Adresse"
+    r")[^\[\]\r\n]{0,70})\]",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class TaggedSpan:
+    label: str
+    value: str
+    start: int
+    end: int
+
+
+def tagged_text_to_clean_and_spans(tagged_text: str) -> tuple[str, list[TaggedSpan]]:
+    """Remove valid entity tags while retaining clean-text span boundaries."""
+    clean_parts: list[str] = []
+    spans: list[TaggedSpan] = []
+    source_cursor = 0
+    clean_cursor = 0
+    for match in _ENTITY_TAG.finditer(tagged_text):
+        plain = tagged_text[source_cursor:match.start()]
+        clean_parts.append(plain)
+        clean_cursor += len(plain)
+        value = match.group(2)
+        start = clean_cursor
+        clean_parts.append(value)
+        clean_cursor += len(value)
+        spans.append(
+            TaggedSpan(
+                label=match.group(1),
+                value=value,
+                start=start,
+                end=clean_cursor,
+            )
+        )
+        source_cursor = match.end()
+    clean_parts.append(tagged_text[source_cursor:])
+    return "".join(clean_parts), spans
+
+
+def find_template_artifacts(text: str) -> list[tuple[int, int, str]]:
+    """Find unresolved human-facing fill-in fields in clean or tagged text."""
+    clean = _ANY_TAG.sub("", text)
+    return [
+        (match.start(), match.end(), match.group(0))
+        for match in _TEMPLATE_ARTIFACT.finditer(clean)
+    ]
+
+
+def seed_realization_status(
+    tagged_text: str,
+    *,
+    label: str,
+    value: str,
+) -> str:
+    """Classify whether an exact seed surface is safely represented by NER spans.
+
+    ``partitioned`` allows a composite Value Bank entry to be split along taxonomy
+    boundaries, for example an ADDRESS street span followed by a LOCATION span.
+    The original seed surface must remain byte-for-byte unchanged and at least one
+    partition must retain the seed's original label.
+    """
+    clean, spans = tagged_text_to_clean_and_spans(tagged_text)
+    occurrences: list[tuple[int, int]] = []
+    cursor = 0
+    while value:
+        start = clean.find(value, cursor)
+        if start < 0:
+            break
+        occurrences.append((start, start + len(value)))
+        cursor = start + len(value)
+    if not occurrences:
+        return "missing"
+
+    signatures: list[tuple[tuple[str, int, int], ...]] = []
+    occurrence_statuses: list[str] = []
+    for start, end in occurrences:
+        containing = [
+            span
+            for span in spans
+            if span.start < end and span.end > start
+        ]
+        exact = any(
+            span.label == label and span.start == start and span.end == end
+            for span in containing
+        )
+        if exact and len(containing) == 1:
+            occurrence_statuses.append("exact")
+            signatures.append(((label, 0, len(value)),))
+            continue
+
+        if any(
+            span.label == label
+            and span.start <= start
+            and span.end >= end
+            and span.value.strip() == value
+            for span in containing
+        ):
+            occurrence_statuses.append("boundary_whitespace")
+            signatures.append(())
+            continue
+
+        internal = sorted(
+            (
+                span
+                for span in containing
+                if span.start >= start and span.end <= end
+            ),
+            key=lambda span: (span.start, span.end),
+        )
+        covered = {
+            index
+            for span in internal
+            for index in range(span.start - start, span.end - start)
+        }
+        alphanumeric_covered = all(
+            not character.isalnum() or index in covered
+            for index, character in enumerate(value)
+        )
+        has_original_label = any(span.label == label for span in internal)
+        non_overlapping = all(
+            left.end <= right.start
+            for left, right in zip(internal, internal[1:])
+        )
+        if internal and alphanumeric_covered and has_original_label and non_overlapping:
+            occurrence_statuses.append("partitioned")
+            signatures.append(tuple(
+                (span.label, span.start - start, span.end - start)
+                for span in internal
+            ))
+        else:
+            occurrence_statuses.append("unannotated")
+            signatures.append(())
+
+    if len(set(signatures)) > 1:
+        return "inconsistent"
+    if all(status == "exact" for status in occurrence_statuses):
+        return "exact"
+    if all(status == "partitioned" for status in occurrence_statuses):
+        return "partitioned"
+    if all(status == "boundary_whitespace" for status in occurrence_statuses):
+        return "boundary_whitespace"
+    return "inconsistent"
 
 
 def extract_occurrence_contexts(text: str, value: str) -> list[str]:
@@ -88,18 +237,16 @@ def validate_seeded_contract(
     local_context_window: int = 80,
     max_decoy_occurrences: int = 1,
 ) -> None:
-    """Enforce exact positive seeds and untagged, explained decoys."""
+    """Enforce exact seed surfaces, taxonomy-safe spans, and explained decoys."""
     entity_pairs = {(str(item.get("label", "")), str(item.get("value", ""))) for item in entities}
     text_without_tags = _ANY_TAG.sub("", tagged_text)
     for seed in positive_entities:
         label, value = str(seed.get("label", "")), str(seed.get("value", ""))
-        expected = f"<{label}>{value}</{label}>"
-        if tagged_text.count(expected) < 1:
-            raise ValueError(f"positive seed must appear with its exact tag: {label}")
-        if (label, value) not in entity_pairs:
-            raise ValueError(f"positive seed is missing from entities: {label}")
-        if value in _ANY_TAG.sub("", tagged_text.replace(expected, "")):
-            raise ValueError(f"positive seed appears outside its required tag: {label}")
+        status = seed_realization_status(tagged_text, label=label, value=value)
+        if status not in {"exact", "partitioned"}:
+            raise ValueError(
+                f"positive seed has invalid surface or annotation ({status}): {label}"
+            )
     entity_values = {value for _, value in entity_pairs}
     for decoy in decoys:
         value = str(decoy.get("value", ""))

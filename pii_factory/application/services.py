@@ -6,7 +6,7 @@ import random
 import time
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Dict, List
+from typing import Callable, Dict, List
 from uuid import uuid4
 
 from data_generator_worker.placeholders import replace_entity_placeholders
@@ -18,6 +18,7 @@ from ..domain.models import (
     DataGenerationResult,
     DeterministicValidationResult,
     EventEnvelope,
+    FormattedTokenUsage,
     GenerationCandidate,
     GeneratedEntity,
     GenerationQuery,
@@ -140,9 +141,15 @@ class RunOrchestrator:
 
 
 class CoverageController:
-    def __init__(self, repository: RunRepository, event_bus: EventBus) -> None:
+    def __init__(
+        self,
+        repository: RunRepository,
+        event_bus: EventBus,
+        taxonomy_for_run: Callable[[str], List[TaxonomyLabel]] | None = None,
+    ) -> None:
         self.repository = repository
         self.event_bus = event_bus
+        self.taxonomy_for_run = taxonomy_for_run
 
     def create_tasks(self, run: Run) -> List[GenerationTask]:
         rng = random.Random(run.config.random_seed)
@@ -154,6 +161,14 @@ class CoverageController:
         )
         tasks: List[GenerationTask] = []
         labels = run.config.label_pool or []
+        annotation_labels = labels
+        if (
+            run.config.value_bank.allow_additional_unseeded_pii
+            and self.taxonomy_for_run is not None
+        ):
+            annotation_labels = [
+                label.code for label in self.taxonomy_for_run(run.run_id)
+            ]
         mandatory_labels = (
             [] if run.config.focus_label
             else [label for label in labels for _ in range(run.config.minimum_per_label)]
@@ -193,9 +208,7 @@ class CoverageController:
                 run, labels, mandatory_labels, sequence_no, max_focus, rng
             )
             selected_robin_labels = focus_labels[1:] if run.config.focus_label else []
-            sample_structure = diversity_planner.select_sample_structure(
-                run.config.sample_structure
-            )
+            sample_structure = diversity_planner.select_sample_structure()
             diversity_profile = diversity_planner.plan(
                 focus_labels,
                 sample_structure,
@@ -205,7 +218,7 @@ class CoverageController:
                 slot_no=sequence_no,
                 focus_labels=focus_labels,
                 annotation_labels=(
-                    labels
+                    annotation_labels
                     if run.config.value_bank.allow_additional_unseeded_pii
                     else focus_labels
                 ),
@@ -947,6 +960,15 @@ class Pipeline:
             entities=candidate.entities,
             allowed_labels=(task.annotation_labels or task.focus_labels),
         )
+        pipeline_usage = self._pipeline_usage(
+            run.run_id, task.slot_no or task.sequence_no
+        )
+        formatted = formatted.copy(update={
+            "token_usage": FormattedTokenUsage(
+                input_tokens=pipeline_usage.total.input_tokens,
+                output_tokens=pipeline_usage.total.output_tokens,
+            ),
+        })
         result = DataGenerationResult(
             **candidate.dict(exclude={"created_at"}),
             output_validation=validation,
@@ -954,9 +976,7 @@ class Pipeline:
             novelty_assessment=novelty,
             verification_trace=trace,
             formatted_sample=formatted,
-            pipeline_token_usage=self._pipeline_usage(
-                run.run_id, task.slot_no or task.sequence_no
-            ),
+            pipeline_token_usage=pipeline_usage,
         )
         self.repository.add_result(result)
         self.repository.add_formatted_sample(task.task_id, formatted)

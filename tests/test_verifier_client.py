@@ -93,6 +93,109 @@ class AzureOpenAIVerifierClientTests(unittest.TestCase):
         self.assertEqual(repaired.model, "gemini-2.5-pro")
         self.assertEqual(transport.calls[0]["max_tokens"], 2500)
 
+    def test_judge_normalizes_zero_based_edit_occurrence(self) -> None:
+        transport = FakeJsonTransport(
+            {
+                "status": "FIXABLE",
+                "score": 88,
+                "issues": [{
+                    "type": "MISSING_ANNOTATION",
+                    "severity": "low",
+                    "field": "tagged_text",
+                    "reason": "The first date is not tagged.",
+                    "suggested_fix": "Add the DATE tag locally.",
+                }],
+                "edits": [{
+                    "action": "add_tag",
+                    "label": "DATE",
+                    "value": "27/10/2023",
+                    "occurrence": 0,
+                    "reason": "The explicit date cue identifies this value as DATE.",
+                }],
+            }
+        )
+        client = AzureOpenAIVerifierClient(
+            settings(),
+            input_price_per_million=Decimal("2.50"),
+            output_price_per_million=Decimal("10.00"),
+            transport=transport,
+        )
+
+        with self.assertLogs(
+            "pii_factory.infrastructure.clients",
+            level="WARNING",
+        ) as captured:
+            decision = client.judge([{"role": "system", "content": "judge"}])
+
+        self.assertEqual(decision.status, "FIXABLE")
+        self.assertEqual(decision.edits[0].occurrence, 1)
+        self.assertIn("zero-based", "\n".join(captured.output))
+
+    def test_judge_keeps_negative_occurrence_invalid(self) -> None:
+        payload = {
+            "status": "FIXABLE",
+            "score": 88,
+            "issues": [{
+                "type": "MISSING_ANNOTATION",
+                "severity": "low",
+                "field": "tagged_text",
+                "reason": "The date is not tagged.",
+                "suggested_fix": "Add the DATE tag locally.",
+            }],
+            "edits": [{
+                "action": "add_tag",
+                "label": "DATE",
+                "value": "27/10/2023",
+                "occurrence": -1,
+                "reason": "The explicit date cue identifies this value as DATE.",
+            }],
+        }
+        client = AzureOpenAIVerifierClient(
+            settings(),
+            input_price_per_million=Decimal("2.50"),
+            output_price_per_million=Decimal("10.00"),
+            transport=FakeJsonTransport(payload),
+        )
+
+        with self.assertRaisesRegex(
+            VerifierInfrastructureError,
+            r"edits\.0\.occurrence",
+        ):
+            client.judge([{"role": "system", "content": "judge"}])
+
+    def test_judge_preserves_issue_when_suggested_fix_is_null(self) -> None:
+        transport = FakeJsonTransport(
+            {
+                "status": "REGENERATE",
+                "score": 35,
+                "issues": [{
+                    "type": "UNNATURAL_TEXT",
+                    "severity": "high",
+                    "field": "tagged_text",
+                    "reason": "The text is incoherent and needs a new generation.",
+                    "suggested_fix": None,
+                }],
+                "edits": [],
+            }
+        )
+        client = AzureOpenAIVerifierClient(
+            settings(),
+            input_price_per_million=Decimal("2.50"),
+            output_price_per_million=Decimal("10.00"),
+            transport=transport,
+        )
+
+        with self.assertLogs(
+            "pii_factory.infrastructure.clients",
+            level="WARNING",
+        ) as captured:
+            decision = client.judge([{"role": "system", "content": "judge"}])
+
+        self.assertEqual(decision.status, "REGENERATE")
+        self.assertEqual(len(decision.issues), 1)
+        self.assertIn("Regenerate", decision.issues[0].suggested_fix)
+        self.assertIn("missing suggested_fix", "\n".join(captured.output))
+
     def test_invalid_or_contradictory_llm_payload_is_infrastructure_error(self) -> None:
         payloads = (
             {"status": "PASS", "score": 90, "issues": [{"unexpected": True}]},

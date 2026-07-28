@@ -108,7 +108,7 @@ class PromptDiversityTests(unittest.TestCase):
         rules = " ".join(envelope_from(messages)["sample_structure_rules"])
 
         self.assertIn("business or administrative document", rules)
-        self.assertIn("administrative record", rules)
+        self.assertIn("finished prose", rules)
         self.assertIn("not a chat conversation", rules)
 
     def test_chat_structure_requires_exactly_two_speakers(self) -> None:
@@ -136,7 +136,7 @@ class PromptDiversityTests(unittest.TestCase):
         rules = " ".join(envelope_from(messages)["sample_structure_rules"])
 
         self.assertIn("exactly two speakers", rules)
-        self.assertIn("customer-support conversation", rules)
+        self.assertIn("natural two-speaker conversation", rules)
         self.assertIn("10 to 14", rules)
 
     def test_custom_structure_is_context_only_and_cannot_override_annotation(self) -> None:

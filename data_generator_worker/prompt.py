@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 from .contracts import DataGenerationRequest
 from .placeholders import placeholder_entities
 
-PROMPT_VERSION = "data-generator.v11.2.0"
+PROMPT_VERSION = "data-generator.v11.3.0"
 
 SYSTEM_PROMPT = """# Role
 You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
@@ -31,6 +31,10 @@ You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
 9. For ADDRESS and LOCATION, follow semantic boundaries: street-level details
    (house number, street, building, apartment, room) are ADDRESS; administrative
    places (ward, district, province, city, country) are LOCATION. ZIP_CODE is separate.
+10. Produce finished prose, never a fill-in template. Do not emit human-readable
+    bracket slots such as [Tên Công ty], [Ngày], [Chức danh], [Tên Tài Xế],
+    [Company Name], or similar fields. Square brackets are reserved exclusively for
+    the supplied canonical entity placeholders such as [PERSON_1].
 
 # Few-Shot Use Policy
 - Examples under `taxonomy_guidance.focus_label.examples` teach label meaning,
@@ -55,7 +59,8 @@ Internally reject and rewrite the draft if any required placeholder is missing o
 any decoy occurrence lacks at least one `required_context_cue` copied unchanged in the same sentence,
 a decoy is attached as a disclaimer instead of participating in the event, an unrelated sentence exists only to
 mention a seed, the clean text is shorter than `length_target.min_words`, required entities are presented as a list rather than
-participating in the event, or the text does not describe one coherent event/document. Return only the final JSON.
+participating in the event, a human-readable bracket field remains, or the text does
+not describe one coherent event/document. Return only the final JSON.
 """
 
 POSITIVE_RULES = [
@@ -115,13 +120,9 @@ STRUCTURE_RULES = {
     "two_sentence_note": "Realize the sample as a two-sentence operational note.",
     "short_dialogue": "Realize the sample as a short dialogue with explicit speaker turns.",
     "form_like_record": "Realize the sample as a structured form-like record, not ordinary narrative prose.",
-    "agreement_clause": "Realize the sample as an agreement or contract section.",
-    "administrative_record": "Realize the sample as a detailed administrative record.",
-    "company_notice": "Realize the sample as a company notice or internal business document.",
-    "handover_minutes": "Realize the sample as handover or meeting minutes.",
-    "friend_chat": "Realize the sample as a natural conversation between two friends.",
-    "customer_support_chat": "Realize the sample as a customer-support conversation.",
     "custom_format": "Use the presentation format specified by custom_instruction.",
+    "contract": "Realize the sample as a complete business or administrative document fragment.",
+    "chat": "Realize the sample as a natural two-speaker conversation.",
 }
 
 REGISTER_RULES = {
@@ -194,34 +195,25 @@ def _sample_structure_rules(task: Mapping[str, Any]) -> list[str]:
     if not isinstance(structure, Mapping):
         return []
     structure_type = str(structure.get("type", "contract"))
-    profile = task.get("diversity_profile") or {}
-    variant = str(profile.get("document_structure", ""))
     target = _length_target(task)
     if structure_type == "contract":
-        variant_rule = STRUCTURE_RULES.get(
-            variant,
-            STRUCTURE_RULES["administrative_record"],
-        )
         return [
             "Write a realistic business or administrative document fragment, not a chat conversation.",
-            variant_rule,
+            STRUCTURE_RULES["contract"],
+            "Write all context as finished prose; never leave fields for a reader to fill in.",
             (
                 f"Aim for {target['min_units']} to {target['max_units']} connected content units. "
                 "Additional meaningful units are allowed; never add filler."
             ),
         ]
     if structure_type == "chat":
-        variant_rule = STRUCTURE_RULES.get(
-            variant,
-            STRUCTURE_RULES["customer_support_chat"],
-        )
         return [
             (
                 "Write a realistic chat with exactly two speakers and aim for "
                 f"{target['min_units']} to {target['max_units']} alternating turns. "
                 "Additional meaningful turns are allowed."
             ),
-            variant_rule,
+            STRUCTURE_RULES["chat"],
             "Keep both speakers in one coherent conversation and never introduce a third speaker.",
         ]
     if structure_type == "custom":
@@ -340,13 +332,17 @@ def build_prompt_messages(
     sample_type = str(task.get("sample_type", ""))
     hard_negative_mode = seed_pack.get("hard_negative_mode")
     focus_labels = [str(label) for label in task.get("focus_labels", [])]
+    allowed_labels = [
+        str(label)
+        for label in (task.get("annotation_labels") or focus_labels)
+    ]
     envelope = {
         "task": dict(task),
         "sample_structure": task.get("sample_structure"),
         "sample_structure_rules": _sample_structure_rules(task),
         "seed_pack_id": seed_pack.get("seed_pack_id"),
         "hard_negative_mode": hard_negative_mode,
-        "allowed_labels": focus_labels,
+        "allowed_labels": allowed_labels,
         "positive_entities": placeholder_entities(
             list(seed_pack.get("positive_entities", []))
         ),

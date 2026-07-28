@@ -26,7 +26,11 @@ def build_pipeline(
     event_bus = InMemoryEventBus()
     orchestrator = RunOrchestrator(repository, event_bus)
     taxonomy_service = TaxonomyService(repository, event_bus)
-    coverage = CoverageController(repository, event_bus)
+    coverage = CoverageController(
+        repository,
+        event_bus,
+        taxonomy_for_run=orchestrator.taxonomy_for_run,
+    )
     rates = CostRates(
         input_per_million_usd=Decimal(os.getenv("INPUT_TOKEN_PRICE_PER_MILLION_USD", "2.50")),
         output_per_million_usd=Decimal(os.getenv("OUTPUT_TOKEN_PRICE_PER_MILLION_USD", "10.00")),

@@ -83,7 +83,43 @@ class DistributionRunConfigTests(unittest.TestCase):
             [tuple((item["type"], item.get("custom_instruction"))) for item in pool] * 5,
         )
 
+    def test_additional_unseeded_pii_uses_full_taxonomy_annotation_pool(self) -> None:
+        config = RunConfig(
+            num_samples=1,
+            focus_labels=["PERSON"],
+            sample_structures=[{"type": "chat"}],
+            sample_type_distribution={
+                "positive": 1.0,
+                "pure_negative": 0.0,
+                "hard_negative": 0.0,
+            },
+            value_bank={"allow_additional_unseeded_pii": True},
+        )
+        pipeline, repository, _ = build_pipeline(offline=True)
+        taxonomy = pipeline.taxonomy_service.import_json(
+            Path("pii_taxonomy_rules.json")
+        )
+        run = pipeline.create_run(
+            CreateRunRequest(
+                taxonomy_version_id=taxonomy.version_id,
+                config=config,
+            )
+        )
+        task = repository.list_tasks(run.run_id)[0]
+
+        self.assertEqual(task.focus_labels, ["PERSON"])
+        self.assertIn("PLATE", task.annotation_labels)
+        self.assertIn("TICKET_ID", task.annotation_labels)
+        self.assertIn("JOB_TITLE", task.annotation_labels)
+        self.assertEqual(task.diversity_profile.document_structure, "chat")
+
     def test_custom_structure_requires_instruction_and_presets_reject_it(self) -> None:
+        with self.assertRaisesRegex(
+            ValidationError,
+            "sample_structures cannot be empty",
+        ):
+            RunConfig(num_samples=1, sample_structures=[])
+
         with self.assertRaisesRegex(
             ValidationError,
             "custom_instruction is required",
@@ -208,6 +244,7 @@ class DistributionRunConfigTests(unittest.TestCase):
         self.assertEqual(config.value_bank.path, "PII_Value_Bank")
         self.assertEqual(config.hard_negative.max_decoys, 1)
         self.assertEqual(config.hard_negative.mode, "mixed_contrastive")
+        self.assertNotIn("sample_structure", raw_config)
         self.assertEqual(config.sample_structure.type, "contract")
         self.assertFalse(config.validation.quality_checks_enabled)
         self.assertTrue(config.verifier.enabled)
@@ -271,7 +308,7 @@ class DistributionRunConfigTests(unittest.TestCase):
         self.assertTrue(all(set(item[1]).issubset({"PERSON", "DATE", "EMAIL", "PHONE"}) for item in decisions[0]))
         self.assertGreater(len({tuple(item[1]) for item in decisions[0]}), 1)
 
-    def test_chat_structure_flows_to_tasks_with_reproducible_variants(self) -> None:
+    def test_legacy_chat_structure_flows_without_hidden_variants(self) -> None:
         config = RunConfig(
             num_samples=12,
             focus_labels=["PERSON"],
@@ -307,7 +344,7 @@ class DistributionRunConfigTests(unittest.TestCase):
         self.assertEqual(planned_variants[0], planned_variants[1])
         self.assertEqual(
             set(planned_variants[0]),
-            {"friend_chat", "customer_support_chat"},
+            {"chat"},
         )
 
     def test_focus_and_robin_labels_flow_to_seed_and_result(self) -> None:

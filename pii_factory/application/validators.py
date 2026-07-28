@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from collections import Counter
 from datetime import datetime
 from typing import Iterable, Sequence
 from urllib.parse import urlparse
 
-from data_generator_worker.validation import extract_occurrence_contexts, validate_generated_output
+from data_generator_worker.validation import (
+    extract_occurrence_contexts,
+    find_template_artifacts,
+    seed_realization_status,
+    tagged_text_to_clean_and_spans,
+    validate_generated_output,
+)
 
 from ..domain.models import (
     DeterministicValidationResult,
@@ -25,12 +32,32 @@ from .seed_generation import HARD_NEGATIVE_STRATEGIES
 _EMAIL = re.compile(r"(?<![\w.+-])[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}(?![\w-])")
 _PHONE = re.compile(r"(?<!\d)(?:\+?84|0)[ .-]?(?:3|5|7|8|9)(?:[ .-]?\d){8}(?!\d)")
 _URL = re.compile(r"https?://[^\s<>]+", re.IGNORECASE)
-_DATE = re.compile(r"(?<!\d)(?:0?[1-9]|[12]\d|3[01])[/.-](?:0?[1-9]|1[0-2])[/.-](?:19|20)\d{2}(?!\d)")
+_DATE = re.compile(
+    r"(?:(?<!\d)(?:0?[1-9]|[12]\d|3[01])[/.-](?:0?[1-9]|1[0-2])[/.-](?:19|20)\d{2}(?!\d)|"
+    r"(?<![A-Za-z0-9-])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])"
+    r"(?![A-Za-z0-9-]))"
+)
 _TIME = re.compile(r"(?<!\d)(?:(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?|(?:0?[1-9]|1[0-2]):[0-5]\d\s?(?:AM|PM))(?!\d)", re.IGNORECASE)
 _IP = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 _IDENTIFIER = re.compile(r"\b(?:ACC|USR|EMP|INC|BH)-[A-Z0-9]{5,}\b", re.IGNORECASE)
+_PLATE_WITH_CONTEXT = re.compile(
+    r"(?i)(?:biển(?:\s+số)?(?:\s+xe)?|biển\s+kiểm\s+soát)"
+    r"\s*(?:là|số|:)?\s*"
+    r"(?P<value>\d{2}[A-Z]{1,2}[-\s]?\d{3}(?:[.\s]?\d{2})?)"
+)
+_TICKET_WITH_CONTEXT = re.compile(
+    r"(?i)(?:mã\s+(?:sự\s+cố|phiếu|yêu\s+cầu|ticket)|ticket)"
+    r"\s*(?:là|số|:)?\s*"
+    r"(?P<value>[A-Z]{2,10}-[A-Z0-9]+(?:-[A-Z0-9]+)+)"
+)
+_HARD_NEGATIVE_META = re.compile(
+    r"(?i)(?:đây|giá\s+trị\s+này|chuỗi\s+này|dữ\s+liệu\s+này)?\s*"
+    r"(?:không\s+phải\s+(?:là\s+)?(?:email|số\s+điện\s+thoại|PII|thông\s+tin\s+cá\s+nhân)"
+    r"|chỉ\s+là\s+(?:dữ\s+liệu|chuỗi|giá\s+trị)\s+giả)"
+)
 _ADDRESS = re.compile(r"(?=.*\d)(?=.*[^\W\d_]).*\s+.*", re.UNICODE)
 _TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9_]*>")
+_ENTITY_PAIR = re.compile(r"<([A-Z][A-Z0-9_]*)>(.*?)</\1>", re.DOTALL)
 _MIXED_LOCALE = re.compile(r"JaneHuyện|JohnQuận|SmithPhường|\b(?:County|Street|Avenue|undefined|null|N/A|xxx)\b", re.IGNORECASE)
 
 
@@ -265,9 +292,23 @@ class DeterministicOutputValidator:
                 max_entities=max_entities,
             )
         except ValueError as exc:
-            issues.append(ValidationIssue(type="invalid_output", scope="TEXT", reason=str(exc)))
+            reason = str(exc)
+            if reason == "entities must correspond exactly to tagged spans":
+                issues.extend(self._metadata_sync_issues(tagged_text, raw_entities))
+            else:
+                issues.append(ValidationIssue(type="invalid_output", scope="TEXT", reason=reason))
 
         clean_text = _TAG.sub("", tagged_text).strip()
+        for _, _, artifact in find_template_artifacts(tagged_text):
+            issues.append(ValidationIssue(
+                type="template_artifact",
+                scope="TEXT",
+                reason=(
+                    f"unresolved human-facing template field {artifact!r}; "
+                    "replace it with finished generic prose, not invented PII"
+                ),
+                value=artifact,
+            ))
         if length_target is not None:
             word_count = len(re.findall(r"\S+", clean_text))
             if word_count < length_target.min_words:
@@ -294,25 +335,40 @@ class DeterministicOutputValidator:
                         ))
             return DeterministicValidationResult(valid=not issues, issues=self._unique_issues(issues))
 
-        listed_pairs = {(str(item.get("label")), str(item.get("value"))) for item in raw_entities}
         for seed in seed_pack.positive_entities:
-            expected = f"<{seed.label}>{seed.value}</{seed.label}>"
-            if tagged_text.count(expected) < 1:
+            status = seed_realization_status(
+                tagged_text,
+                label=seed.label,
+                value=seed.value,
+            )
+            if status == "missing":
                 issues.append(ValidationIssue(
                     type="missing_positive_seed", scope="TEXT",
-                    reason="positive seed must appear with its exact tag", label=seed.label, value=seed.value,
+                    reason="positive seed surface is absent from clean text",
+                    label=seed.label, value=seed.value,
                 ))
-            if (seed.label, seed.value) not in listed_pairs:
+            elif status == "boundary_whitespace":
                 issues.append(ValidationIssue(
-                    type="missing_entity_metadata", scope="TEXT",
-                    reason="positive seed is missing from entities", label=seed.label, value=seed.value,
+                    type="entity_boundary_whitespace", scope="TEXT",
+                    reason="entity tag includes whitespace outside the exact positive-seed boundary",
+                    label=seed.label, value=seed.value,
                 ))
-            remainder = tagged_text.replace(expected, "")
-            if seed.value in _TAG.sub("", remainder):
+            elif status not in {"exact", "partitioned"}:
                 issues.append(ValidationIssue(
-                    type="duplicate_positive_seed", scope="TEXT",
-                    reason="one or more positive-seed occurrences remain outside the required tag", label=seed.label, value=seed.value,
+                    type="positive_seed_annotation_mismatch", scope="TEXT",
+                    reason=(
+                        "positive seed surface is present but its occurrences are "
+                        "untagged, inconsistently tagged, or use unsafe taxonomy boundaries"
+                    ),
+                    label=seed.label, value=seed.value,
                 ))
+
+        if not hard_decoy_only:
+            issues.extend(self._missing_structured_annotations(
+                tagged_text=tagged_text,
+                allowed_labels=(allowed_labels or focus_labels),
+                excluded_values={decoy.value for decoy in seed_pack.decoys},
+            ))
 
         entity_values = {str(item.get("value", "")) for item in raw_entities}
         for decoy in seed_pack.decoys:
@@ -333,9 +389,14 @@ class DeterministicOutputValidator:
                 not any(cue.casefold() in context.casefold() for cue in decoy.required_context_cues)
                 for context in contexts
             ):
+                cues = ", ".join(repr(cue) for cue in decoy.required_context_cues)
+                observed = " | ".join(contexts) if contexts else "<not found>"
                 issues.append(self._decoy_issue(
                     "decoy_context_unclear",
-                    "every decoy occurrence must have a required context cue in the same sentence",
+                    (
+                        "every decoy occurrence must have one of these exact cues in "
+                        f"the same sentence: {cues}; observed context: {observed}"
+                    ),
                     decoy,
                 ))
             clean = _TAG.sub("", tagged_text)
@@ -353,6 +414,19 @@ class DeterministicOutputValidator:
                 for cue in decoy.forbidden_context_cues
             ):
                 issues.append(self._decoy_issue("decoy_used_as_pii", "forbidden PII cue directly introduces decoy", decoy))
+
+        if SampleType(seed_pack.sample_type) == SampleType.HARD_NEGATIVE:
+            meta_match = _HARD_NEGATIVE_META.search(clean_text)
+            if meta_match:
+                issues.append(ValidationIssue(
+                    type="hard_negative_meta_explanation",
+                    scope="TEXT",
+                    reason=(
+                        "hard-negative contrast is explained as annotation policy "
+                        "instead of being demonstrated by natural operational context"
+                    ),
+                    value=meta_match.group(0),
+                ))
 
         if hard_decoy_only and self.config.hard_negative_structured_scan:
             clean_without_decoys = _TAG.sub("", tagged_text)
@@ -373,6 +447,117 @@ class DeterministicOutputValidator:
     def _structured_detectors() -> Iterable[tuple[str, re.Pattern[str]]]:
         return (("EMAIL", _EMAIL), ("PHONE", _PHONE), ("URL", _URL), ("DATE", _DATE),
                 ("TIME", _TIME), ("IP", _IP), ("ACCOUNT_ID", _IDENTIFIER))
+
+    @staticmethod
+    def _missing_structured_annotations(
+        *,
+        tagged_text: str,
+        allowed_labels: Sequence[str],
+        excluded_values: set[str],
+    ) -> list[ValidationIssue]:
+        clean, spans = tagged_text_to_clean_and_spans(tagged_text)
+        allowed = set(allowed_labels)
+        candidates: list[tuple[str, str, int, int]] = []
+        for label, pattern in DeterministicOutputValidator._structured_detectors():
+            if label not in allowed:
+                continue
+            for match in pattern.finditer(clean):
+                candidates.append((label, match.group(0), match.start(), match.end()))
+        for label, pattern in (
+            ("PLATE", _PLATE_WITH_CONTEXT),
+            ("TICKET_ID", _TICKET_WITH_CONTEXT),
+        ):
+            if label not in allowed:
+                continue
+            for match in pattern.finditer(clean):
+                candidates.append((
+                    label,
+                    match.group("value"),
+                    match.start("value"),
+                    match.end("value"),
+                ))
+
+        issues: list[ValidationIssue] = []
+        for label, value, start, end in candidates:
+            if value in excluded_values:
+                continue
+            if any(span.start <= start and span.end >= end for span in spans):
+                continue
+            context = clean[max(0, start - 45):min(len(clean), end + 45)].strip()
+            issues.append(ValidationIssue(
+                type="missing_annotation_candidate",
+                scope="TEXT",
+                reason=(
+                    f"clear contextual {label} candidate {value!r} is untagged; "
+                    f"local context: {context!r}"
+                ),
+                label=label,
+                value=value,
+            ))
+        return issues
+
+    @staticmethod
+    def _metadata_sync_issues(
+        tagged_text: str,
+        entities: Sequence[dict[str, str]],
+    ) -> list[ValidationIssue]:
+        tag_counts = Counter(_ENTITY_PAIR.findall(tagged_text))
+        entity_counts = Counter(
+            (
+                str(entity.get("label", "")).strip(),
+                str(entity.get("value", "")).strip(),
+            )
+            for entity in entities
+        )
+        normalized_tag_counts = Counter(
+            (label, value.strip())
+            for label, value in _ENTITY_PAIR.findall(tagged_text)
+        )
+        if normalized_tag_counts == entity_counts:
+            return [
+                ValidationIssue(
+                    type="entity_boundary_whitespace",
+                    scope="TEXT",
+                    reason=(
+                        "entity tag includes whitespace outside the exact "
+                        "positive-seed boundary"
+                    ),
+                    label=label,
+                    value=value.strip(),
+                )
+                for label, value in _ENTITY_PAIR.findall(tagged_text)
+                if value != value.strip()
+            ]
+        issues: list[ValidationIssue] = []
+        for (label, value), count in (tag_counts - entity_counts).items():
+            issues.append(ValidationIssue(
+                type="missing_entity_metadata",
+                scope="TEXT",
+                reason=(
+                    f"{count} tagged {label} occurrence(s) are missing matching "
+                    "entities metadata"
+                ),
+                label=label,
+                value=value,
+            ))
+        for (label, value), count in (entity_counts - tag_counts).items():
+            issues.append(ValidationIssue(
+                type="extra_entity_metadata",
+                scope="TEXT",
+                reason=(
+                    f"{count} {label} entities metadata occurrence(s) have no "
+                    "matching tagged span"
+                ),
+                label=label,
+                value=value,
+            ))
+        return issues or [
+            ValidationIssue(
+                type="invalid_output",
+                scope="TEXT",
+                reason="entities must correspond exactly to tagged spans",
+            )
+        ]
 
     @staticmethod
     def _decoy_issue(issue_type: str, reason: str, decoy: object) -> ValidationIssue:

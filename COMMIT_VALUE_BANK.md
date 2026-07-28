@@ -326,7 +326,7 @@ Prompt version:
 
 ```text
 data-generator.v9.0.0
-→ data-generator.v11.2.0
+→ data-generator.v11.3.0
 ```
 
 Prompt mới yêu cầu:
@@ -450,13 +450,13 @@ Các test cũ về seed generation, hard-negative, prompt, worker, retry và con
 Lệnh đã chạy:
 
 ```powershell
-.\.venv310\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest tests -q
 ```
 
 Kết quả hiện tại sau khi merge và bổ sung regression tests:
 
 ```text
-162 passed
+179 passed
 ```
 
 Offline diversity audit:
@@ -464,7 +464,7 @@ Offline diversity audit:
 ```text
 Requested samples: 100
 Generated samples: 100
-Prompt version: data-generator.v11.2.0
+Prompt version: data-generator.v11.3.0
 Random seed: 174
 ```
 
@@ -472,7 +472,55 @@ Online Azure/OpenAI đã được chạy thủ công bằng config local. Log l�
 phát hiện response JSON không ổn định ở Repair và lỗi bỏ tag khi cùng seed xuất hiện
 nhiều lần; cả hai trường hợp đã có parser/log chẩn đoán và regression test tương ứng.
 
-## 17. Vấn đề hiện có trong Value Bank nhưng chưa sửa
+## 17. Structure và Verifier hardening sau online test
+
+Config mới dùng `sample_structures` làm nguồn structure duy nhất. Code chọn một
+phần tử trong chính pool này bằng seeded random và đưa nguyên `type` cùng
+`custom_instruction` sang prompt. Các biến thể ẩn từng được tự chọn cho contract/chat
+đã bị bỏ khỏi task planner. Field đơn `sample_structure` chỉ còn để migrate config cũ;
+pool khai báo rỗng bị từ chối.
+
+Generator prompt cấm để lại trường điền cho người đọc như `[Tên Công ty]`, `[Ngày]`,
+`[Chức danh]` hoặc `[Tên Tài Xế]`. Deterministic validator phát hiện các artifact này
+và route sang `FIXABLE`.
+
+Khi `allow_additional_unseeded_pii=true`, `annotation_labels` dùng toàn bộ taxonomy
+của run. Generator và Verifier vì vậy có thể gắn các class rõ ngữ cảnh nhưng không
+thuộc positive seed hiện tại, ví dụ PLATE, TICKET_ID và JOB_TITLE. Code có detector
+deterministic cho DATE, PLATE, TICKET_ID và các structured class sẵn có; Verifier
+thực hiện semantic pass cho các class còn lại.
+
+Judge response có thêm `edits`. Mỗi edit bắt buộc có `reason` và dùng một action cục
+bộ như `add_tag`, `split_tag`, `adjust_tag_boundary`,
+`replace_template_artifact` hoặc `sync_entities`. Cả `issues` và `edits` được truyền
+sang Repair và được log để chẩn đoán.
+
+Repair được phép tách một composite Value Bank seed theo taxonomy boundary, ví dụ
+ADDRESS street detail + LOCATION administrative geography, với các điều kiện:
+
+- clean seed surface không đổi;
+- mọi phần chữ/số được span hợp lệ bao phủ;
+- ít nhất một segment giữ label seed gốc;
+- mọi occurrence của seed dùng cùng cách phân tách;
+- metadata khớp chính xác tagged spans.
+
+Hard-negative feedback hiện ghi cả cue bắt buộc và context quan sát được. Dạng text
+tự giải thích “đây không phải PII” bị từ chối để buộc model thể hiện contrast bằng
+ngữ cảnh nghiệp vụ tự nhiên.
+
+Các file bổ sung trong đợt hardening:
+
+```text
+pii_factory/application/diversity.py
+pii_factory/application/verification.py
+pii_factory/infrastructure/clients.py
+pii_factory/bootstrap.py
+tests/test_deterministic_validators.py
+tests/test_quality_contracts.py
+tests/test_verifier_service.py
+```
+
+## 18. Vấn đề hiện có trong Value Bank nhưng chưa sửa
 
 Theo yêu cầu, không file Value Bank nào được tự động chỉnh sửa.
 
@@ -549,11 +597,24 @@ Ba file hiện tại:
 - Không có locale mismatch.
 - Không có item value rỗng.
 
-## 18. Lưu ý Git trước khi push
+## 19. Lưu ý Git trước khi push
 
-`PII_Value_Bank/` hiện là directory chưa được Git track. Cần đảm bảo ba file JSON
-được `git add` cùng commit, nếu không repository sau khi clone sẽ không chạy positive
-generation.
+`PII_Value_Bank/` được `.gitignore` loại khỏi commit vì dữ liệu mẫu có thể kích hoạt
+GitHub secret scanning. Không chạy `git add -f PII_Value_Bank`.
+
+Người clone repository phải tự đặt Value Bank hợp lệ vào đường dẫn được cấu hình,
+mặc định là `PII_Value_Bank/`, hoặc đổi:
+
+```json
+{
+  "value_bank": {
+    "path": "D:/data/PII_Value_Bank"
+  }
+}
+```
+
+Nếu directory/file ngôn ngữ/class bị thiếu hoặc JSON sai, pipeline dừng với
+`value_bank_error`; hệ thống không âm thầm quay lại Faker.
 
 Không commit các artifact môi trường local:
 
@@ -568,9 +629,51 @@ Checklist đề xuất:
 ```powershell
 git status --short
 git diff --check
-python -m pytest -q
-git add PII_Value_Bank
+.\.venv\Scripts\python.exe -m pytest tests -q
 git add COMMIT_VALUE_BANK.md
 ```
 
 Sau đó review danh sách file staged trước khi commit.
+
+## 20. Làm cứng hợp đồng JSON của verifier
+
+Verifier đôi khi trả `occurrence: 0` với ý nghĩa “lần xuất hiện đầu tiên”, trong khi
+hợp đồng nội bộ dùng chỉ số bắt đầu từ `1`. Sai khác quy ước này trước đây làm
+Pydantic ném `ValidationError` và dừng toàn bộ lượt chạy.
+
+Thay đổi hiện tại:
+
+- Prompt judge quy định rõ `occurrence` là số nguyên bắt đầu từ `1`, không dùng `0`.
+- Biên nhận response và schema cùng chuẩn hóa riêng `0`/`"0"` thành `1`.
+- Số âm vẫn không hợp lệ; hệ thống không âm thầm chấp nhận chỉ số nguy hiểm.
+- Các biến thể hình thức vô hại được chuẩn hóa: hoa/thường của
+  `status`/`severity`/`action`, collection `null`, và field tùy chọn rỗng.
+- Khi hợp đồng vẫn sai, log ghi chính xác đường dẫn field lỗi, ví dụ
+  `edits.0.occurrence`, thay vì chỉ báo chung chung.
+
+Các test hồi quy nằm trong `tests/test_quality_contracts.py`,
+`tests/test_verifier_client.py` và `tests/test_verifier_service.py`.
+
+## 21. Verifier null fallback và token usage trong dataset
+
+- `suggested_fix: null`, field bị thiếu hoặc chuỗi rỗng không còn làm mất toàn bộ
+  issue. Code điền một hướng xử lý an toàn theo severity/status rồi giữ nguyên
+  `REGENERATE`, `FIXABLE` hoặc `REJECTED`.
+- Root validator chỉ chạy khi nested issue đã hợp lệ, nên log không còn báo phụ
+  sai lệch rằng `REGENERATE` không có issue.
+- Prompt judge yêu cầu `suggested_fix` luôn là chuỗi không rỗng và mô tả rõ cách
+  tránh lỗi ở lần generate tiếp theo.
+- Mỗi sample trong file `.json` cuối có thêm đúng một field:
+
+```json
+{
+  "token_usage": {
+    "input_tokens": 1240,
+    "output_tokens": 380
+  }
+}
+```
+
+Đây là usage của toàn logical slot: Generator, Judge, Repair, re-Judge và các retry
+đã thực sự phát sinh token. Mảng dataset, tagged/clean text, entity, privacy mask và
+offset không thay đổi. Terminal summary vẫn báo tổng token toàn run.

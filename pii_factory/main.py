@@ -224,7 +224,7 @@ def main() -> None:
                 "rejection_issue_types": dict(issue_counts),
             },
             "samples": [
-                result.formatted_sample.dict()
+                result.formatted_sample.dict(exclude_none=True)
                 for result in results
                 if result.formatted_sample is not None
             ],

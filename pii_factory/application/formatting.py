@@ -120,7 +120,7 @@ class JsonDatasetWriter:
 
     def _atomic_write(self, path: Path, samples: Sequence[FormattedSample]) -> None:
         self.base_directory.mkdir(parents=True, exist_ok=True)
-        payload = [sample.dict() for sample in samples]
+        payload = [sample.dict(exclude_none=True) for sample in samples]
         temporary_path: Path | None = None
         try:
             with NamedTemporaryFile(

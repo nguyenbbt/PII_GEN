@@ -166,6 +166,14 @@ class QualityFirstPipelineTests(unittest.TestCase):
                 result.pipeline_token_usage.total.total_tokens,
                 result.token_usage.total_tokens,
             )
+            self.assertEqual(
+                result.formatted_sample.token_usage.input_tokens,
+                result.pipeline_token_usage.total.input_tokens,
+            )
+            self.assertEqual(
+                result.formatted_sample.token_usage.output_tokens,
+                result.pipeline_token_usage.total.output_tokens,
+            )
             for entity in result.formatted_sample.entities:
                 self.assertEqual(
                     result.formatted_sample.text[entity.start:entity.end],

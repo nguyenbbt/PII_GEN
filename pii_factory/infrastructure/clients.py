@@ -30,6 +30,70 @@ from ..domain.models import (
 logger = logging.getLogger(__name__)
 
 
+def _normalize_judge_payload(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], int, int]:
+    """Normalize harmless verifier indexing differences without relaxing the schema."""
+    normalized = dict(payload)
+    normalized_suggested_fixes = 0
+    raw_issues = payload.get("issues")
+    if isinstance(raw_issues, list):
+        status = str(payload.get("status") or "").strip().upper()
+        if status == "FIXABLE":
+            fallback_fix = (
+                "Apply the smallest safe local correction described by the issue reason."
+            )
+        elif status == "REJECTED":
+            fallback_fix = "Reject the sample and do not preserve the unsafe content."
+        else:
+            fallback_fix = "Regenerate the sample so the reported issue no longer occurs."
+        normalized_issues: list[Any] = []
+        for raw_issue in raw_issues:
+            if not isinstance(raw_issue, dict):
+                normalized_issues.append(raw_issue)
+                continue
+            issue = dict(raw_issue)
+            suggested_fix = issue.get("suggested_fix")
+            if suggested_fix is None or (
+                isinstance(suggested_fix, str) and not suggested_fix.strip()
+            ):
+                issue["suggested_fix"] = fallback_fix
+                normalized_suggested_fixes += 1
+            normalized_issues.append(issue)
+        normalized["issues"] = normalized_issues
+
+    raw_edits = payload.get("edits")
+    if not isinstance(raw_edits, list):
+        return normalized, 0, normalized_suggested_fixes
+
+    normalized_edits: list[Any] = []
+    normalized_occurrences = 0
+    for raw_edit in raw_edits:
+        if not isinstance(raw_edit, dict):
+            normalized_edits.append(raw_edit)
+            continue
+        edit = dict(raw_edit)
+        occurrence = edit.get("occurrence")
+        if not isinstance(occurrence, bool) and (
+            occurrence == 0
+            or (isinstance(occurrence, str) and occurrence.strip() == "0")
+        ):
+            edit["occurrence"] = 1
+            normalized_occurrences += 1
+        normalized_edits.append(edit)
+    normalized["edits"] = normalized_edits
+    return normalized, normalized_occurrences, normalized_suggested_fixes
+
+
+def _validation_error_summary(exc: Exception) -> str:
+    if isinstance(exc, ValidationError):
+        return "; ".join(
+            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+            for error in exc.errors()[:8]
+        )
+    return str(exc)
+
+
 def _safe_http_error_details(
     error: HTTPError,
     *,
@@ -351,17 +415,39 @@ class AzureOpenAIVerifierClient:
                 stage="judge",
                 token_usage=exc.token_usage,
             ) from exc
+        (
+            payload,
+            normalized_occurrences,
+            normalized_suggested_fixes,
+        ) = _normalize_judge_payload(completion.payload)
+        if normalized_occurrences:
+            logger.warning(
+                "[llm verifier] normalized %s zero-based edit occurrence value(s) "
+                "to one-based indexing",
+                normalized_occurrences,
+            )
+        if normalized_suggested_fixes:
+            logger.warning(
+                "[llm verifier] filled %s missing suggested_fix value(s) "
+                "without discarding their issues",
+                normalized_suggested_fixes,
+            )
         try:
             return VerifierDecision(
-                **completion.payload,
+                **payload,
                 token_usage=self._usage(completion),
                 latency_ms=completion.latency_ms,
                 model=self.settings.effective_verifier_model,
                 prompt_version=JUDGE_PROMPT_VERSION,
             )
         except (TypeError, ValueError, ValidationError) as exc:
+            details = _validation_error_summary(exc)
+            logger.error(
+                "[llm verifier] invalid judge response contract: %s",
+                details,
+            )
             raise VerifierInfrastructureError(
-                "Verifier judge returned an invalid response contract",
+                f"Verifier judge returned an invalid response contract: {details}",
                 stage="judge",
                 token_usage=self._usage(completion),
             ) from exc
@@ -388,8 +474,13 @@ class AzureOpenAIVerifierClient:
                 prompt_version=REPAIR_PROMPT_VERSION,
             )
         except (TypeError, ValueError, ValidationError) as exc:
+            details = _validation_error_summary(exc)
+            logger.error(
+                "[llm verifier] invalid repair response contract: %s",
+                details,
+            )
             raise VerifierInfrastructureError(
-                "Verifier repair returned an invalid response contract",
+                f"Verifier repair returned an invalid response contract: {details}",
                 stage="repair",
                 token_usage=self._usage(completion),
             ) from exc
@@ -633,6 +724,9 @@ class OfflineCompletionClient:
             role=role,
             content=content,
             sample_structure=sample_structure,
+            document_type=document_type,
+            context_frame_id=str(profile.get("context_frame_id") or document_type),
+            length_bucket=str(profile.get("length_bucket") or "medium"),
         )
         if selected is not None:
             return selected
@@ -653,6 +747,9 @@ class OfflineCompletionClient:
         role: str,
         content: str,
         sample_structure: dict,
+        document_type: str,
+        context_frame_id: str,
+        length_bucket: str,
     ) -> str | None:
         structure_type = sample_structure.get("type")
         if structure_type == "chat":
@@ -671,7 +768,9 @@ class OfflineCompletionClient:
                 "HỒ SƠ DOANH NGHIỆP",
             )
             return (
-                f"{heading} | {register_marker}; "
+                f"{heading} | Hồ sơ {document_type}, bối cảnh "
+                f"{context_frame_id.replace('_', ' ')}, mức {length_bucket} | "
+                f"{register_marker}; "
                 f"{role} {intent} {content}."
             )
         if structure_type == "custom":

@@ -23,6 +23,7 @@ from pii_factory.domain.models import (
     SeedPack,
     TokenUsage,
     ValidationIssue,
+    VerificationEdit,
     VerificationIssue,
     VerifierDecision,
 )
@@ -196,20 +197,9 @@ class VerifierServiceTests(unittest.TestCase):
                     valid=False,
                     issues=[
                         ValidationIssue(
-                            type="invalid_output",
+                            type="positive_seed_annotation_mismatch",
                             scope="TEXT",
-                            reason="duplicate entity value in one completion: 'Mai Huyền'",
-                        ),
-                        ValidationIssue(
-                            type="missing_positive_seed",
-                            scope="TEXT",
-                            reason="positive seed must appear with its exact tag",
-                            label="PERSON",
-                        ),
-                        ValidationIssue(
-                            type="duplicate_positive_seed",
-                            scope="TEXT",
-                            reason="positive seed appears outside its required tag",
+                            reason="positive seed surface is present but inconsistently tagged",
                             label="PERSON",
                         ),
                     ],
@@ -301,7 +291,13 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertIn("few-shot", system_prompt)
         self.assertIn("comma-separated", system_prompt)
         self.assertIn("unnatural", system_prompt)
-        self.assertIn("at most 5 issues", system_prompt)
+        self.assertIn("at most 10 issues", system_prompt)
+        self.assertIn("suggested_fix must always be a non-empty string", system_prompt)
+        self.assertIn("never", system_prompt)
+        self.assertIn("Every edit must contain action", system_prompt)
+        self.assertIn("occurrence is a one-based integer", system_prompt)
+        self.assertIn("never use 0", system_prompt)
+        self.assertIn("Error examples", system_prompt)
         self.assertIn("low, medium, high, or critical", system_prompt)
         self.assertIn(
             "minor, major, warning, error",
@@ -315,7 +311,7 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertNotIn("random_seed", user_payload["task"])
         self.assertNotIn("token_usage", user_payload["candidate"])
         self.assertNotIn("output_hash", user_payload["candidate"])
-        self.assertLess(len(system_prompt), 3500)
+        self.assertLess(len(system_prompt), 6000)
         legacy_envelope = {
             "task": task().dict(),
             "seed_pack": seed_pack().dict(),
@@ -462,6 +458,13 @@ class VerifierServiceTests(unittest.TestCase):
                         reason="Ngày 15/05/2024 chưa được gắn nhãn.",
                         suggested_fix="Gắn DATE và bổ sung entity metadata.",
                     )],
+                    edits=[VerificationEdit(
+                        action="add_tag",
+                        label="DATE",
+                        value="15/05/2024",
+                        occurrence=1,
+                        reason="Giá trị đứng sau cụm 'hẹn tái khám ngày' nên là DATE.",
+                    )],
                     token_usage=token_usage(),
                     latency_ms=2,
                     model="offline-verifier",
@@ -491,6 +494,9 @@ class VerifierServiceTests(unittest.TestCase):
             "MISSING_ANNOTATION",
             client.judge_messages[0][0]["content"],
         )
+        repair_payload = json.loads(client.repair_messages[0][1]["content"])
+        self.assertEqual(repair_payload["edits"][0]["action"], "add_tag")
+        self.assertIn("hẹn tái khám", repair_payload["edits"][0]["reason"])
 
     def test_repair_restores_every_repeated_seed_occurrence(self) -> None:
         person = seed_pack().positive_entities[0].value
@@ -542,6 +548,140 @@ class VerifierServiceTests(unittest.TestCase):
             3,
         )
         self.assertEqual(verified.entities[-1].label, "DATE")
+
+    def test_repair_may_split_composite_address_without_changing_seed_surface(self) -> None:
+        address = "34 Nguyễn Chí Thanh, Ba Đình, Hà Nội"
+        address_seed_pack = seed_pack().copy(update={
+            "positive_entities": [PositiveEntitySeed(
+                label="ADDRESS",
+                value=address,
+                semantic_role="service_address",
+            )],
+        })
+        original = candidate().copy(update={
+            "tagged_text": f"Giao tại <ADDRESS>{address}</ADDRESS>.",
+            "entities": [GeneratedEntity(label="ADDRESS", value=address)],
+        })
+        repaired = RepairResult(
+            tagged_text=(
+                "Giao tại <ADDRESS>34 Nguyễn Chí Thanh</ADDRESS>, "
+                "<LOCATION>Ba Đình, Hà Nội</LOCATION>."
+            ),
+            entities=[
+                GeneratedEntity(label="ADDRESS", value="34 Nguyễn Chí Thanh"),
+                GeneratedEntity(label="LOCATION", value="Ba Đình, Hà Nội"),
+            ],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        split_decision = VerifierDecision(
+            status="FIXABLE",
+            score=85,
+            issues=[VerificationIssue(
+                type="BOUNDARY",
+                severity="low",
+                field="tagged_text",
+                reason="ADDRESS đang chứa địa giới hành chính.",
+                suggested_fix="Tách ADDRESS và LOCATION.",
+            )],
+            edits=[VerificationEdit(
+                action="split_tag",
+                source_label="ADDRESS",
+                source_value=address,
+                segments=[
+                    {"label": "ADDRESS", "value": "34 Nguyễn Chí Thanh"},
+                    {"label": "LOCATION", "value": "Ba Đình, Hà Nội"},
+                ],
+                reason=(
+                    "Số nhà và tên đường là ADDRESS; quận và thành phố là LOCATION."
+                ),
+            )],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="judge.test",
+        )
+        client = FakeVerifierClient(
+            [split_decision, decision("PASS")],
+            repair_result=repaired,
+        )
+
+        verified, trace = VerifierService(client).verify(
+            candidate=original,
+            task=task().copy(update={
+                "focus_labels": ["ADDRESS"],
+                "annotation_labels": ["ADDRESS", "LOCATION"],
+            }),
+            seed_pack=address_seed_pack,
+            taxonomy_context=self.taxonomy_context,
+            revalidate=lambda _: DeterministicValidationResult(valid=True),
+        )
+
+        self.assertEqual(trace.outcome, "FIXED")
+        self.assertEqual(
+            verified.tagged_text.replace("<ADDRESS>", "").replace("</ADDRESS>", "")
+            .replace("<LOCATION>", "").replace("</LOCATION>", ""),
+            f"Giao tại {address}.",
+        )
+
+    def test_repair_replaces_only_human_template_artifact(self) -> None:
+        person = seed_pack().positive_entities[0].value
+        original = candidate().copy(update={
+            "tagged_text": (
+                f"Bộ phận [Tên Công ty] tiếp nhận hồ sơ của "
+                f"<PERSON>{person}</PERSON>."
+            ),
+        })
+        repaired = RepairResult(
+            tagged_text=(
+                f"Bộ phận dịch vụ tiếp nhận hồ sơ của "
+                f"<PERSON>{person}</PERSON>."
+            ),
+            entities=[GeneratedEntity(label="PERSON", value=person)],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        artifact_decision = VerifierDecision(
+            status="FIXABLE",
+            score=82,
+            issues=[VerificationIssue(
+                type="TEMPLATE_ARTIFACT",
+                severity="low",
+                field="tagged_text",
+                reason="[Tên Công ty] là trường điền còn sót.",
+                suggested_fix="Thay bằng mô tả bộ phận chung, không tạo PII mới.",
+            )],
+            edits=[VerificationEdit(
+                action="replace_template_artifact",
+                source_value="[Tên Công ty]",
+                replacement="dịch vụ",
+                reason="Đây là trường điền chưa hoàn tất, không phải entity hợp lệ.",
+            )],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="judge.test",
+        )
+        client = FakeVerifierClient(
+            [artifact_decision, decision("PASS")],
+            repair_result=repaired,
+        )
+
+        verified, trace = VerifierService(client).verify(
+            candidate=original,
+            task=task(),
+            seed_pack=seed_pack(),
+            taxonomy_context=self.taxonomy_context,
+            revalidate=lambda _: DeterministicValidationResult(valid=True),
+        )
+
+        self.assertEqual(trace.outcome, "FIXED")
+        self.assertNotIn("[Tên Công ty]", verified.tagged_text)
+        self.assertIn("Bộ phận dịch vụ", verified.tagged_text)
 
     def test_content_regenerate_and_rejected_route_without_repair(self) -> None:
         content_regenerate = VerifierDecision(

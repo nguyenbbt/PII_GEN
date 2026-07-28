@@ -80,7 +80,7 @@ def merge_shard_payloads(
                     "parallel shards contain duplicate sample text"
                 )
             seen_texts.add(sample.text)
-            samples.append(sample.dict())
+            samples.append(sample.dict(exclude_none=True))
 
         usage = payload.get("token_usage") or {}
         input_tokens += int(usage.get("input_tokens", 0))

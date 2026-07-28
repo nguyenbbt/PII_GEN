@@ -219,6 +219,145 @@ class DeterministicValidatorTests(unittest.TestCase):
 
         self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
 
+    def test_composite_address_seed_accepts_taxonomy_safe_partition(self) -> None:
+        value = "34 Nguyễn Chí Thanh, Ba Đình, Hà Nội"
+        pack = SeedPack(
+            task_id="partitioned-address",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[PositiveEntitySeed(
+                label="ADDRESS",
+                value=value,
+                semantic_role="service_address",
+            )],
+        )
+        tagged_text = (
+            "Giao tại <ADDRESS>34 Nguyễn Chí Thanh</ADDRESS>, "
+            "<LOCATION>Ba Đình, Hà Nội</LOCATION>."
+        )
+        entities = [
+            GeneratedEntity(label="ADDRESS", value="34 Nguyễn Chí Thanh"),
+            GeneratedEntity(label="LOCATION", value="Ba Đình, Hà Nội"),
+        ]
+
+        result = self.output.validate(
+            tagged_text=tagged_text,
+            entities=entities,
+            seed_pack=pack,
+            focus_labels=["ADDRESS"],
+            allowed_labels=["ADDRESS", "LOCATION"],
+            max_entities=2,
+        )
+
+        self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
+        validate_seeded_contract(
+            tagged_text=tagged_text,
+            entities=[entity.dict() for entity in entities],
+            positive_entities=[pack.positive_entities[0].dict()],
+            decoys=[],
+        )
+
+    def test_composite_seed_rejects_full_relabel_or_unannotated_surface(self) -> None:
+        value = "34 Nguyễn Chí Thanh, Ba Đình, Hà Nội"
+        pack = SeedPack(
+            task_id="unsafe-address",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[PositiveEntitySeed(
+                label="ADDRESS",
+                value=value,
+                semantic_role="service_address",
+            )],
+        )
+        for tagged_text, entities in (
+            (
+                f"<LOCATION>{value}</LOCATION>",
+                [GeneratedEntity(label="LOCATION", value=value)],
+            ),
+            (value, []),
+        ):
+            with self.subTest(tagged_text=tagged_text):
+                result = self.output.validate(
+                    tagged_text=tagged_text,
+                    entities=entities,
+                    seed_pack=pack,
+                    focus_labels=["ADDRESS"],
+                    allowed_labels=["ADDRESS", "LOCATION"],
+                    max_entities=2,
+                )
+                self.assertIn(
+                    "positive_seed_annotation_mismatch",
+                    {issue.type for issue in result.issues},
+                )
+
+    def test_template_artifacts_and_clear_context_entities_are_fixable_findings(self) -> None:
+        pack = SeedPack(
+            task_id="context-findings",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[PositiveEntitySeed(
+                label="PERSON",
+                value="Mai Huyền",
+                semantic_role="requester",
+            )],
+        )
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Mai Huyền</PERSON> gửi [Tên Công ty] phiếu hỗ trợ "
+                "mã sự cố SV-20231027-001 cho xe biển số 51C-123.45."
+            ),
+            entities=[GeneratedEntity(label="PERSON", value="Mai Huyền")],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            allowed_labels=["PERSON", "ORG", "TICKET_ID", "PLATE"],
+            max_entities=4,
+        )
+
+        findings = {(issue.type, issue.label, issue.value) for issue in result.issues}
+        self.assertIn(("template_artifact", None, "[Tên Công ty]"), findings)
+        self.assertIn(
+            ("missing_annotation_candidate", "TICKET_ID", "SV-20231027-001"),
+            findings,
+        )
+        self.assertIn(
+            ("missing_annotation_candidate", "PLATE", "51C-123.45"),
+            findings,
+        )
+
+    def test_boundary_whitespace_produces_one_seed_specific_finding(self) -> None:
+        pack = SeedPack(
+            task_id="boundary-space",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[PositiveEntitySeed(
+                label="PERSON",
+                value="Mai Huyền",
+                semantic_role="requester",
+            )],
+        )
+        result = self.output.validate(
+            tagged_text="Người gửi <PERSON> Mai Huyền </PERSON> đã xác nhận.",
+            entities=[{"label": "PERSON", "value": " Mai Huyền "}],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            max_entities=2,
+        )
+
+        seed_findings = [
+            issue for issue in result.issues
+            if issue.type in {
+                "missing_positive_seed",
+                "missing_entity_metadata",
+                "duplicate_positive_seed",
+                "entity_boundary_whitespace",
+                "positive_seed_annotation_mismatch",
+            }
+        ]
+        self.assertEqual(
+            [issue.type for issue in seed_findings],
+            ["entity_boundary_whitespace"],
+        )
+
     def test_pure_negative_rejects_structured_candidates_and_accepts_generic_text(self) -> None:
         pack = SeedPack(
             task_id="negative-1", sample_type="pure_negative", context_frame=frame(),
@@ -268,6 +407,38 @@ class DeterministicValidatorTests(unittest.TestCase):
         self.assertTrue(valid.valid)
         self.assertIn("decoy_context_unclear", {issue.type for issue in unclear.issues})
         self.assertIn("decoy_tagged", {issue.type for issue in tagged.issues})
+
+    def test_hard_negative_rejects_meta_explanation_and_reports_exact_cues(self) -> None:
+        pack = SeedPack(
+            task_id="hard-meta",
+            sample_type="hard_negative",
+            hard_negative_mode="decoy_only",
+            context_frame=frame(),
+            decoys=[DecoySeed(
+                strategy_id="date_as_invalid_calendar_value",
+                target_label="DATE",
+                value="32/13/2026",
+                family="invalid_value",
+                semantic_type="date_validation_test",
+                negative_labels=["DATE"],
+                required_context_cues=["dữ liệu lỗi"],
+                forbidden_context_cues=["ngày hẹn"],
+            )],
+        )
+        result = self.output.validate(
+            tagged_text=(
+                "Đây không phải PII; bộ kiểm thử chỉ ghi nhận mã 32/13/2026."
+            ),
+            entities=[],
+            seed_pack=pack,
+            focus_labels=["DATE"],
+            max_entities=2,
+        )
+
+        by_type = {issue.type: issue for issue in result.issues}
+        self.assertIn("hard_negative_meta_explanation", by_type)
+        self.assertIn("decoy_context_unclear", by_type)
+        self.assertIn("'dữ liệu lỗi'", by_type["decoy_context_unclear"].reason)
 
     def test_decoy_only_accepts_one_natural_repetition_with_context_for_each_mention(self) -> None:
         pack = SeedPack(

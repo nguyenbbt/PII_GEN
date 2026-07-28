@@ -261,6 +261,13 @@ class ParallelGenerationTests(unittest.TestCase):
                 len({sample["text"] for sample in dataset}),
                 4,
             )
+            self.assertTrue(all(
+                set(sample["token_usage"]) == {
+                    "input_tokens",
+                    "output_tokens",
+                }
+                for sample in dataset
+            ))
 
 
 if __name__ == "__main__":
