@@ -63,8 +63,75 @@ class DistributionRunConfigTests(unittest.TestCase):
         )
 
         self.assertFalse(config.validation.quality_checks_enabled)
+        self.assertFalse(config.verifier.enabled)
         self.assertEqual(config.validation.novelty_mode, "enforce")
         self.assertEqual(config.validation.near_duplicate_threshold, 0.8)
+
+    def test_length_distribution_requires_exact_presets_and_sum(self) -> None:
+        config = RunConfig(
+            num_samples=10,
+            sample_length_distribution={
+                "short": 0.2,
+                "medium": 0.5,
+                "long": 0.3,
+            },
+        )
+
+        self.assertEqual(
+            config.sample_length_distribution,
+            {"short": 0.2, "medium": 0.5, "long": 0.3},
+        )
+        with self.assertRaisesRegex(ValidationError, "sample_length_distribution"):
+            RunConfig(
+                num_samples=10,
+                sample_length_distribution={
+                    "short": 0.2,
+                    "medium": 0.5,
+                    "long": 0.4,
+                },
+            )
+
+    def test_legacy_quality_flag_enables_verifier_unless_explicitly_overridden(self) -> None:
+        legacy = RunConfig(
+            num_samples=1,
+            validation={"quality_checks_enabled": True},
+        )
+        explicit = RunConfig(
+            num_samples=1,
+            validation={"quality_checks_enabled": False},
+            verifier={"enabled": True},
+        )
+
+        self.assertTrue(legacy.verifier.enabled)
+        self.assertTrue(explicit.verifier.enabled)
+
+    def test_focus_label_config_rejects_silently_truncated_robin_maximum(self) -> None:
+        with self.assertRaisesRegex(
+            ValidationError,
+            "robin_selection.max_per_sample",
+        ):
+            RunConfig(
+                num_samples=10,
+                focus_label="PERSON",
+                robin_labels=["PHONE", "EMAIL", "ADDRESS", "DATE"],
+                robin_selection={"min_per_sample": 2, "max_per_sample": 4},
+                difficulty_distribution={
+                    "easy": 0.0,
+                    "medium": 0.0,
+                    "hard": 1.0,
+                },
+                sample_type_distribution={
+                    "positive": 1.0,
+                    "pure_negative": 0.0,
+                    "hard_negative": 0.0,
+                },
+                max_entities={"easy": 3, "medium": 3, "hard": 3},
+                complexity_limits={
+                    "positive": 3,
+                    "pure_negative": 1,
+                    "hard_negative": 4,
+                },
+            )
 
     def test_parses_documented_config_and_normalises_language(self) -> None:
         raw_config = json.loads(Path("configs/run_config.example.json").read_text(encoding="utf-8"))
@@ -79,14 +146,19 @@ class DistributionRunConfigTests(unittest.TestCase):
             "PHONE", "EMAIL", "ADDRESS", "DATE", "TIME", "MONEY", "URL",
             "IP", "CARD_NUMBER", "PLATE", "PASSPORT", "MEDICAL_INFO", "LOCATION",
         ])
-        self.assertEqual(config.robin_selection.min_per_sample, 2)
-        self.assertEqual(config.robin_selection.max_per_sample, 4)
+        self.assertEqual(config.robin_selection.min_per_sample, 4)
+        self.assertEqual(config.robin_selection.max_per_sample, 7)
+        self.assertEqual(
+            config.sample_length_distribution,
+            {"short": 0.2, "medium": 0.5, "long": 0.3},
+        )
         self.assertEqual(config.max_attempts, 3)
         self.assertEqual(config.value_bank.path, "PII_Value_Bank")
         self.assertEqual(config.hard_negative.max_decoys, 1)
         self.assertEqual(config.hard_negative.mode, "mixed_contrastive")
         self.assertEqual(config.sample_structure.type, "contract")
         self.assertFalse(config.validation.quality_checks_enabled)
+        self.assertTrue(config.verifier.enabled)
         self.assertNotIn(
             "informal_chat",
             config.optional_constraint_distribution,
@@ -291,7 +363,7 @@ class DistributionRunConfigTests(unittest.TestCase):
         result = pipeline.generate_pending(run.run_id, limit=1)[0]
 
         self.assertTrue(result.entities)
-        self.assertEqual(len({entity.value.casefold() for entity in result.entities}), len(result.entities))
+        self.assertEqual(len({entity.value for entity in result.entities}), len(result.entities))
         self.assertTrue(result.seed_pack_id)
 
     def test_omitted_focus_labels_uses_taxonomy_and_batch_size_caps_generation(self) -> None:

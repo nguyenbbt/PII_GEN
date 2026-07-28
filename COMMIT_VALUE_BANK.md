@@ -94,7 +94,8 @@ Provider thực hiện:
 - Chọn file theo mẫu `{language}_pii_value_pools.json`.
 - Chọn đúng array theo taxonomy class.
 - Dùng chính `random.Random` được pipeline truyền vào.
-- Khử duplicate trong bộ nhớ để duplicate source không làm lệch xác suất chọn.
+- Giữ nguyên mọi entry trong bộ nhớ để duplicate và biến thể hoa/thường trong source
+  vẫn tham gia đúng xác suất chọn đã cấu hình.
 - Không ghi hoặc sửa lại file Value Bank.
 - Hỗ trợ `excluded_values` để hạn chế lấy trùng trong cùng sample.
 - Gắn `format_variant="value_bank"` cho positive seed.
@@ -170,7 +171,7 @@ Placeholder lạ hoặc chưa resolve bị từ chối. Các lỗi như thiếu 
 placeholder lặp, sai tag hoặc metadata không khớp vẫn được chuyển cho deterministic
 validators hiện có xử lý.
 
-## 7. Reproducibility và chống trùng
+## 7. Reproducibility và xử lý value lặp
 
 Pipeline tiếp tục khởi tạo:
 
@@ -193,14 +194,15 @@ Với cùng:
 kết quả chọn value có thể tái lập.
 
 Trong một sample, `PositiveSeedFactory` truyền toàn bộ value đã dùng qua
-`excluded_values`. Việc so sánh chống trùng sử dụng:
+`excluded_values`. Việc so sánh chỉ dùng chuỗi chính xác:
 
 ```text
-value.strip().casefold()
+value
 ```
 
-Do đó các value chỉ khác hoa/thường hoặc khoảng trắng đầu/cuối cũng được xem là
-trùng.
+Do đó các value chỉ khác hoa/thường được xem là các lựa chọn khác nhau. Ví dụ
+`Visa`, `VISA` và `visa` đều được giữ lại. Chỉ chuỗi hoàn toàn giống một value đã
+chọn mới bị loại khỏi lần chọn tiếp theo trong cùng sample.
 
 Value vẫn có thể xuất hiện lại ở sample khác. Đây là hành vi dự kiến vì mỗi sample
 có random state riêng và Value Bank là một tập hữu hạn.
@@ -322,7 +324,7 @@ Prompt version:
 
 ```text
 data-generator.v9.0.0
-→ data-generator.v10.0.0
+→ data-generator.v11.0.0
 ```
 
 Prompt mới yêu cầu:
@@ -418,8 +420,8 @@ tests/test_entity_variants.py
 - Ba ngôn ngữ đều cover đủ taxonomy class.
 - Chọn đúng language và class.
 - Reproducibility với cùng seed.
-- `excluded_values` chống trùng trong sample.
-- Duplicate source được khử trong bộ nhớ nhưng file không bị sửa.
+- `excluded_values` chỉ chống trùng chính xác trong sample.
+- Duplicate source và biến thể hoa/thường được giữ nguyên; file không bị sửa.
 - Thiếu directory.
 - Thiếu language file.
 - Thiếu class.
@@ -448,10 +450,10 @@ Lệnh đã chạy:
 .\.venv310\Scripts\python.exe -m pytest -q
 ```
 
-Kết quả gần nhất:
+Kết quả sau khi merge `origin/agent/generation-quality`:
 
 ```text
-130 passed, 120 subtests passed
+151 passed
 ```
 
 Offline diversity audit:
@@ -459,7 +461,7 @@ Offline diversity audit:
 ```text
 Requested samples: 100
 Generated samples: 100
-Prompt version: data-generator.v10.0.0
+Prompt version: data-generator.v11.0.0
 Random seed: 174
 ```
 
@@ -479,8 +481,9 @@ Số entry duplicate sau khi normalize bằng `strip().casefold()`:
 | `en` | 28 |
 | `de` | 12 |
 
-Provider khử các duplicate này trong bộ nhớ khi chọn, nhưng dữ liệu gốc vẫn giữ
-nguyên.
+Provider giữ nguyên các entry này trong bộ nhớ khi chọn. Các biến thể hoa/thường
+được coi là value khác nhau; duplicate hoàn toàn giống nhau vẫn giữ nguyên trọng số
+lấy mẫu của dữ liệu nguồn.
 
 Các class có duplicate đáng chú ý:
 
@@ -524,8 +527,9 @@ File không được sửa trong commit này.
 
 ### Tập value hữu hạn
 
-Value Bank hạn chế trùng trong một sample nhưng không đảm bảo uniqueness trên toàn
-run. Audit 100 sample với `PERSON` làm anchor có unique ratio thấp nhất là `58%`.
+Value Bank chỉ hạn chế chọn lại cùng chuỗi chính xác trong một sample và không đảm
+bảo uniqueness trên toàn run. Audit 100 sample với `PERSON` làm anchor có unique
+ratio thấp nhất là `58%`.
 Nếu cần uniqueness toàn dataset, phải bổ sung run-level allocation policy trong một
 thay đổi riêng.
 

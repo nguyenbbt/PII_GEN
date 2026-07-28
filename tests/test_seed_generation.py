@@ -44,7 +44,7 @@ class SeedGenerationTests(unittest.TestCase):
         )
 
         self.assertEqual({seed.label for seed in pack.positive_entities}, {"ADDRESS", "DATE", "EMAIL"})
-        self.assertEqual(len({seed.value.casefold() for seed in pack.positive_entities}), 3)
+        self.assertEqual(len({seed.value for seed in pack.positive_entities}), 3)
         self.assertTrue(self.validator.validate(pack, [label.code for label in labels], labels).valid)
         address = next(seed.value for seed in pack.positive_entities if seed.label == "ADDRESS")
         self.assertNotRegex(address, r"Jane|John|Smith|County|Street|Avenue")

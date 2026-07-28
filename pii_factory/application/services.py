@@ -37,7 +37,7 @@ from ..domain.models import (
 from ..ports import CompletionClient, EventBus, RunRepository
 from .formatting import JsonDatasetWriter, OutputFormatter
 from .few_shot_similarity import FewShotImitationGuard
-from .diversity import DiversityPlanner
+from .diversity import DiversityPlanner, resolve_length_target
 from .context_catalog import compatible_context_frames
 from .novelty import NoveltyGuard
 from .retry import RegenerationRouter
@@ -142,7 +142,11 @@ class CoverageController:
 
     def create_tasks(self, run: Run) -> List[GenerationTask]:
         rng = random.Random(run.config.random_seed)
-        diversity_planner = DiversityPlanner(run.config.random_seed)
+        diversity_planner = DiversityPlanner(
+            run.config.random_seed,
+            run.config.sample_length_distribution,
+            run.config.num_samples,
+        )
         tasks: List[GenerationTask] = []
         labels = run.config.label_pool or []
         mandatory_labels = (
@@ -184,6 +188,10 @@ class CoverageController:
                 run, labels, mandatory_labels, sequence_no, max_focus, rng
             )
             selected_robin_labels = focus_labels[1:] if run.config.focus_label else []
+            diversity_profile = diversity_planner.plan(
+                focus_labels,
+                run.config.sample_structure,
+            )
             task = GenerationTask(
                 run_id=run.run_id, sequence_no=sequence_no, language=run.config.language,
                 slot_no=sequence_no,
@@ -192,9 +200,10 @@ class CoverageController:
                 focus_label=run.config.focus_label, robin_labels=selected_robin_labels,
                 optional_constraints=optional_constraints, max_entities=entity_limit,
                 max_attempts=run.config.max_attempts, random_seed=rng.randint(1, 2_147_483_647),
-                diversity_profile=diversity_planner.plan(
-                    focus_labels,
+                diversity_profile=diversity_profile,
+                length_target=resolve_length_target(
                     run.config.sample_structure,
+                    diversity_profile.length_bucket,
                 ),
             )
             self.repository.add_task(task)
@@ -298,6 +307,7 @@ class DataGenerator:
                 constraints=request.task.optional_constraints, difficulty=request.task.difficulty,
                 sample_type=request.task.sample_type, max_entities=request.task.max_entities,
                 sample_structure=request.task.sample_structure,
+                length_target=request.task.length_target,
             ),
             entities=entities,
             tagged_text=tagged_text,
@@ -345,6 +355,7 @@ class Pipeline:
         taxonomy_service: TaxonomyService,
         repository: RunRepository,
         event_bus: EventBus,
+        enforce_quality_targets: bool = True,
     ) -> None:
         self.orchestrator = orchestrator
         self.coverage = coverage
@@ -355,6 +366,7 @@ class Pipeline:
         self.taxonomy_service = taxonomy_service
         self.repository = repository
         self.event_bus = event_bus
+        self.enforce_quality_targets = enforce_quality_targets
         self._seed_states: Dict[str, tuple[SeedPack, DeterministicValidationResult]] = {}
         self._reflections: Dict[str, ReflectionContext] = {}
         self._usage_calls: Dict[tuple[str, int], Dict[str, List[TokenUsage]]] = {}
@@ -554,15 +566,12 @@ class Pipeline:
                 if deterministic_route == "REJECTED":
                     self._reject_task(run, task, "TEXT", validation.issues)
                     return None
-                quality_checks_enabled = (
-                    run.config.validation.quality_checks_enabled
-                )
-                if deterministic_route == "REGENERATE" or (
-                    deterministic_route == "FIXABLE"
-                    and not quality_checks_enabled
-                ):
+                if deterministic_route == "REGENERATE":
                     raise OutputValidationError(validation)
-                if not quality_checks_enabled:
+                verifier_enabled = run.config.verifier.enabled
+                if not verifier_enabled:
+                    if deterministic_route in {"REGENERATE", "FIXABLE"}:
+                        raise OutputValidationError(validation)
                     return self._accept_candidate(
                         run=run,
                         task=task,
@@ -694,6 +703,9 @@ class Pipeline:
             seed_pack=seed_pack,
             focus_labels=task.focus_labels,
             max_entities=task.max_entities,
+            length_target=(
+                task.length_target if self.enforce_quality_targets else None
+            ),
         )
         if candidate.taxonomy_context_used is not None:
             imitation_issue = FewShotImitationGuard().find_imitation(

@@ -20,6 +20,7 @@ dev = []
 [project.scripts]
 data-generator-worker = "data_generator_worker.main:main"
 pii-factory = "pii_factory.main:main"
+pii-factory-parallel = "pii_factory.parallel:main"
 
 [tool.setuptools]
 packages = ["data_generator_worker", "pii_factory", "pii_factory.application", "pii_factory.domain", "pii_factory.infrastructure"]

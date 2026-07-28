@@ -43,8 +43,9 @@ class ValueBankEntityProvider:
     """Load and deterministically sample entity values from language JSON banks.
 
     Relative paths are resolved against the process working directory. Files are
-    loaded lazily and cached after validation. Duplicate values are retained in
-    the source files but collapsed in memory so they do not bias random choice.
+    loaded lazily and cached after validation. Every source entry is retained,
+    including case variants and intentional duplicates, so the configured bank
+    remains the source of truth for sampling probabilities.
     """
 
     def __init__(self, value_bank_path: str | Path = "PII_Value_Bank") -> None:
@@ -76,8 +77,8 @@ class ValueBankEntityProvider:
         excluded_values: Iterable[str] = (),
     ) -> GeneratedEntityValue:
         values = self.values_for(language, label)
-        excluded = {self._value_key(value) for value in excluded_values}
-        available = [value for value in values if self._value_key(value) not in excluded]
+        excluded = {str(value) for value in excluded_values}
+        available = [value for value in values if value not in excluded]
         if not available:
             raise ValueBankEmptyClassError(
                 f"Value Bank class {label!r} for language {language!r} "
@@ -162,8 +163,7 @@ class ValueBankEntityProvider:
                     f"{language!r} has no values"
                 )
 
-            unique_values: list[str] = []
-            seen: set[str] = set()
+            values: list[str] = []
             for index, item in enumerate(raw_items):
                 if not isinstance(item, Mapping):
                     raise InvalidValueBankError(
@@ -182,16 +182,13 @@ class ValueBankEntityProvider:
                         f"Value Bank item {raw_label}[{index}] in {file_path} "
                         f"has locale {locale!r}; expected {language!r}"
                     )
-                key = cls._value_key(value)
-                if key not in seen:
-                    seen.add(key)
-                    unique_values.append(value)
-            if not unique_values:
+                values.append(value)
+            if not values:
                 raise ValueBankEmptyClassError(
                     f"Value Bank class {raw_label!r} for language "
                     f"{language!r} has no usable values"
                 )
-            bank[raw_label] = tuple(unique_values)
+            bank[raw_label] = tuple(values)
         return bank
 
     @staticmethod
@@ -213,7 +210,3 @@ class ValueBankEntityProvider:
                 f"unsupported Value Bank language code: {language!r}"
             )
         return normalised
-
-    @staticmethod
-    def _value_key(value: str) -> str:
-        return str(value).strip().casefold()

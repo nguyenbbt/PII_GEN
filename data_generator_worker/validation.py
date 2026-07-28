@@ -38,8 +38,8 @@ def validate_generated_output(
 ) -> list[dict[str, str]]:
     """Validate the LLM contract independently of prompt compliance.
 
-    Entity values are compared after trimming and case folding, so variants such
-    as ``"Test"`` and ``" test "`` are duplicates in the same completion.
+    Entity values are compared exactly. Case variants such as ``"Test"`` and
+    ``"test"`` remain distinct because Value Bank entries are opaque values.
     """
     if not isinstance(tagged_text, str) or not tagged_text.strip():
         raise ValueError("tagged_text must be a non-empty string")
@@ -58,7 +58,7 @@ def validate_generated_output(
             raise ValueError("each entity requires non-empty label and value")
         if label not in allowed:
             raise ValueError(f"entity label is not allowed: {label}")
-        unique_key = value.casefold()
+        unique_key = value
         if unique_key in seen_values:
             raise ValueError(f"duplicate entity value in one completion: {value!r}")
         seen_values.add(unique_key)

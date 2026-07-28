@@ -42,7 +42,8 @@ _ALL_LABELS = ALL_LABELS
 
 
 SEMANTIC_ROLES: Dict[str, str] = {
-    "ADDRESS": "service_location", "DATE": "appointment_date", "TIME": "appointment_time",
+    "ADDRESS": "street_address", "LOCATION": "administrative_location",
+    "ZIP_CODE": "postal_code", "DATE": "appointment_date", "TIME": "appointment_time",
     "EMAIL": "contact_email", "PHONE": "contact_phone", "PERSON": "requester_name",
     "IP": "device_ip", "URL": "support_portal", "TICKET_ID": "support_ticket_id",
     "EMPLOYEE_ID": "employee_record_id", "NATIONAL_ID": "identity_document_number",
@@ -360,7 +361,7 @@ class PositiveSeedFactory:
                 excluded_values=seen,
             )
             value = generated.value
-            seen.add(value.strip().casefold())
+            seen.add(value)
             task.diversity_profile.entity_format_variants[label] = generated.format_variant
             entities.append(PositiveEntitySeed(
                 label=label,

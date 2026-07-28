@@ -6,7 +6,8 @@ PII Data Factory tạo dữ liệu PII tổng hợp phục vụ huấn luyện v
 Named Entity Recognition. Luồng hiện tại là một modular monolith chạy từ CLI hoặc
 FastAPI: đọc taxonomy, lập kế hoạch sample, sinh dữ liệu bằng Azure OpenAI, kiểm tra
 deterministic và xuất JSON có offset. NoveltyGuard cùng LLM Judge/Repair là quality
-checks tùy chọn; config mẫu tắt chúng để giảm độ phức tạp và chi phí.
+checks độc lập; config mẫu bật Gemini 2.5 Pro Judge cho mọi candidate online.
+Offline chỉ là smoke test và không được dùng làm dataset.
 
 Hệ thống không sử dụng Faker để sinh positive entity. Value được chọn bằng Python
 từ Value Bank ba ngôn ngữ; Generator chỉ viết nội dung và placeholder skeleton.
@@ -24,8 +25,8 @@ flowchart TD
     TAXCTX[JSON Taxonomy Context Selector]
     GEN[Data Generator]
     DET[Technical Deterministic Validators]
-    QUALITY{quality_checks_enabled?}
-    NOVELTY[Novelty Guard]
+    NOVELTY{NoveltyGuard enabled?}
+    QUALITY{verifier.enabled?}
     JUDGE[LLM Judge]
     REPAIR[LLM Repair]
     RECHECK[Deterministic Re-check]
@@ -35,12 +36,12 @@ flowchart TD
 
     ENTRY --> TAX --> RUN --> COV --> SEED --> SEEDVAL
     SEEDVAL --> TAXCTX --> GEN --> DET
-    DET -->|invalid| GEN
-    DET -->|valid| QUALITY
+    DET -->|critical risk| COV
+    DET --> NOVELTY
+    NOVELTY -->|duplicate| GEN
+    NOVELTY -->|pass / disabled| QUALITY
     QUALITY -->|false| FMT
-    QUALITY -->|true| NOVELTY
-    NOVELTY -->|valid| JUDGE
-    NOVELTY -->|invalid| GEN
+    QUALITY -->|true| JUDGE
     JUDGE -->|PASS| FMT
     JUDGE -->|FIXABLE| REPAIR --> RECHECK
     RECHECK -->|valid| FINALJUDGE
@@ -52,19 +53,21 @@ flowchart TD
     FMT --> FILE
 ```
 
-Luồng mặc định:
+Luồng quality-first của config mẫu:
 
 ```text
 Generator
   → Technical Deterministic Validators
-  → Output Formatter
+  → Gemini 2.5 Pro Judge
+  → optional Repair + re-check + final Judge
+  → Python Output Formatter
   → gen_data
 ```
 
-Khi `validation.quality_checks_enabled=true`, hệ thống chèn thêm
-`NoveltyGuard → LLM Judge → optional Repair → re-check → final Judge` trước
-Formatter. Dù quality checks tắt, Formatter không bao giờ được bỏ qua technical
-validation.
+`verifier.enabled` điều khiển Judge/Repair. Cờ legacy
+`validation.quality_checks_enabled` chỉ còn điều khiển NoveltyGuard và được migrate
+sang `verifier.enabled` khi config cũ không khai báo `verifier`. Dù Judge tắt,
+Formatter không bao giờ được bỏ qua technical validation.
 
 ## 3. Các module
 
@@ -96,11 +99,11 @@ Khi API khởi động, taxonomy canonical được đọc từ `PII_TAXONOMY_PA
 taxonomy version mặc định này.
 
 `limit` là số sample đã accept cần trả về, không phải số request LLM tối đa. Một
-sample có thể cần nhiều Generator attempt và, khi quality checks bật, nhiều Verifier
+sample có thể cần nhiều Generator attempt và, khi Verifier bật, nhiều Verifier
 call.
 
 Lỗi hạ tầng Verifier trả HTTP `503` mà không tiêu hao Generator attempt khi quality
-checks được bật.
+gate được bật.
 
 ### 3.2 Taxonomy Service
 
@@ -126,10 +129,22 @@ trong taxonomy snapshot của run được sử dụng.
 - difficulty distribution;
 - sample type distribution;
 - optional constraints;
+- exact seeded quota cho `short/medium/long`;
 - sample structure cố định của run;
 - focus label và robin labels;
 - entity/complexity limits;
 - deterministic `random_seed`.
+
+Preset độ dài:
+
+| Structure | short | medium | long |
+|---|---:|---:|---:|
+| Contract | 80–120 từ, 3–5 content units | 150–230 từ, 6–9 units | 260–400 từ, 10–14 units |
+| Chat | 80–120 từ, 6–8 lượt | 150–230 từ, 10–14 lượt | 260–400 từ, 16–22 lượt |
+| Custom | 80–120 từ | 150–230 từ | 260–400 từ |
+
+Planner dùng largest-remainder quota rồi shuffle bằng `random_seed`; với 10 mẫu và
+distribution `0.2/0.5/0.3`, quota luôn là `2/5/3`.
 
 Mỗi task ban đầu có `slot_no`. Nếu task hết Generator attempt, task thay thế:
 
@@ -157,21 +172,30 @@ Run chỉ `COMPLETED` khi mỗi slot có một sample `ACCEPTED`.
 `locale` khớp tên file.
 
 Provider dùng đúng instance `random.Random` đã seed bằng `task.random_seed`.
-Duplicate source value được khử trong bộ nhớ, không ghi lại file. Khi một sample có
-nhiều entity cùng class, factory loại các value đã chọn khỏi lần chọn sau để hạn chế
-trùng. Thiếu directory/language/class, class rỗng, JSON lỗi, version sai hoặc locale
+Mọi entry trong file đều được giữ nguyên trong bộ nhớ, kể cả duplicate và các biến
+thể chỉ khác hoa/thường. Khi một sample có nhiều entity, factory chỉ loại chuỗi đã
+chọn nếu chuỗi mới giống hoàn toàn; `Visa`, `VISA` và `visa` vẫn là các value khác
+nhau. Thiếu directory/language/class, class rỗng, JSON lỗi, version sai hoặc locale
 sai đều tạo `value_bank_error` scope `SEEDS` và dừng retry vô ích.
 
 `SeedPackValidator` kiểm tra:
 
 - label thuộc taxonomy;
-- positive value không trùng trong cùng completion;
+- positive value không trùng chính xác trong cùng completion; khác hoa/thường được
+  xem là value khác;
 - seed ngoài Value Bank vẫn qua format/mixed-locale checks cũ;
 - seed từ Value Bank phải mang `format_variant=value_bank`, sau khi file đã được
   provider validate;
 - decoy strategy tồn tại;
 - decoy không va chạm positive seed hoặc label cấu trúc khác;
 - required/forbidden context cues.
+
+PERSON được lấy nguyên văn từ đúng class và language trong Value Bank; không dùng
+Faker name. Quy tắc taxonomy phân tách địa chỉ như sau:
+
+- `ADDRESS`: số nhà, đường, tòa, căn hộ hoặc phòng;
+- `LOCATION`: phường, quận/huyện, tỉnh/thành phố hoặc quốc gia;
+- `ZIP_CODE`: span bưu chính độc lập.
 
 ### 3.5 JSON Taxonomy Context Selector
 
@@ -197,6 +221,8 @@ Generator nhận:
 - structured taxonomy guidance;
 - reflection feedback của attempt trước.
 - `sample_structure` và structure variant đã được lập kế hoạch.
+- `length_target` có giới hạn từ và content-unit/turn cụ thể.
+- số entity bắt buộc bằng đúng số positive seed của task.
 
 Ba structure được hỗ trợ:
 
@@ -222,8 +248,10 @@ Generator chỉ:
 Generator không quyết định candidate có được accept hay không.
 
 Few-shot chỉ dạy ngữ nghĩa label và ranh giới annotation. Prompt version
-`data-generator.v10.0.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
+`data-generator.v11.0.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
 opening phrase, clause order và sentence structure của example.
+Prompt cấm ghép seed thành danh sách dấu phẩy; mỗi entity phải có vai trò nghiệp vụ
+và được phân bố qua nhiều câu/lượt trong cùng một sự kiện.
 
 Ví dụ LLM nhìn thấy `<PERSON>[PERSON_1]</PERSON>` và
 `entities[].value="[PERSON_1]"`. LLM không nhìn thấy value thật. Python thay đồng
@@ -253,12 +281,13 @@ Technical gate luôn chạy trước Formatter:
 - entity metadata khớp tag;
 - allowed/focus labels;
 - entity count;
+- clean-text word count đúng `length_target` trong online mode;
 - positive seed xuất hiện đúng một lần và nguyên văn;
 - decoy luôn untagged và có context cue;
 - pure-negative/hard-negative structured PII scan;
 - structured PII scan cho negative sample.
 - `FewShotImitationGuard` che tagged entity rồi so sánh sequence/token n-gram với
-  ba focus examples; candidate quá giống phải regenerate ngay cả khi quality checks
+  ba focus examples; candidate quá giống phải regenerate ngay cả khi Judge
   đang tắt.
 
 Khi `quality_checks_enabled=true`, NoveltyGuard mới kiểm tra duplicate entity value
@@ -266,7 +295,7 @@ và sentence/entity novelty trong cùng run.
 
 `DeterministicIssueRouter` ánh xạ kết quả theo route rõ ràng:
 
-- `FIXABLE`: chỉ lỗi metadata cục bộ; chuyển cho Judge/Repair nếu quality checks
+- `FIXABLE`: chỉ lỗi metadata cục bộ; chuyển cho Judge/Repair nếu Verifier
   bật, nếu không thì regenerate;
 - `REGENERATE`: lỗi tag, semantic, seed/decoy, novelty hoặc structured PII;
 - `REJECTED`: credential/real-PII risk severity `critical`.
@@ -276,9 +305,14 @@ Candidate cần regenerate tạo reflection feedback và quay lại Generator. V
 
 ### 3.8 LLM Verifier
 
-Verifier dùng cùng Azure endpoint, deployment và model với Generator nhưng có prompt
-và sampling config riêng. Module này chỉ được gọi khi
-`validation.quality_checks_enabled=true`.
+Verifier dùng cùng endpoint nhưng có model, prompt và sampling config riêng. Module
+này được gọi khi `verifier.enabled=true`; config mẫu dùng `gemini-2.5-pro` cho Judge
+và Repair trong khi Generator dùng `gemini-2.5-flash`.
+
+Judge kiểm tra word/turn target, đủ 5–8 positive entity theo task, độ tự nhiên,
+duplicate skeleton, seed/decoy contract, few-shot imitation và boundary
+`ADDRESS/LOCATION/ZIP_CODE`. Deterministic issue là bằng chứng bắt buộc: Judge không
+được trả `PASS` khi danh sách này còn issue.
 
 Judge chỉ đánh giá, không được sửa:
 
@@ -429,13 +463,13 @@ formatted_sample
 pipeline_token_usage
 ```
 
-`verification_trace` là `null` khi quality checks tắt.
+`verification_trace` là `null` khi `verifier.enabled=false`.
 
 `token_usage` cũ là usage của Generator attempt đã accept.
 `pipeline_token_usage.total` gồm:
 
 - toàn bộ Generator attempt của logical slot;
-- Judge call nếu quality checks bật;
+- Judge call nếu Verifier bật;
 - Repair call nếu phát sinh;
 - final Judge call nếu phát sinh;
 - call đã trả response có schema lỗi nhưng vẫn phát sinh token.
@@ -461,6 +495,7 @@ Các field chính:
 | `focus_labels` | Chế độ legacy: pool focus labels |
 | `difficulty_distribution` | Xác suất easy/medium/hard |
 | `sample_type_distribution` | Xác suất positive/pure-negative/hard-negative |
+| `sample_length_distribution` | Quota short/medium/long; đủ đúng ba key và tổng bằng 1 |
 | `sample_structure` | Một trong `contract`, `chat`, `custom` cho toàn run |
 | `optional_constraint_distribution` | Xác suất `teen_code`, `light_typo`, `abbreviation` |
 | `max_entities` | Entity limit theo difficulty |
@@ -469,8 +504,10 @@ Các field chính:
 | `value_bank` | `path`, seed-pack retry và unseeded-PII policy |
 | `hard_negative` | Mode, decoy count và focus limits |
 | `complexity_limits` | Complexity budget theo sample type |
-| `validation.quality_checks_enabled` | Bật/tắt NoveltyGuard và LLM Verifier; mặc định `false` |
+| `validation.quality_checks_enabled` | Cờ legacy cho NoveltyGuard; migrate sang Verifier nếu config không có `verifier` |
+| `verifier.enabled` | Bật/tắt LLM Judge/Repair; config mẫu bật |
 | `verifier.max_repairs_per_candidate` | Hiện chỉ cho phép `0` hoặc `1` |
+| `parallel_generation` | Số worker, kích thước shard và số lần retry mỗi shard |
 | `random_seed` | Tái lập task/seed selection |
 
 Ví dụ:
@@ -496,6 +533,8 @@ Trong anchor mode:
 - `pure_negative` phải bằng `0`;
 - hard-negative phải dùng `mixed_contrastive`;
 - robin label được chọn ngẫu nhiên, không lặp trong cùng task.
+- `1 + robin_selection.max_per_sample` không được vượt capacity; config sai bị từ
+  chối thay vì âm thầm cắt số label.
 
 Ví dụ structure:
 
@@ -509,8 +548,8 @@ Ví dụ structure:
 ```
 
 `custom_instruction` bắt buộc với `custom` và bị từ chối với `contract` hoặc `chat`.
-Các field validation cũ vẫn được parse để tương thích; chúng chỉ ảnh hưởng quality
-flow khi `quality_checks_enabled=true`. Seed/tag/decoy/metadata/offset validation
+Các field validation cũ vẫn được parse để tương thích. Seed/tag/decoy/metadata/offset
+và online length validation
 không thể tắt.
 
 ## 6. Azure/OpenAI settings
@@ -527,10 +566,10 @@ GENERATOR_MODEL=gemini-2.5-flash
 VERIFIER_MODEL=gemini-2.5-pro
 DEPLOYMENT_NAME=gpt-4o
 TEMPERATURE=0.2
-MAX_TOKENS=2500
+MAX_TOKENS=6000
 
 VERIFIER_TEMPERATURE=0.0
-VERIFIER_JUDGE_MAX_TOKENS=1200
+VERIFIER_JUDGE_MAX_TOKENS=4000
 VERIFIER_REPAIR_MAX_TOKENS=2500
 
 LLM_TIMEOUT_SECONDS=120
@@ -550,7 +589,7 @@ hostname Azure OpenAI native; với gateway tùy chỉnh, client dùng
 Có thể ép `azure` hoặc `openai` nếu gateway không thể nhận diện đúng bằng
 hostname.
 
-Khi quality checks bật, Verifier transport/contract failure:
+Khi Verifier bật, Verifier transport/contract failure:
 
 - retry theo infrastructure policy;
 - không tăng Generator `attempt_no`;
@@ -558,8 +597,9 @@ Khi quality checks bật, Verifier transport/contract failure:
 - không đưa raw critical candidate vào reflection.
 
 Offline mode dùng `OfflineCompletionClient` và `OfflineVerifierClient`, không gọi
-Azure nên không phát sinh hóa đơn. Verifier cost bằng `0`; Generator vẫn trả token
-count và `money_cost` mô phỏng theo bảng giá cấu hình để kiểm thử cost accounting.
+Azure nên không phát sinh hóa đơn. Artifact được ghi dưới
+`gen_data/offline-smoke/`; CLI cảnh báo đây không phải dataset. Verifier cost bằng
+`0`; Generator vẫn trả token count và `money_cost` mô phỏng để kiểm thử accounting.
 
 ## 7. Chạy hệ thống
 
@@ -585,7 +625,7 @@ Mở:
 http://127.0.0.1:8000/docs
 ```
 
-### 7.3 Chạy taxonomy JSON offline đến JSON final
+### 7.3 Chạy taxonomy JSON offline để smoke test
 
 ```powershell
 & '.\.venv\bin\pii-factory.exe' `
@@ -611,6 +651,8 @@ CLI in:
 - accepted sample count;
 - input/output/total tokens;
 - `money_cost`;
+- diagnostics: candidate bị loại, deterministic/Verifier rejection, task replacement,
+  verification outcome và issue-type counts;
 - các formatted sample.
 
 ### 7.4 Chạy online
@@ -623,6 +665,16 @@ Bỏ `--offline`:
 ```
 
 Online mode gọi Generator và Verifier nên phát sinh chi phí.
+
+Để chạy config theo nhiều shard song song và chỉ publish khi đủ toàn bộ sample:
+
+```powershell
+& '.\.venv\bin\pii-factory-parallel.exe' `
+  --config configs\run_config.example.json
+```
+
+Mỗi shard dùng một `random_seed` độc lập. Runner kiểm tra số lượng, schema, offset
+và duplicate text trước khi ghi một file JSON hợp nhất vào `gen_data`.
 
 ## 8. State và events
 
@@ -657,7 +709,7 @@ seed.validated / seed.rejected
 data.generated
 data.deterministic.validated
 data.generation.rejected
-data.verification.judged / rejected  # chỉ khi quality checks bật
+data.verification.judged / rejected  # chỉ khi verifier.enabled=true
 sample.formatted
 sample.accepted
 generation.task.replaced
@@ -682,7 +734,8 @@ Test suite bao phủ:
 - distributions/focus/robin config;
 - contract/chat/custom sample structures;
 - Value Bank provider/seed/hard-negative strategies;
-- reproducibility theo seed và chống trùng trong sample;
+- reproducibility theo seed và chống trùng chính xác trong sample, không collapse
+  biến thể hoa/thường;
 - placeholder đánh số, replacement và unknown-placeholder rejection;
 - deterministic validators;
 - novelty/diversity;
@@ -696,7 +749,9 @@ Test suite bao phủ:
 - offset sau khi chèn Value Bank value;
 - partial/final JSON writer;
 - offline end-to-end.
-- quality checks disabled vẫn giữ technical gate.
+- Verifier disabled vẫn giữ technical gate.
+- exact length quota, numeric word target và entity density;
+- PERSON thuần Việt và ADDRESS/LOCATION/ZIP_CODE boundary.
 
 ## 10. Giới hạn hiện tại và hướng production
 
@@ -718,10 +773,9 @@ repository hiện tại.
 Rủi ro còn lại:
 
 - chất lượng phụ thuộc taxonomy, model và prompt;
-- khi quality checks bật, cùng model được dùng cho Generator và Verifier nên vẫn có
-  correlated bias;
+- Generator và Verifier vẫn có thể có correlated model-family bias;
 - LLM Verifier tùy chọn không thay thế human review cho dataset quan trọng;
-- bật quality flow làm tăng latency/cost ở sample cần Repair;
+- bật Verifier làm tăng latency/cost ở sample cần Repair;
 - real-PII detection rule-based không thể đảm bảo tuyệt đối;
 - JSON offset dùng Python code point; consumer dùng UTF-16 phải tự chuyển index.
 
@@ -731,7 +785,7 @@ Run chỉ được xem là thành công khi:
 
 - có đúng `num_samples` sample `ACCEPTED`;
 - mọi sample deterministic-valid;
-- nếu quality checks bật, mọi sample có Judge cuối `PASS`;
+- nếu Verifier bật, mọi sample có Judge cuối `PASS`;
 - mọi formatted span thỏa `text[start:end] == entity.text`;
 - không có task slot bị cạn replacement budget;
 - file `.json` final đã được publish atomically;

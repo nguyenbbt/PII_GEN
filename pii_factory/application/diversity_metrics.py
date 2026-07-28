@@ -69,7 +69,7 @@ def audit_diversity(
         constraint_counts.update(sample.constraints)
         format_counts.update(f"{label}:{variant}" for label, variant in sample.entity_format_variants.items())
         for entity in sample.entities:
-            entity_values[str(entity["label"])].append(str(entity["value"]).strip().casefold())
+            entity_values[str(entity["label"])].append(str(entity["value"]).strip())
 
     skeleton_counts = Counter(skeletons)
     duplicate_count = sum(count - 1 for count in skeleton_counts.values())

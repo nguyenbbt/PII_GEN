@@ -94,6 +94,7 @@ class DataGeneratorWorker:
             difficulty=request.task.difficulty,
             sample_type=request.task.sample_type,
             max_entities=request.task.max_entities,
+            length_target=request.task.length_target,
         )
         result = DataGenerationResult(
             task_id=request.task.task_id,

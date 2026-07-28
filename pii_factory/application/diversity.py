@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import random
 from collections import Counter
-from typing import Sequence
+from math import floor
+from typing import Mapping, Sequence
 
-from ..domain.models import DiversityProfile, SampleStructureConfig
+from ..domain.models import (
+    DiversityProfile,
+    LengthTarget,
+    SampleStructureConfig,
+)
 from .context_catalog import compatible_context_frames
 
 
@@ -24,7 +29,12 @@ class _QuotaAxis:
 class DiversityPlanner:
     """Builds reproducible, quota-balanced realization profiles without an LLM."""
 
-    def __init__(self, random_seed: int) -> None:
+    def __init__(
+        self,
+        random_seed: int,
+        length_distribution: Mapping[str, float] | None = None,
+        total_samples: int | None = None,
+    ) -> None:
         self._rng = random.Random(random_seed ^ 0x5EED_D1)
         self._context_usage: Counter[str] = Counter()
         self._speaker_roles = _QuotaAxis(
@@ -53,7 +63,43 @@ class DiversityPlanner:
         self._registers = _QuotaAxis(
             ("formal", "neutral", "informal", "concise_technical"), self._rng
         )
-        self._lengths = _QuotaAxis(("short", "medium", "long"), self._rng)
+        length_values = (
+            self._weighted_values(length_distribution, total_samples)
+            if length_distribution is not None and total_samples is not None
+            else ["short", "medium", "long"]
+        )
+        self._lengths = _QuotaAxis(length_values, self._rng)
+
+    @staticmethod
+    def _weighted_values(
+        distribution: Mapping[str, float],
+        total_samples: int,
+    ) -> list[str]:
+        raw_counts = {
+            name: probability * total_samples
+            for name, probability in distribution.items()
+        }
+        counts = {
+            name: floor(value)
+            for name, value in raw_counts.items()
+        }
+        remaining = total_samples - sum(counts.values())
+        largest_remainders = sorted(
+            distribution,
+            key=lambda name: (
+                raw_counts[name] - counts[name],
+                distribution[name],
+                name,
+            ),
+            reverse=True,
+        )
+        for name in largest_remainders[:remaining]:
+            counts[name] += 1
+        return [
+            name
+            for name in ("short", "medium", "long")
+            for _ in range(counts[name])
+        ]
 
     def plan(
         self,
@@ -93,3 +139,44 @@ class DiversityPlanner:
             language_register=language_register,
             length_bucket=self._lengths.next(),
         )
+
+
+_WORD_TARGETS = {
+    "short": (80, 120),
+    "medium": (150, 230),
+    "long": (260, 400),
+}
+_CONTRACT_UNIT_TARGETS = {
+    "short": (3, 5),
+    "medium": (6, 9),
+    "long": (10, 14),
+}
+_CHAT_UNIT_TARGETS = {
+    "short": (6, 8),
+    "medium": (10, 14),
+    "long": (16, 22),
+}
+
+
+def resolve_length_target(
+    sample_structure: SampleStructureConfig,
+    bucket: str,
+) -> LengthTarget:
+    min_words, max_words = _WORD_TARGETS[bucket]
+    if sample_structure.type == "chat":
+        min_units, max_units = _CHAT_UNIT_TARGETS[bucket]
+        unit = "turns"
+    elif sample_structure.type == "contract":
+        min_units, max_units = _CONTRACT_UNIT_TARGETS[bucket]
+        unit = "content_units"
+    else:
+        min_units = max_units = 1
+        unit = "words"
+    return LengthTarget(
+        bucket=bucket,
+        min_words=min_words,
+        max_words=max_words,
+        unit=unit,
+        min_units=min_units,
+        max_units=max_units,
+    )

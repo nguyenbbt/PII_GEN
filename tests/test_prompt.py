@@ -50,7 +50,7 @@ class DataGeneratorPromptTests(unittest.TestCase):
 
         messages = build_messages(request)
 
-        self.assertEqual(PROMPT_VERSION, "data-generator.v10.0.0")
+        self.assertEqual(PROMPT_VERSION, "data-generator.v11.0.0")
         self.assertEqual(messages[0], {"role": "system", "content": SYSTEM_PROMPT})
         self.assertNotIn("task-1", messages[0]["content"])
         self.assertIn("# Generation Request", messages[1]["content"])
@@ -63,6 +63,7 @@ class DataGeneratorPromptTests(unittest.TestCase):
         self.assertIn("Few-Shot Use Policy", messages[0]["content"])
         self.assertIn("Do not copy or closely paraphrase", messages[0]["content"])
         self.assertIn("sentence structure", messages[0]["content"])
+        self.assertIn("Never serialize entity seeds as a comma-separated list", messages[0]["content"])
         envelope = json.loads(messages[1]["content"].split("```json\n", 1)[1].split("\n```", 1)[0])
         self.assertEqual(
             envelope["taxonomy_guidance"]["focus_label"]["label"],
@@ -142,6 +143,57 @@ class DataGeneratorPromptTests(unittest.TestCase):
         self.assertIn("actual record or payload processed through this decoy", instance_rules)
         self.assertIn("Do not append a disclaimer", instance_rules)
         self.assertNotIn("không phải dữ liệu cá nhân", rules + instance_rules)
+
+    def test_prompt_enforces_numeric_length_entity_density_and_address_boundaries(self) -> None:
+        messages = build_prompt_messages(
+            task={
+                "task_id": "quality-1",
+                "language": "vi",
+                "focus_labels": ["PERSON", "ADDRESS", "LOCATION", "ZIP_CODE", "EMAIL"],
+                "difficulty": "hard",
+                "sample_type": "positive",
+                "max_entities": 8,
+                "sample_structure": {"type": "contract"},
+                "length_target": {
+                    "bucket": "long",
+                    "min_words": 260,
+                    "max_words": 400,
+                    "unit": "content_units",
+                    "min_units": 10,
+                    "max_units": 14,
+                },
+            },
+            seed_pack={
+                "sample_type": "positive",
+                "positive_entities": [
+                    {"label": label, "value": f"value-{index}", "semantic_role": "field"}
+                    for index, label in enumerate(
+                        ("PERSON", "ADDRESS", "LOCATION", "ZIP_CODE", "EMAIL"),
+                        start=1,
+                    )
+                ],
+                "decoys": [],
+            },
+            taxonomy_context={},
+        )
+
+        envelope = json.loads(
+            messages[1]["content"].split("```json\n", 1)[1].split("\n```", 1)[0]
+        )
+        rules = " ".join([
+            *envelope["sample_structure_rules"],
+            *envelope["realization_rules"],
+        ])
+
+        self.assertEqual(envelope["required_entity_count"], 5)
+        self.assertIn("260 and 400 words", rules)
+        self.assertIn("330 whitespace-separated words", rules)
+        self.assertNotIn("10 to 14 connected content units", rules)
+        self.assertIn("multiple sentences", rules)
+        self.assertIn("comma-separated", rules)
+        self.assertIn("street-level", rules)
+        self.assertIn("administrative", rules)
+        self.assertNotRegex(rules.casefold(), r"\bcompact\b|\bconcise\b")
 
 
 if __name__ == "__main__":

@@ -74,7 +74,7 @@ class NoveltyGuard:
         previous_results: Sequence[DataGenerationResult],
     ) -> list[ValidationIssue]:
         previous_pairs = {
-            (entity.label, entity.value.strip().casefold())
+            (entity.label, entity.value.strip())
             for result in previous_results
             for entity in result.entities
             if entity.label not in self.categorical_labels
@@ -89,5 +89,5 @@ class NoveltyGuard:
             )
             for entity in entities
             if entity.label not in self.categorical_labels
-            and (entity.label, entity.value.strip().casefold()) in previous_pairs
+            and (entity.label, entity.value.strip()) in previous_pairs
         ]

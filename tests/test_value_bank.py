@@ -52,21 +52,38 @@ class ValueBankEntityProviderTests(unittest.TestCase):
             excluded_values={first},
         )
 
-        self.assertNotEqual(first.strip().casefold(), second.strip().casefold())
+        self.assertNotEqual(first, second)
 
-    def test_duplicate_source_values_are_collapsed_without_editing_source(self) -> None:
+    def test_source_duplicates_and_case_variants_are_retained_without_editing_source(self) -> None:
         with TemporaryDirectory() as directory:
             path = Path(directory) / "vi_pii_value_pools.json"
             self._write_bank(
                 path,
-                {"PERSON": ["Nguyễn An", "Nguyễn An", "Lê Bình"]},
+                {"PERSON": ["Visa", "VISA", "Visa"]},
             )
             before = path.read_bytes()
 
             values = ValueBankEntityProvider(directory).values_for("vi", "PERSON")
 
-            self.assertEqual(values, ("Nguyễn An", "Lê Bình"))
+            self.assertEqual(values, ("Visa", "VISA", "Visa"))
             self.assertEqual(path.read_bytes(), before)
+
+    def test_exclusions_are_case_sensitive(self) -> None:
+        with TemporaryDirectory() as directory:
+            self._write_bank(
+                Path(directory) / "vi_pii_value_pools.json",
+                {"CARD_ISSUER": ["Visa", "VISA"]},
+            )
+            provider = ValueBankEntityProvider(directory)
+
+            selected = provider.generate(
+                "CARD_ISSUER",
+                "vi",
+                random.Random(1),
+                excluded_values={"Visa"},
+            )
+
+            self.assertEqual(selected, "VISA")
 
     def test_missing_directory_language_and_class_have_explicit_errors(self) -> None:
         with TemporaryDirectory() as directory:

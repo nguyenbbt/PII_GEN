@@ -82,11 +82,11 @@ class AzureOpenAISettings(BaseModel):
     generator_model: str | None = None
     verifier_model: str | None = None
     temperature: float = Field(0.2, ge=0, le=2)
-    max_tokens: int = Field(2500, gt=0)
+    max_tokens: int = Field(6000, gt=0)
     timeout_seconds: float = Field(120, gt=0)
     infrastructure_retries: int = Field(3, ge=0, le=10)
     verifier_temperature: float = Field(0.0, ge=0, le=2)
-    verifier_judge_max_tokens: int = Field(1200, gt=0)
+    verifier_judge_max_tokens: int = Field(4000, gt=0)
     verifier_repair_max_tokens: int = Field(2500, gt=0)
     api_style: Literal["auto", "azure", "openai"] = "auto"
 
@@ -106,14 +106,14 @@ class AzureOpenAISettings(BaseModel):
             generator_model=os.getenv("GENERATOR_MODEL") or None,
             verifier_model=os.getenv("VERIFIER_MODEL") or None,
             temperature=float(os.getenv("TEMPERATURE", "0.2")),
-            max_tokens=int(os.getenv("MAX_TOKENS", "2500")),
+            max_tokens=int(os.getenv("MAX_TOKENS", "6000")),
             timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "120")),
             infrastructure_retries=int(
                 os.getenv("LLM_INFRA_MAX_RETRIES", "3")
             ),
             verifier_temperature=float(os.getenv("VERIFIER_TEMPERATURE", "0.0")),
             verifier_judge_max_tokens=int(
-                os.getenv("VERIFIER_JUDGE_MAX_TOKENS", "1200")
+                os.getenv("VERIFIER_JUDGE_MAX_TOKENS", "4000")
             ),
             verifier_repair_max_tokens=int(
                 os.getenv("VERIFIER_REPAIR_MAX_TOKENS", "2500")
@@ -429,7 +429,7 @@ class AzureOpenAICompletionClient:
                         )
                     ) from exc
                 last_error = exc
-            except URLError as exc:
+            except (KeyError, TypeError, ValueError, URLError) as exc:
                 last_error = exc
             if attempt < self.settings.infrastructure_retries:
                 time.sleep(min(2**attempt, 8))

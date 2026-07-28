@@ -4,6 +4,7 @@ import unittest
 from data_generator_worker.config import Settings
 from data_generator_worker.contracts import DataGenerationRequest
 from data_generator_worker.llm_client import CompletionResponse
+from data_generator_worker.validation import validate_generated_output
 from data_generator_worker.worker import DataGeneratorWorker, InMemoryAttemptStore
 
 
@@ -68,7 +69,7 @@ class DataGeneratorWorkerTests(unittest.TestCase):
         )
         self.assertEqual(duplicate.event_id, first.event_id)
 
-    def test_worker_rejects_duplicate_entity_values_in_one_completion(self) -> None:
+    def test_worker_accepts_entity_values_that_only_differ_by_case(self) -> None:
         class DuplicateLLM:
             def generate(self, messages):
                 return CompletionResponse(
@@ -98,8 +99,33 @@ class DataGeneratorWorkerTests(unittest.TestCase):
             },
         })
 
+        event = DataGeneratorWorker(
+            DuplicateLLM(),
+            settings,
+            InMemoryAttemptStore(),
+        ).process(request)
+
+        self.assertEqual(
+            [entity.value for entity in event.payload.entities],
+            ["Nguyễn An", "nguyễn an"],
+        )
+
+    def test_output_contract_still_rejects_exact_duplicate_values(self) -> None:
         with self.assertRaisesRegex(ValueError, "duplicate entity value"):
-            DataGeneratorWorker(DuplicateLLM(), settings, InMemoryAttemptStore()).process(request)
+            validate_generated_output(
+                tagged_text=(
+                    "<PERSON>Nguyễn An</PERSON> dùng tên "
+                    "<USERNAME>Nguyễn An</USERNAME>."
+                ),
+                entities=[
+                    {"label": "PERSON", "value": "Nguyễn An"},
+                    {"label": "USERNAME", "value": "Nguyễn An"},
+                ],
+                allowed_labels=["PERSON", "USERNAME"],
+                required_labels=["PERSON", "USERNAME"],
+                sample_type="positive",
+                max_entities=2,
+            )
 
     def test_worker_allows_a_natural_decoy_repetition_in_decoy_only_mode(self) -> None:
         class RepeatedDecoyLLM:

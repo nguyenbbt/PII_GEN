@@ -45,6 +45,14 @@ def settings() -> AzureOpenAISettings:
 
 
 class AzureOpenAIVerifierClientTests(unittest.TestCase):
+    def test_default_judge_budget_accommodates_reasoning_models(self) -> None:
+        default_settings = AzureOpenAISettings(
+            api_key="unused",
+            base_url="https://gateway.example",
+        )
+
+        self.assertEqual(default_settings.verifier_judge_max_tokens, 4000)
+
     def test_judge_uses_separate_settings_and_tracks_cost(self) -> None:
         transport = FakeJsonTransport(
             {"status": "PASS", "score": 99, "issues": []}
