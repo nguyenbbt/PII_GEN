@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import random
 import time
 from dataclasses import dataclass
@@ -56,6 +57,9 @@ from .verification import (
     VerifierInfrastructureError,
     VerifierService,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -146,6 +150,7 @@ class CoverageController:
             run.config.random_seed,
             run.config.sample_length_distribution,
             run.config.num_samples,
+            run.config.sample_structures,
         )
         tasks: List[GenerationTask] = []
         labels = run.config.label_pool or []
@@ -188,21 +193,30 @@ class CoverageController:
                 run, labels, mandatory_labels, sequence_no, max_focus, rng
             )
             selected_robin_labels = focus_labels[1:] if run.config.focus_label else []
+            sample_structure = diversity_planner.select_sample_structure(
+                run.config.sample_structure
+            )
             diversity_profile = diversity_planner.plan(
                 focus_labels,
-                run.config.sample_structure,
+                sample_structure,
             )
             task = GenerationTask(
                 run_id=run.run_id, sequence_no=sequence_no, language=run.config.language,
                 slot_no=sequence_no,
-                focus_labels=focus_labels, difficulty=difficulty, sample_type=sample_type,
-                sample_structure=run.config.sample_structure,
+                focus_labels=focus_labels,
+                annotation_labels=(
+                    labels
+                    if run.config.value_bank.allow_additional_unseeded_pii
+                    else focus_labels
+                ),
+                difficulty=difficulty, sample_type=sample_type,
+                sample_structure=sample_structure,
                 focus_label=run.config.focus_label, robin_labels=selected_robin_labels,
                 optional_constraints=optional_constraints, max_entities=entity_limit,
                 max_attempts=run.config.max_attempts, random_seed=rng.randint(1, 2_147_483_647),
                 diversity_profile=diversity_profile,
                 length_target=resolve_length_target(
-                    run.config.sample_structure,
+                    sample_structure,
                     diversity_profile.length_bucket,
                 ),
             )
@@ -282,6 +296,12 @@ class DataGenerator:
             tagged_text, raw_entities, input_tokens, output_tokens, total_tokens = self.client.generate(
                 self._messages(request)
             )
+            logger.info(
+                "[sample %s attempt %s] LLM raw tagged_text:\n%s",
+                request.task.slot_no or request.task.sequence_no,
+                request.attempt_no,
+                tagged_text,
+            )
             tagged_text, raw_entities = replace_entity_placeholders(
                 tagged_text=tagged_text,
                 entities=raw_entities,
@@ -289,7 +309,19 @@ class DataGenerator:
                     entity.dict() for entity in request.seed_pack.positive_entities
                 ],
             )
+            logger.info(
+                "[sample %s attempt %s] candidate after Value Bank binding:\n%s",
+                request.task.slot_no or request.task.sequence_no,
+                request.attempt_no,
+                tagged_text,
+            )
         except ValueError as exc:
+            logger.warning(
+                "[sample %s attempt %s] output binding failed: %s",
+                request.task.slot_no or request.task.sequence_no,
+                request.attempt_no,
+                exc,
+            )
             raise OutputValidationError(DeterministicValidationResult(
                 valid=False,
                 issues=[ValidationIssue(type="invalid_output", scope="TEXT", reason=str(exc))],
@@ -489,12 +521,37 @@ class Pipeline:
         taxonomy: List[TaxonomyLabel],
         output_validator: DeterministicOutputValidator,
     ) -> DataGenerationResult | None:
+        slot_no = task.slot_no or task.sequence_no
+        logger.info(
+            "[sample %s/%s] start type=%s structure=%s variant=%s length=%s labels=%s",
+            slot_no,
+            run.config.num_samples,
+            task.sample_type,
+            task.sample_structure.type,
+            task.diversity_profile.document_structure,
+            task.length_target.bucket,
+            ",".join(task.focus_labels),
+        )
         try:
             seed_pack, seed_validation = self._seed_states.get(task.task_id) or (
                 self._build_valid_seed_pack(task, taxonomy, run)
             )
             self._seed_states[task.task_id] = (seed_pack, seed_validation)
+            logger.info(
+                "[sample %s/%s] seed ready positives=%s decoys=%s",
+                slot_no,
+                run.config.num_samples,
+                len(seed_pack.positive_entities),
+                len(seed_pack.decoys),
+            )
         except SeedPlanningError as exc:
+            logger.error(
+                "[sample %s/%s] seed planning failed scope=%s issues=%s",
+                slot_no,
+                run.config.num_samples,
+                exc.regeneration_scope,
+                len(exc.issues),
+            )
             self._reject_task(run, task, exc.regeneration_scope, exc.issues)
             return None
 
@@ -522,6 +579,22 @@ class Pipeline:
 
         for attempt_no in range(start_attempt, task.max_attempts + 1):
             try:
+                reflection = self._reflections.get(task.task_id)
+                if reflection is not None:
+                    logger.info(
+                        "[sample %s/%s] retry feedback for attempt %s: %s",
+                        slot_no,
+                        run.config.num_samples,
+                        attempt_no,
+                        " | ".join(reflection.mandatory_repairs),
+                    )
+                logger.info(
+                    "[sample %s/%s] generator attempt %s/%s started",
+                    slot_no,
+                    run.config.num_samples,
+                    attempt_no,
+                    task.max_attempts,
+                )
                 candidate = self.generator.generate(
                     DataGenerationRequest(
                         task=task,
@@ -542,6 +615,12 @@ class Pipeline:
                     task.task_id,
                     attempt_no,
                 )
+                logger.info(
+                    "[sample %s/%s] generator finished tokens=%s",
+                    slot_no,
+                    run.config.num_samples,
+                    candidate.token_usage.total_tokens,
+                )
                 task.status = TaskStatus.VALIDATING
                 self.repository.update_task(task)
                 validation, novelty = self._validate_candidate(
@@ -549,6 +628,19 @@ class Pipeline:
                 )
                 deterministic_route, deterministic_issues = (
                     DeterministicIssueRouter.route(validation)
+                )
+                logger.info(
+                    "[sample %s/%s] deterministic validation route=%s issues=%s",
+                    slot_no,
+                    run.config.num_samples,
+                    deterministic_route,
+                    len(validation.issues),
+                )
+                self._log_validation_feedback(
+                    task=task,
+                    attempt_no=attempt_no,
+                    source="deterministic",
+                    issues=validation.issues,
                 )
                 self.event_bus.publish(EventEnvelope(
                     event_type="data.deterministic.validated",
@@ -583,6 +675,11 @@ class Pipeline:
 
                 task.status = TaskStatus.VERIFYING
                 self.repository.update_task(task)
+                logger.info(
+                    "[sample %s/%s] verifier started",
+                    slot_no,
+                    run.config.num_samples,
+                )
                 verified, trace = self.verifier.verify(
                     candidate=candidate,
                     task=task,
@@ -592,6 +689,12 @@ class Pipeline:
                         repaired, seed_pack, task, output_validator
                     )[0],
                     deterministic_issues=deterministic_issues,
+                )
+                logger.info(
+                    "[sample %s/%s] verifier finished outcome=%s",
+                    slot_no,
+                    run.config.num_samples,
+                    trace.outcome,
                 )
                 self._record_verifier_trace(run.run_id, task, attempt_no, trace)
                 final_validation, final_novelty = self._validate_candidate(
@@ -608,6 +711,29 @@ class Pipeline:
                     trace=trace,
                 )
             except VerificationRoutingError as exc:
+                logger.warning(
+                    "[sample %s/%s] verifier route=%s issues=%s attempt=%s/%s",
+                    slot_no,
+                    run.config.num_samples,
+                    exc.status,
+                    len(exc.issues),
+                    attempt_no,
+                    task.max_attempts,
+                )
+                for index, issue in enumerate(exc.issues, start=1):
+                    logger.warning(
+                        "[sample %s/%s] verifier feedback %s/%s "
+                        "type=%s severity=%s field=%s reason=%s suggested_fix=%s",
+                        slot_no,
+                        run.config.num_samples,
+                        index,
+                        len(exc.issues),
+                        issue.type,
+                        issue.severity,
+                        issue.field,
+                        issue.reason,
+                        issue.suggested_fix,
+                    )
                 if exc.trace is not None:
                     self._record_verifier_trace(
                         run.run_id, task, attempt_no, exc.trace
@@ -647,6 +773,13 @@ class Pipeline:
                     self._reject_task(run, task, error.regeneration_scope, error.result.issues)
                     return None
             except VerifierInfrastructureError as exc:
+                logger.error(
+                    "[sample %s/%s] verifier infrastructure failure stage=%s: %s",
+                    slot_no,
+                    run.config.num_samples,
+                    exc.stage or "unknown",
+                    exc,
+                )
                 if exc.token_usage is not None:
                     category = (
                         "verifier_repair"
@@ -660,6 +793,21 @@ class Pipeline:
                 self.repository.update_task(task)
                 raise
             except OutputValidationError as exc:
+                logger.warning(
+                    "[sample %s/%s] regeneration requested scope=%s issues=%s attempt=%s/%s",
+                    slot_no,
+                    run.config.num_samples,
+                    exc.regeneration_scope,
+                    len(exc.result.issues),
+                    attempt_no,
+                    task.max_attempts,
+                )
+                self._log_validation_feedback(
+                    task=task,
+                    attempt_no=attempt_no,
+                    source="regeneration",
+                    issues=exc.result.issues,
+                )
                 self._publish_generation_rejection(
                     run.run_id, task, attempt_no, exc.result
                 )
@@ -690,6 +838,29 @@ class Pipeline:
             self.repository.update_task(task)
         return None
 
+    @staticmethod
+    def _log_validation_feedback(
+        *,
+        task: GenerationTask,
+        attempt_no: int,
+        source: str,
+        issues: List[ValidationIssue],
+    ) -> None:
+        for index, issue in enumerate(issues, start=1):
+            logger.warning(
+                "[sample %s attempt %s] %s feedback %s/%s "
+                "type=%s scope=%s label=%s reason=%s",
+                task.slot_no or task.sequence_no,
+                attempt_no,
+                source,
+                index,
+                len(issues),
+                issue.type,
+                issue.scope,
+                issue.label or "-",
+                issue.reason,
+            )
+
     def _validate_candidate(
         self,
         candidate: GenerationCandidate,
@@ -702,7 +873,8 @@ class Pipeline:
             entities=candidate.entities,
             seed_pack=seed_pack,
             focus_labels=task.focus_labels,
-            max_entities=task.max_entities,
+            allowed_labels=(task.annotation_labels or task.focus_labels),
+            max_entities=max(task.max_entities, len(candidate.entities)),
             length_target=(
                 task.length_target if self.enforce_quality_targets else None
             ),
@@ -773,7 +945,7 @@ class Pipeline:
         formatted = self.formatter.format(
             tagged_text=candidate.tagged_text,
             entities=candidate.entities,
-            allowed_labels=task.focus_labels,
+            allowed_labels=(task.annotation_labels or task.focus_labels),
         )
         result = DataGenerationResult(
             **candidate.dict(exclude={"created_at"}),
@@ -804,6 +976,14 @@ class Pipeline:
         ))
 
         samples = self.repository.list_formatted_samples(run.run_id)
+        logger.info(
+            "[sample %s/%s] accepted progress=%s/%s verifier=%s",
+            task.slot_no or task.sequence_no,
+            run.config.num_samples,
+            len(samples),
+            run.config.num_samples,
+            trace.outcome if trace is not None else "disabled",
+        )
         if len(samples) >= run.config.num_samples:
             path = self.dataset_writer.finalize(
                 run_name=run.name,
@@ -832,6 +1012,15 @@ class Pipeline:
         scope: str,
         issues: List[ValidationIssue],
     ) -> None:
+        logger.error(
+            "[sample %s/%s] rejected scope=%s issues=%s replacement=%s/%s",
+            task.slot_no or task.sequence_no,
+            run.config.num_samples,
+            scope,
+            len(issues),
+            task.replacement_no,
+            run.config.max_task_replacements,
+        )
         task.status = TaskStatus.REJECTED
         self.repository.update_task(task)
         self.event_bus.publish(EventEnvelope(
@@ -884,6 +1073,13 @@ class Pipeline:
                 "status": TaskStatus.CREATED,
             })
             self.repository.add_task(replacement)
+            logger.warning(
+                "[sample %s/%s] replacement scheduled %s/%s",
+                task.slot_no or task.sequence_no,
+                run.config.num_samples,
+                replacement.replacement_no,
+                run.config.max_task_replacements,
+            )
             self.event_bus.publish(EventEnvelope(
                 event_type="generation.task.replaced",
                 correlation_id=run.run_id,

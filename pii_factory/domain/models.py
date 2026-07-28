@@ -99,6 +99,7 @@ class GenerationTaxonomyContext(Schema):
     sample_type: SampleType
     focus_label: LabelGenerationContext
     robin_labels: List[LabelGenerationContext] = Field(default_factory=list)
+    available_labels: List[LabelGenerationContext] = Field(default_factory=list)
 
 
 class ValueBankConfig(Schema):
@@ -199,6 +200,7 @@ class RunConfig(Schema):
         default_factory=lambda: {"short": 1 / 3, "medium": 1 / 3, "long": 1 / 3}
     )
     sample_structure: SampleStructureConfig = Field(default_factory=SampleStructureConfig)
+    sample_structures: List[SampleStructureConfig] = Field(default_factory=list)
     optional_constraint_distribution: Dict[str, float] = Field(default_factory=dict)
     max_entities: Dict[str, int] = Field(default_factory=lambda: {"easy": 2, "medium": 4, "hard": 6})
     max_regenerate_attempts: int = Field(default=2, ge=0, le=4)
@@ -474,6 +476,7 @@ class GenerationTask(Schema):
     sequence_no: int = Field(..., gt=0)
     language: str
     focus_labels: List[str] = Field(..., min_items=1)
+    annotation_labels: List[str] = Field(default_factory=list)
     focus_label: Optional[str] = None
     robin_labels: List[str] = Field(default_factory=list)
     difficulty: Difficulty

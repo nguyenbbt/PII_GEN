@@ -130,7 +130,7 @@ trong taxonomy snapshot của run được sử dụng.
 - sample type distribution;
 - optional constraints;
 - exact seeded quota cho `short/medium/long`;
-- sample structure cố định của run;
+- sample structure được random có seed từ pool cấu hình;
 - focus label và robin labels;
 - entity/complexity limits;
 - deterministic `random_seed`.
@@ -142,6 +142,9 @@ Preset độ dài:
 | Contract | 80–120 từ, 3–5 content units | 150–230 từ, 6–9 units | 260–400 từ, 10–14 units |
 | Chat | 80–120 từ, 6–8 lượt | 150–230 từ, 10–14 lượt | 260–400 từ, 16–22 lượt |
 | Custom | 80–120 từ | 150–230 từ | 260–400 từ |
+
+Các khoảng trên là mục tiêu để Generator hướng tới. Validator chỉ enforce cận dưới
+`80/150/260`; sample dài hơn cận trên vẫn hợp lệ và không bị regenerate.
 
 Planner dùng largest-remainder quota rồi shuffle bằng `random_seed`; với 10 mẫu và
 distribution `0.2/0.5/0.3`, quota luôn là `2/5/3`.
@@ -221,7 +224,8 @@ Generator nhận:
 - structured taxonomy guidance;
 - reflection feedback của attempt trước.
 - `sample_structure` và structure variant đã được lập kế hoạch.
-- `length_target` có giới hạn từ và content-unit/turn cụ thể.
+- `length_target` có khoảng từ và content-unit/turn mục tiêu; chỉ cận dưới của số
+  từ là bắt buộc.
 - số entity bắt buộc bằng đúng số positive seed của task.
 
 Ba structure được hỗ trợ:
@@ -248,7 +252,7 @@ Generator chỉ:
 Generator không quyết định candidate có được accept hay không.
 
 Few-shot chỉ dạy ngữ nghĩa label và ranh giới annotation. Prompt version
-`data-generator.v11.0.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
+`data-generator.v11.2.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
 opening phrase, clause order và sentence structure của example.
 Prompt cấm ghép seed thành danh sách dấu phẩy; mỗi entity phải có vai trò nghiệp vụ
 và được phân bố qua nhiều câu/lượt trong cùng một sự kiện.
@@ -281,8 +285,9 @@ Technical gate luôn chạy trước Formatter:
 - entity metadata khớp tag;
 - allowed/focus labels;
 - entity count;
-- clean-text word count đúng `length_target` trong online mode;
-- positive seed xuất hiện đúng một lần và nguyên văn;
+- clean-text word count đạt tối thiểu của `length_target`; vượt cận trên được bỏ qua;
+- positive seed xuất hiện nguyên văn; nếu cùng value lặp lại trong câu thì mọi
+  occurrence đều phải có tag và một metadata entry tương ứng;
 - decoy luôn untagged và có context cue;
 - pure-negative/hard-negative structured PII scan;
 - structured PII scan cho negative sample.
@@ -290,15 +295,21 @@ Technical gate luôn chạy trước Formatter:
   ba focus examples; candidate quá giống phải regenerate ngay cả khi Judge
   đang tắt.
 
-Khi `quality_checks_enabled=true`, NoveltyGuard mới kiểm tra duplicate entity value
-và sentence/entity novelty trong cùng run.
+Khi `quality_checks_enabled=true`, NoveltyGuard kiểm tra entity value giữa các sample
+đã accept và sentence/entity novelty trong cùng run. Các occurrence lặp lại hợp lệ
+trong cùng một sample không bị xem là duplicate annotation.
 
 `DeterministicIssueRouter` ánh xạ kết quả theo route rõ ràng:
 
-- `FIXABLE`: chỉ lỗi metadata cục bộ; chuyển cho Judge/Repair nếu Verifier
-  bật, nếu không thì regenerate;
-- `REGENERATE`: lỗi tag, semantic, seed/decoy, novelty hoặc structured PII;
+- `FIXABLE`: lỗi metadata, tag/span boundary, duplicate span hoặc missing annotation
+  có thể sửa cục bộ; chuyển cho Judge/Repair nếu Verifier bật;
+- `REGENERATE`: chỉ các lỗi nội dung/ngữ nghĩa không thể sửa cục bộ, seed/decoy
+  semantics, novelty/imitation hoặc structured PII làm sai sample type;
 - `REJECTED`: credential/real-PII risk severity `critical`.
+
+Nếu seed value đã có trong text nhưng thiếu tag/metadata, route là `FIXABLE`. Nếu
+seed value hoàn toàn vắng mặt, route là `REGENERATE` trực tiếp và không tốn một lượt
+Judge để xác nhận lại lỗi contract mà code đã biết chắc.
 
 Candidate cần regenerate tạo reflection feedback và quay lại Generator. Với lỗi scope
 `SEEDS` hoặc `CONTEXT`, `RegenerationRouter` tạo seed/context mới theo đúng scope.
@@ -309,10 +320,25 @@ Verifier dùng cùng endpoint nhưng có model, prompt và sampling config riên
 này được gọi khi `verifier.enabled=true`; config mẫu dùng `gemini-2.5-pro` cho Judge
 và Repair trong khi Generator dùng `gemini-2.5-flash`.
 
-Judge kiểm tra word/turn target, đủ 5–8 positive entity theo task, độ tự nhiên,
-duplicate skeleton, seed/decoy contract, few-shot imitation và boundary
-`ADDRESS/LOCATION/ZIP_CODE`. Deterministic issue là bằng chứng bắt buộc: Judge không
-được trả `PASS` khi danh sách này còn issue.
+Judge kiểm tra cận dưới độ dài, độ tự nhiên, duplicate skeleton, seed/decoy contract,
+few-shot imitation và boundary `ADDRESS/LOCATION/ZIP_CODE`; không được reject vì vượt
+cận trên. Với positive sample, Judge quét toàn văn theo `annotation_labels`. PII phát
+sinh trong ngữ cảnh nhưng chưa có tag/metadata phải trả `FIXABLE/MISSING_ANNOTATION`;
+Repair thêm tag và entity, deterministic gate kiểm tra lại, rồi Formatter tính lại
+start/end offset. Deterministic issue là bằng chứng bắt buộc: Judge không được trả
+`PASS` khi danh sách này còn issue.
+
+Sau Repair, code bảo toàn mọi occurrence của positive seed và dựng lại metadata từ
+tag trước khi re-check. Vì vậy nếu LLM vô tình bỏ tag ở lần nhắc lại thứ hai hoặc thứ
+ba, code tự khôi phục thay vì regenerate cả nội dung.
+
+Placeholder chuẩn luôn có ngoặc vuông và label viết hoa, ví dụ `[PERSON_1]`. Biến thể
+thiếu ngoặc như `PERSON_1`, placeholder sai định dạng hoặc không thuộc seed contract
+đều bị từ chối trước Verifier; code chỉ chèn Value Bank khi contract chính xác.
+
+Response JSON của Generator/Judge/Repair chấp nhận JSON object thuần, JSON trong code
+fence, hoặc object có phần giải thích bao quanh. JSON thực sự sai hoặc bị cắt vẫn được
+retry và log ghi rõ dòng, cột cùng preview để chẩn đoán.
 
 Judge chỉ đánh giá, không được sửa:
 
@@ -335,8 +361,10 @@ Judge chỉ đánh giá, không được sửa:
 Trạng thái:
 
 - `PASS`: `issues` bắt buộc rỗng;
-- `FIXABLE`: chỉ được chứa issue severity `low`;
-- `REGENERATE`: lỗi ngữ nghĩa, label, hard-negative, độ tự nhiên hoặc difficulty;
+- `FIXABLE`: chỉ được chứa issue severity `low`, gồm boundary/tag/metadata và missing
+  annotation có thể xác định chắc chắn;
+- `REGENERATE`: lỗi nội dung như thiếu/đối nghịch context, sai ngữ nghĩa không thể sửa
+  cục bộ, hard-negative mơ hồ, thiếu tự nhiên hoặc rập khuôn;
 - `REJECTED`: phải có issue `critical`, ví dụ credential/real-PII risk.
 
 Luồng lỗi nhẹ:
@@ -496,12 +524,13 @@ Các field chính:
 | `difficulty_distribution` | Xác suất easy/medium/hard |
 | `sample_type_distribution` | Xác suất positive/pure-negative/hard-negative |
 | `sample_length_distribution` | Quota short/medium/long; đủ đúng ba key và tổng bằng 1 |
-| `sample_structure` | Một trong `contract`, `chat`, `custom` cho toàn run |
+| `sample_structure` | Structure fallback tương thích config cũ |
+| `sample_structures` | Pool structure; mỗi sample random từ pool bằng `random_seed` |
 | `optional_constraint_distribution` | Xác suất `teen_code`, `light_typo`, `abbreviation` |
-| `max_entities` | Entity limit theo difficulty |
+| `max_entities` | Mục tiêu entity khi generate; verifier có thể bổ sung annotation bị bỏ sót |
 | `max_regenerate_attempts` | Số lần sinh lại trong cùng task |
 | `max_task_replacements` | Số task thay thế tối đa cho mỗi slot |
-| `value_bank` | `path`, seed-pack retry và unseeded-PII policy |
+| `value_bank` | `path`, seed-pack retry và unseeded-PII policy; bật `allow_additional_unseeded_pii` để verifier gắn nhãn PII phát sinh trong context |
 | `hard_negative` | Mode, decoy count và focus limits |
 | `complexity_limits` | Complexity budget theo sample type |
 | `validation.quality_checks_enabled` | Cờ legacy cho NoveltyGuard; migrate sang Verifier nếu config không có `verifier` |
@@ -540,17 +569,29 @@ Ví dụ structure:
 
 ```json
 {
-  "sample_structure": {
-    "type": "custom",
-    "custom_instruction": "Biên bản bàn giao thiết bị theo dạng checklist"
-  }
+  "sample_structures": [
+    {"type": "contract"},
+    {"type": "chat"},
+    {
+      "type": "custom",
+      "custom_instruction": "Viết dưới dạng email nghiệp vụ"
+    },
+    {
+      "type": "custom",
+      "custom_instruction": "Viết dưới dạng báo cáo sự việc"
+    }
+  ]
 }
 ```
 
-`custom_instruction` bắt buộc với `custom` và bị từ chối với `contract` hoặc `chat`.
+Mỗi task bốc ngẫu nhiên một phần tử trong `sample_structures`; đây không phải quota
+cố định. Cùng `random_seed` tạo cùng chuỗi lựa chọn. Nếu pool bị bỏ trống, hệ thống
+dùng `sample_structure` như config cũ. Có thể thêm nhiều phần tử `custom` để mở rộng
+format; `custom_instruction` bắt buộc với `custom` và bị từ chối với `contract`
+hoặc `chat`.
 Các field validation cũ vẫn được parse để tương thích. Seed/tag/decoy/metadata/offset
-và online length validation
-không thể tắt.
+và cận dưới độ dài không thể tắt. Cận trên của cả `short`, `medium`, `long` chỉ là
+guidance và không tạo lỗi validation.
 
 ## 6. Azure/OpenAI settings
 
@@ -664,6 +705,15 @@ Bỏ `--offline`:
   --config configs\run_config.example.json
 ```
 
+CLI ghi progress log theo thời gian thực ra `stderr`, gồm số sample hiện tại/tổng
+số, sample type, length bucket, label, generator attempt, LLM retry/latency,
+deterministic validation route, verifier judge/repair và tiến độ accepted. Log không
+ghi API key, header hoặc prompt. Diagnostic log có ghi tagged text, Value Bank value
+đã bind, toàn bộ feedback và nội dung trước/sau verifier repair để phục vụ điều tra
+local. Mặc định file UTF-8 có timestamp được tạo trong `--output-dir`; dùng
+`--log-file <path>` nếu muốn chỉ định tên khác. Báo cáo JSON hoàn chỉnh vẫn được ghi
+ra `stdout` sau khi run kết thúc và có thêm `diagnostic_log_path`.
+
 Online mode gọi Generator và Verifier nên phát sinh chi phí.
 
 Để chạy config theo nhiều shard song song và chỉ publish khi đủ toàn bộ sample:
@@ -750,7 +800,8 @@ Test suite bao phủ:
 - partial/final JSON writer;
 - offline end-to-end.
 - Verifier disabled vẫn giữ technical gate.
-- exact length quota, numeric word target và entity density;
+- exact length quota, minimum word target, bỏ qua upper-bound và entity density;
+- verifier bổ sung missing annotation rồi formatter tính lại offset;
 - PERSON thuần Việt và ADDRESS/LOCATION/ZIP_CODE boundary.
 
 ## 10. Giới hạn hiện tại và hướng production

@@ -55,6 +55,11 @@ class TaxonomyContextSelector:
                 self._guidance(labels_by_code[code])
                 for code in robin_codes
             ],
+            available_labels=[
+                self._guidance(labels_by_code[code])
+                for code in (task.annotation_labels or requested_codes)
+                if code not in requested_codes
+            ],
         )
 
     @classmethod

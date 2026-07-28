@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import json
+import logging
 import os
+from datetime import datetime
 from pathlib import Path
 import sys
 
@@ -49,8 +51,23 @@ def main() -> None:
         type=Path,
         help="Directory for partial/final accepted JSON datasets (default: GEN_DATA_DIR or gen_data)",
     )
+    parser.add_argument(
+        "--log-file",
+        type=Path,
+        help=(
+            "Detailed UTF-8 diagnostic log path. By default a timestamped log "
+            "is created inside --output-dir."
+        ),
+    )
     args = parser.parse_args()
     if args.config or args.taxonomy_json:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s | %(levelname)s | %(message)s",
+            datefmt="%H:%M:%S",
+            stream=sys.stderr,
+            force=True,
+        )
         if args.offline:
             print(
                 "WARNING: offline output is a smoke-test artifact, not a dataset.",
@@ -78,11 +95,45 @@ def main() -> None:
                     "hard_negative": float(sample_type == "hard_negative"),
                 },
             )
+        log_directory = args.output_dir or Path(
+            os.getenv("GEN_DATA_DIR", "gen_data")
+        )
+        log_path = args.log_file or (
+            log_directory
+            / f"{config.run_name}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+        )
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(
+            log_path,
+            mode="w",
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        ))
+        logging.getLogger().addHandler(file_handler)
         run = pipeline.create_run(CreateRunRequest(
             run_name=config.run_name, taxonomy_version_id=taxonomy.version_id, config=config,
         ))
+        logging.getLogger(__name__).info(
+            "[run] started name=%s samples=%s language=%s verifier=%s",
+            config.run_name,
+            config.num_samples,
+            config.language,
+            "on" if config.verifier.enabled else "off",
+        )
+        logging.getLogger(__name__).info(
+            "[run] detailed diagnostic log=%s",
+            log_path.resolve(),
+        )
         results = []
         while len(results) < config.num_samples:
+            logging.getLogger(__name__).info(
+                "[run] scheduling next batch accepted=%s/%s",
+                len(results),
+                config.num_samples,
+            )
             batch = pipeline.generate_pending(
                 run.run_id,
                 limit=min(config.batch_size, config.num_samples - len(results)),
@@ -90,6 +141,11 @@ def main() -> None:
             if not batch:
                 break
             results.extend(batch)
+            logging.getLogger(__name__).info(
+                "[run] batch finished accepted=%s/%s",
+                len(results),
+                config.num_samples,
+            )
         final_run = repository.get_run(run.run_id)
         pipeline_usages = [
             result.pipeline_token_usage.total
@@ -139,6 +195,7 @@ def main() -> None:
             "run_id": run.run_id,
             "status": final_run.status,
             "output_path": final_run.output_path,
+            "diagnostic_log_path": str(log_path.resolve()),
             "accepted_samples": len(results),
             "token_usage": {
                 "input_tokens": total_input_tokens,
@@ -172,6 +229,15 @@ def main() -> None:
                 if result.formatted_sample is not None
             ],
         }, ensure_ascii=False, indent=2, default=str))
+        logging.getLogger(__name__).info(
+            "[run] finished status=%s accepted=%s/%s output=%s",
+            final_run.status,
+            len(results),
+            config.num_samples,
+            final_run.output_path,
+        )
+        logging.getLogger().removeHandler(file_handler)
+        file_handler.close()
         if final_run.status == "FAILED":
             raise SystemExit(1)
         return

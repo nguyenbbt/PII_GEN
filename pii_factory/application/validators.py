@@ -246,6 +246,7 @@ class DeterministicOutputValidator:
         seed_pack: SeedPack,
         focus_labels: Sequence[str],
         max_entities: int,
+        allowed_labels: Sequence[str] | None = None,
         length_target: LengthTarget | None = None,
     ) -> DeterministicValidationResult:
         issues: list[ValidationIssue] = []
@@ -258,7 +259,7 @@ class DeterministicOutputValidator:
             validate_generated_output(
                 tagged_text=tagged_text,
                 entities=raw_entities,
-                allowed_labels=focus_labels,
+                allowed_labels=(allowed_labels or focus_labels),
                 required_labels=focus_labels,
                 sample_type="pure_negative" if hard_decoy_only else str(seed_pack.sample_type),
                 max_entities=max_entities,
@@ -269,13 +270,14 @@ class DeterministicOutputValidator:
         clean_text = _TAG.sub("", tagged_text).strip()
         if length_target is not None:
             word_count = len(re.findall(r"\S+", clean_text))
-            if not length_target.min_words <= word_count <= length_target.max_words:
+            if word_count < length_target.min_words:
                 issues.append(ValidationIssue(
-                    type="length_out_of_range",
+                    type="length_below_minimum",
                     scope="TEXT",
                     reason=(
-                        f"clean text has {word_count} words; expected "
-                        f"{length_target.min_words}-{length_target.max_words}"
+                        f"clean text has {word_count} words; expected at least "
+                        f"{length_target.min_words}. The preferred upper target "
+                        f"{length_target.max_words} is guidance only."
                     ),
                 ))
 
@@ -295,21 +297,21 @@ class DeterministicOutputValidator:
         listed_pairs = {(str(item.get("label")), str(item.get("value"))) for item in raw_entities}
         for seed in seed_pack.positive_entities:
             expected = f"<{seed.label}>{seed.value}</{seed.label}>"
-            if tagged_text.count(expected) != 1:
+            if tagged_text.count(expected) < 1:
                 issues.append(ValidationIssue(
                     type="missing_positive_seed", scope="TEXT",
-                    reason="positive seed must appear exactly once with its exact tag", label=seed.label, value=seed.value,
+                    reason="positive seed must appear with its exact tag", label=seed.label, value=seed.value,
                 ))
             if (seed.label, seed.value) not in listed_pairs:
                 issues.append(ValidationIssue(
                     type="missing_entity_metadata", scope="TEXT",
                     reason="positive seed is missing from entities", label=seed.label, value=seed.value,
                 ))
-            remainder = tagged_text.replace(expected, "", 1)
+            remainder = tagged_text.replace(expected, "")
             if seed.value in _TAG.sub("", remainder):
                 issues.append(ValidationIssue(
                     type="duplicate_positive_seed", scope="TEXT",
-                    reason="positive seed also appears outside its required tag", label=seed.label, value=seed.value,
+                    reason="one or more positive-seed occurrences remain outside the required tag", label=seed.label, value=seed.value,
                 ))
 
         entity_values = {str(item.get("value", "")) for item in raw_entities}

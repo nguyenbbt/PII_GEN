@@ -7,6 +7,8 @@ from typing import Any, Mapping, Sequence
 
 
 _PLACEHOLDER = re.compile(r"\[([A-Z][A-Z0-9_]*)_([1-9][0-9]*)\]")
+_BARE_PLACEHOLDER = re.compile(r"[A-Z][A-Z0-9_]*_[1-9][0-9]*")
+_ENTITY_TAG = re.compile(r"<[A-Z][A-Z0-9_]*>([^<>]+)</[A-Z][A-Z0-9_]*>")
 
 
 @dataclass(frozen=True)
@@ -93,5 +95,18 @@ def replace_entity_placeholders(
     if unresolved:
         raise ValueError(
             f"generated output contains unknown or unresolved entity placeholders: {unresolved}"
+        )
+    invalid_bare = sorted({
+        value
+        for value in [
+            *(match.group(1) for match in _ENTITY_TAG.finditer(bound_text)),
+            *(item["value"] for item in bound_entities),
+        ]
+        if _BARE_PLACEHOLDER.fullmatch(value)
+    })
+    if invalid_bare:
+        raise ValueError(
+            "generated output contains placeholders without required square "
+            f"brackets: {invalid_bare}"
         )
     return bound_text, bound_entities

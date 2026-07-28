@@ -116,7 +116,108 @@ class DeterministicValidatorTests(unittest.TestCase):
         )
 
         self.assertFalse(result.valid)
-        self.assertIn("length_out_of_range", {issue.type for issue in result.issues})
+        self.assertIn("length_below_minimum", {issue.type for issue in result.issues})
+
+    def test_long_length_target_has_no_upper_word_limit(self) -> None:
+        pack = SeedPack(
+            task_id="long-positive",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[
+                PositiveEntitySeed(
+                    label="DATE",
+                    value="21/10/2026",
+                    semantic_role="appointment_date",
+                )
+            ],
+        )
+        tagged_text = (
+            "<DATE>21/10/2026</DATE> "
+            + " ".join(f"nội_dung_{index}" for index in range(450))
+        )
+
+        result = self.output.validate(
+            tagged_text=tagged_text,
+            entities=[GeneratedEntity(label="DATE", value="21/10/2026")],
+            seed_pack=pack,
+            focus_labels=["DATE"],
+            max_entities=2,
+            length_target=LengthTarget(
+                bucket="long",
+                min_words=260,
+                max_words=400,
+                unit="content_units",
+                min_units=10,
+                max_units=14,
+            ),
+        )
+
+        self.assertNotIn(
+            "length_below_minimum",
+            {issue.type for issue in result.issues},
+        )
+
+    def test_additional_annotated_context_entity_is_allowed(self) -> None:
+        pack = SeedPack(
+            task_id="context-entity",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[
+                PositiveEntitySeed(
+                    label="PERSON",
+                    value="Mai Huyền",
+                    semantic_role="patient",
+                )
+            ],
+        )
+
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Mai Huyền</PERSON> hẹn tái khám vào "
+                "<DATE>15/05/2024</DATE>."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value="Mai Huyền"),
+                GeneratedEntity(label="DATE", value="15/05/2024"),
+            ],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            allowed_labels=["PERSON", "DATE"],
+            max_entities=2,
+        )
+
+        self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
+
+    def test_repeated_positive_seed_is_valid_when_every_occurrence_is_tagged(self) -> None:
+        pack = SeedPack(
+            task_id="repeated-person",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[
+                PositiveEntitySeed(
+                    label="PERSON",
+                    value="Mai Huyền",
+                    semantic_role="patient",
+                )
+            ],
+        )
+        result = self.output.validate(
+            tagged_text=(
+                "Người liên hệ <PERSON>Mai Huyền</PERSON>. "
+                "Bệnh nhân <PERSON>Mai Huyền</PERSON> đã xác nhận. "
+                "Hồ sơ của <PERSON>Mai Huyền</PERSON> được cập nhật."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value="Mai Huyền"),
+                GeneratedEntity(label="PERSON", value="Mai Huyền"),
+                GeneratedEntity(label="PERSON", value="Mai Huyền"),
+            ],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            max_entities=3,
+        )
+
+        self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
 
     def test_pure_negative_rejects_structured_candidates_and_accepts_generic_text(self) -> None:
         pack = SeedPack(

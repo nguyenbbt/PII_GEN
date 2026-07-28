@@ -31,6 +31,58 @@ class DistributionRunConfigTests(unittest.TestCase):
         self.assertEqual(custom.sample_structure.type, "custom")
         self.assertIn("bàn giao thiết bị", custom.sample_structure.custom_instruction)
 
+    def test_sample_structure_pool_is_random_and_reproducible(self) -> None:
+        pool = [
+            {"type": "contract"},
+            {"type": "chat"},
+            {
+                "type": "custom",
+                "custom_instruction": "Viết dưới dạng email nghiệp vụ.",
+            },
+            {
+                "type": "custom",
+                "custom_instruction": "Viết dưới dạng báo cáo sự việc.",
+            },
+        ]
+        config = RunConfig(
+            num_samples=20,
+            focus_labels=["PERSON"],
+            sample_structures=pool,
+            sample_type_distribution={
+                "positive": 1.0,
+                "pure_negative": 0.0,
+                "hard_negative": 0.0,
+            },
+            random_seed=174,
+        )
+
+        selections = []
+        for _ in range(2):
+            pipeline, repository, _ = build_pipeline(offline=True)
+            taxonomy = pipeline.taxonomy_service.import_json(
+                Path("pii_taxonomy_rules.json")
+            )
+            run = pipeline.create_run(
+                CreateRunRequest(
+                    taxonomy_version_id=taxonomy.version_id,
+                    config=config,
+                )
+            )
+            selections.append([
+                (
+                    task.sample_structure.type,
+                    task.sample_structure.custom_instruction,
+                )
+                for task in repository.list_tasks(run.run_id)
+            ])
+
+        self.assertEqual(selections[0], selections[1])
+        self.assertGreater(len(set(selections[0])), 2)
+        self.assertNotEqual(
+            selections[0],
+            [tuple((item["type"], item.get("custom_instruction"))) for item in pool] * 5,
+        )
+
     def test_custom_structure_requires_instruction_and_presets_reject_it(self) -> None:
         with self.assertRaisesRegex(
             ValidationError,

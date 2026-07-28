@@ -48,7 +48,6 @@ def validate_generated_output(
 
     allowed = set(allowed_labels)
     normalised: list[dict[str, str]] = []
-    seen_values: set[str] = set()
     for raw in entities:
         if not isinstance(raw, Mapping):
             raise ValueError("each entity must be an object")
@@ -58,10 +57,6 @@ def validate_generated_output(
             raise ValueError("each entity requires non-empty label and value")
         if label not in allowed:
             raise ValueError(f"entity label is not allowed: {label}")
-        unique_key = value
-        if unique_key in seen_values:
-            raise ValueError(f"duplicate entity value in one completion: {value!r}")
-        seen_values.add(unique_key)
         normalised.append({"label": label, "value": value})
 
     tag_pairs = _ENTITY_TAG.findall(tagged_text)
@@ -99,11 +94,11 @@ def validate_seeded_contract(
     for seed in positive_entities:
         label, value = str(seed.get("label", "")), str(seed.get("value", ""))
         expected = f"<{label}>{value}</{label}>"
-        if tagged_text.count(expected) != 1:
-            raise ValueError(f"positive seed must appear exactly once with exact tag: {label}")
+        if tagged_text.count(expected) < 1:
+            raise ValueError(f"positive seed must appear with its exact tag: {label}")
         if (label, value) not in entity_pairs:
             raise ValueError(f"positive seed is missing from entities: {label}")
-        if value in _ANY_TAG.sub("", tagged_text.replace(expected, "", 1)):
+        if value in _ANY_TAG.sub("", tagged_text.replace(expected, "")):
             raise ValueError(f"positive seed appears outside its required tag: {label}")
     entity_values = {value for _, value in entity_pairs}
     for decoy in decoys:

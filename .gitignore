@@ -11,5 +11,6 @@ dist/
 build/
 *.egg-info/
 gen_data/
+PII_Value_Bank/
 *.pem
 *.key

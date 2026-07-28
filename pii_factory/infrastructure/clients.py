@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -24,6 +25,9 @@ from ..domain.models import (
     TokenUsage,
     VerifierDecision,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_http_error_details(
@@ -194,6 +198,36 @@ class JsonCompletionTransport(Protocol):
     ) -> JsonCompletion: ...
 
 
+def _load_json_object_content(content: object) -> dict:
+    """Parse JSON-object responses, tolerating common Markdown/prose wrappers."""
+    if not isinstance(content, str):
+        raise TypeError("LLM response content must be a string")
+    stripped = content.strip()
+    candidates = [stripped]
+    if stripped.startswith("```") and stripped.endswith("```"):
+        first_newline = stripped.find("\n")
+        if first_newline >= 0:
+            candidates.append(stripped[first_newline + 1:-3].strip())
+    first_brace = stripped.find("{")
+    last_brace = stripped.rfind("}")
+    if 0 <= first_brace < last_brace:
+        candidates.append(stripped[first_brace:last_brace + 1])
+
+    last_error: json.JSONDecodeError | None = None
+    for candidate in dict.fromkeys(candidates):
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            continue
+        if not isinstance(payload, dict):
+            raise TypeError("LLM JSON response must be an object")
+        return payload
+    if last_error is not None:
+        raise last_error
+    raise json.JSONDecodeError("No JSON object found", stripped, 0)
+
+
 class AzureOpenAIJsonTransport:
     def __init__(self, settings: AzureOpenAISettings) -> None:
         self.settings = settings
@@ -216,13 +250,21 @@ class AzureOpenAIJsonTransport:
             },
         )
         last_error: Exception | None = None
+        content = ""
         for attempt in range(self.settings.infrastructure_retries + 1):
             started = time.perf_counter()
+            logger.info(
+                "[llm verifier] request attempt=%s/%s model=%s timeout=%ss",
+                attempt + 1,
+                self.settings.infrastructure_retries + 1,
+                self.settings.effective_verifier_model,
+                self.settings.timeout_seconds,
+            )
             try:
                 with urlopen(request, timeout=self.settings.timeout_seconds) as response:
                     raw = json.loads(response.read().decode("utf-8"))
                 content = raw["choices"][0]["message"]["content"]
-                payload = json.loads(content)
+                payload = _load_json_object_content(content)
                 if not isinstance(payload, dict):
                     raise VerifierInfrastructureError(
                         "Azure OpenAI verifier response must be a JSON object"
@@ -230,6 +272,12 @@ class AzureOpenAIJsonTransport:
                 usage = raw.get("usage", {})
                 input_tokens = int(usage.get("prompt_tokens", 0))
                 output_tokens = int(usage.get("completion_tokens", 0))
+                elapsed_ms = round((time.perf_counter() - started) * 1000)
+                logger.info(
+                    "[llm verifier] response received latency_ms=%s tokens=%s",
+                    elapsed_ms,
+                    int(usage.get("total_tokens", input_tokens + output_tokens)),
+                )
                 return JsonCompletion(
                     payload=payload,
                     input_tokens=input_tokens,
@@ -237,7 +285,7 @@ class AzureOpenAIJsonTransport:
                     total_tokens=int(
                         usage.get("total_tokens", input_tokens + output_tokens)
                     ),
-                    latency_ms=round((time.perf_counter() - started) * 1000),
+                    latency_ms=elapsed_ms,
                 )
             except HTTPError as exc:
                 if exc.code not in {408, 429, 500, 502, 503, 504}:
@@ -251,8 +299,26 @@ class AzureOpenAIJsonTransport:
                 last_error = exc
             except (KeyError, TypeError, ValueError, json.JSONDecodeError, URLError) as exc:
                 last_error = exc
+                if isinstance(exc, json.JSONDecodeError):
+                    logger.warning(
+                        "[llm verifier] invalid JSON msg=%s line=%s col=%s preview=%r",
+                        exc.msg,
+                        exc.lineno,
+                        exc.colno,
+                        content[:400],
+                    )
             if attempt < self.settings.infrastructure_retries:
-                time.sleep(min(2**attempt, 8))
+                delay = min(2**attempt, 8)
+                logger.warning(
+                    "[llm verifier] attempt failed error=%s; retrying in %ss",
+                    type(last_error).__name__,
+                    delay,
+                )
+                time.sleep(delay)
+        logger.error(
+            "[llm verifier] request failed after %s attempts",
+            self.settings.infrastructure_retries + 1,
+        )
         raise VerifierInfrastructureError(
             "Azure OpenAI verifier request failed after infrastructure retries"
         ) from last_error
@@ -393,12 +459,21 @@ class AzureOpenAICompletionClient:
             },
         )
         last_error: Exception | None = None
+        content = ""
         for attempt in range(self.settings.infrastructure_retries + 1):
+            started = time.perf_counter()
+            logger.info(
+                "[llm generator] request attempt=%s/%s model=%s timeout=%ss",
+                attempt + 1,
+                self.settings.infrastructure_retries + 1,
+                self.settings.effective_generator_model,
+                self.settings.timeout_seconds,
+            )
             try:
                 with urlopen(request, timeout=self.settings.timeout_seconds) as response:
                     raw = json.loads(response.read().decode("utf-8"))
                 content = raw["choices"][0]["message"]["content"]
-                parsed = json.loads(content)
+                parsed = _load_json_object_content(content)
                 tagged_text = parsed["tagged_text"]
                 if not isinstance(tagged_text, str) or not tagged_text.strip():
                     raise ValueError("tagged_text must be a non-empty string")
@@ -418,6 +493,11 @@ class AzureOpenAICompletionClient:
                 input_tokens = int(usage.get("prompt_tokens", 0))
                 output_tokens = int(usage.get("completion_tokens", 0))
                 total_tokens = int(usage.get("total_tokens", input_tokens + output_tokens))
+                logger.info(
+                    "[llm generator] response received latency_ms=%s tokens=%s",
+                    round((time.perf_counter() - started) * 1000),
+                    total_tokens,
+                )
                 return tagged_text, parsed_entities, input_tokens, output_tokens, total_tokens
             except HTTPError as exc:
                 if exc.code not in {408, 429, 500, 502, 503, 504}:
@@ -431,8 +511,26 @@ class AzureOpenAICompletionClient:
                 last_error = exc
             except (KeyError, TypeError, ValueError, URLError) as exc:
                 last_error = exc
+                if isinstance(exc, json.JSONDecodeError):
+                    logger.warning(
+                        "[llm generator] invalid JSON msg=%s line=%s col=%s preview=%r",
+                        exc.msg,
+                        exc.lineno,
+                        exc.colno,
+                        content[:400],
+                    )
             if attempt < self.settings.infrastructure_retries:
-                time.sleep(min(2**attempt, 8))
+                delay = min(2**attempt, 8)
+                logger.warning(
+                    "[llm generator] attempt failed error=%s; retrying in %ss",
+                    type(last_error).__name__,
+                    delay,
+                )
+                time.sleep(delay)
+        logger.error(
+            "[llm generator] request failed after %s attempts",
+            self.settings.infrastructure_retries + 1,
+        )
         raise RuntimeError("Azure OpenAI request failed after infrastructure retries") from last_error
 
 

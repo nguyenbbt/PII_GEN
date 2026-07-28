@@ -54,6 +54,47 @@ class OutputFormatterTests(unittest.TestCase):
         self.assertEqual(sample.entities[0].end, 8)
         self.assertEqual(sample.text[6:8], "Hà")
 
+    def test_offsets_are_recomputed_after_missing_annotation_is_added(self) -> None:
+        sample = self.formatter.format(
+            tagged_text=(
+                "Chị <PERSON>Mai Huyền</PERSON> hẹn tái khám ngày "
+                "<DATE>15/05/2024</DATE>."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value="Mai Huyền"),
+                GeneratedEntity(label="DATE", value="15/05/2024"),
+            ],
+            allowed_labels=["PERSON", "DATE"],
+        )
+
+        self.assertEqual(
+            [(item.label, item.text) for item in sample.entities],
+            [("PERSON", "Mai Huyền"), ("DATE", "15/05/2024")],
+        )
+        for entity in sample.entities:
+            self.assertEqual(
+                sample.text[entity.start:entity.end],
+                entity.text,
+            )
+
+    def test_repeated_value_produces_one_span_per_occurrence(self) -> None:
+        sample = self.formatter.format(
+            tagged_text=(
+                "<PERSON>Mai Huyền</PERSON> xác nhận hồ sơ của "
+                "<PERSON>Mai Huyền</PERSON>."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value="Mai Huyền"),
+                GeneratedEntity(label="PERSON", value="Mai Huyền"),
+            ],
+            allowed_labels=["PERSON"],
+        )
+
+        self.assertEqual(len(sample.entities), 2)
+        self.assertNotEqual(sample.entities[0].start, sample.entities[1].start)
+        for entity in sample.entities:
+            self.assertEqual(sample.text[entity.start:entity.end], "Mai Huyền")
+
     def test_pure_negative_has_an_empty_entity_array(self) -> None:
         sample = self.formatter.format(
             tagged_text="Bộ phận kỹ thuật đã chuyển biểu mẫu.",

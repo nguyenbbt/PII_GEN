@@ -88,6 +88,14 @@ class PlaceholderReplacementTests(unittest.TestCase):
                 positive_entities=self.positive_entities[:1],
             )
 
+    def test_placeholder_without_square_brackets_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "without required square brackets"):
+            replace_entity_placeholders(
+                tagged_text="<PERSON>PERSON_1</PERSON>",
+                entities=[{"label": "PERSON", "value": "PERSON_1"}],
+                positive_entities=self.positive_entities[:1],
+            )
+
     def test_existing_seed_validator_rejects_missing_or_duplicate_placeholder(self) -> None:
         cases = (
             (

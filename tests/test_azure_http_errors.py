@@ -59,6 +59,32 @@ def _malformed_json_response() -> BytesIO:
     )
 
 
+def _wrapped_json_response() -> BytesIO:
+    payload = {"tagged_text": "wrapped", "entities": []}
+    return BytesIO(
+        json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                "```json\n"
+                                + json.dumps(payload, ensure_ascii=False)
+                                + "\n```"
+                            )
+                        }
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+            }
+        ).encode("utf-8")
+    )
+
+
 class AzureOpenAIHttpErrorTests(unittest.TestCase):
     def test_generator_defaults_to_long_form_completion_budget(self) -> None:
         settings = AzureOpenAISettings(
@@ -91,6 +117,22 @@ class AzureOpenAIHttpErrorTests(unittest.TestCase):
         self.assertEqual(tagged_text, "test")
         self.assertEqual(entities, [])
         self.assertEqual(mocked_urlopen.call_count, 2)
+
+    def test_generator_accepts_json_wrapped_in_markdown_fence(self) -> None:
+        settings = AzureOpenAISettings(
+            api_key="top-secret-value",
+            base_url="https://gateway.example",
+        )
+        with patch(
+            "pii_factory.infrastructure.clients.urlopen",
+            return_value=_wrapped_json_response(),
+        ):
+            tagged_text, entities, *_ = AzureOpenAICompletionClient(
+                settings
+            ).generate([{"role": "user", "content": "Return JSON."}])
+
+        self.assertEqual(tagged_text, "wrapped")
+        self.assertEqual(entities, [])
 
     def test_standalone_worker_uses_openai_compatible_gateway_request(self) -> None:
         settings = WorkerSettings(

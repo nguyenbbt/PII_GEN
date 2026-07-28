@@ -1,0 +1,94 @@
+{
+  "run_name": "vi-value-bank-online-10",
+  "num_samples": 10,
+  "language": "vi",
+  "minimum_per_label": 0,
+  "batch_size": 2,
+  "focus_labels": [
+    "PERSON",
+    "PHONE",
+    "EMAIL",
+    "ADDRESS",
+    "LOCATION",
+    "DATE",
+    "TIME"
+  ],
+  "sample_length_distribution": {
+    "short": 0.0,
+    "medium": 0.6,
+    "long": 0.4
+  },
+  "difficulty_distribution": {
+    "easy": 0.0,
+    "medium": 1.0,
+    "hard": 0.0
+  },
+  "sample_type_distribution": {
+    "positive": 0.6,
+    "pure_negative": 0.2,
+    "hard_negative": 0.2
+  },
+  "sample_structures": [
+    {
+      "type": "contract"
+    },
+    {
+      "type": "chat"
+    },
+    {
+      "type": "custom",
+      "custom_instruction": "Viết dưới dạng email nghiệp vụ tự nhiên, có tiêu đề, lời chào, nội dung chính và phần kết phù hợp."
+    },
+    {
+      "type": "custom",
+      "custom_instruction": "Viết dưới dạng phiếu yêu cầu hoặc ticket hỗ trợ, trình bày bối cảnh, vấn đề và hành động cần thực hiện."
+    },
+    {
+      "type": "custom",
+      "custom_instruction": "Viết dưới dạng báo cáo sự việc hoặc nhật ký vận hành, có diễn biến và bước xử lý tiếp theo."
+    },
+    {
+      "type": "custom",
+      "custom_instruction": "Viết dưới dạng ghi chú hoặc tin nhắn nội bộ tự nhiên giữa các đồng nghiệp, không dùng văn phong hợp đồng."
+    }
+  ],
+  "optional_constraint_distribution": {},
+  "max_entities": {
+    "easy": 5,
+    "medium": 5,
+    "hard": 5
+  },
+  "max_regenerate_attempts": 2,
+  "max_task_replacements": 2,
+  "value_bank": {
+    "path": "PII_Value_Bank",
+    "max_seed_pack_attempts": 5,
+    "allow_additional_unseeded_pii": true
+  },
+  "hard_negative": {
+    "mode": "decoy_only",
+    "min_decoys": 1,
+    "max_decoys": 1,
+    "max_focus_labels": 5,
+    "unsupported_label_policy": "rebuild_task"
+  },
+  "complexity_limits": {
+    "positive": 5,
+    "pure_negative": 1,
+    "hard_negative": 5
+  },
+  "validation": {
+    "quality_checks_enabled": true,
+    "novelty_mode": "audit"
+  },
+  "verifier": {
+    "enabled": true,
+    "max_repairs_per_candidate": 1
+  },
+  "parallel_generation": {
+    "workers": 1,
+    "shard_size": 10,
+    "max_shard_retries": 1
+  },
+  "random_seed": 174
+}

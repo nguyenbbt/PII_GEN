@@ -34,6 +34,7 @@ class DiversityPlanner:
         random_seed: int,
         length_distribution: Mapping[str, float] | None = None,
         total_samples: int | None = None,
+        sample_structures: Sequence[SampleStructureConfig] | None = None,
     ) -> None:
         self._rng = random.Random(random_seed ^ 0x5EED_D1)
         self._context_usage: Counter[str] = Counter()
@@ -64,16 +65,22 @@ class DiversityPlanner:
             ("formal", "neutral", "informal", "concise_technical"), self._rng
         )
         length_values = (
-            self._weighted_values(length_distribution, total_samples)
+            self._weighted_values(
+                length_distribution,
+                total_samples,
+                ("short", "medium", "long"),
+            )
             if length_distribution is not None and total_samples is not None
             else ["short", "medium", "long"]
         )
         self._lengths = _QuotaAxis(length_values, self._rng)
+        self._sample_structures = list(sample_structures or ())
 
     @staticmethod
     def _weighted_values(
         distribution: Mapping[str, float],
         total_samples: int,
+        order: Sequence[str],
     ) -> list[str]:
         raw_counts = {
             name: probability * total_samples
@@ -97,9 +104,19 @@ class DiversityPlanner:
             counts[name] += 1
         return [
             name
-            for name in ("short", "medium", "long")
+            for name in order
+            if name in counts
             for _ in range(counts[name])
         ]
+
+    def select_sample_structure(
+        self,
+        fallback: SampleStructureConfig,
+    ) -> SampleStructureConfig:
+        """Randomly select a seeded per-sample structure or preserve the legacy preset."""
+        if not self._sample_structures:
+            return fallback
+        return self._rng.choice(self._sample_structures)
 
     def plan(
         self,

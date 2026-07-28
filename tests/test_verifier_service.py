@@ -196,6 +196,53 @@ class VerifierServiceTests(unittest.TestCase):
                     valid=False,
                     issues=[
                         ValidationIssue(
+                            type="invalid_output",
+                            scope="TEXT",
+                            reason="duplicate entity value in one completion: 'Mai Huyền'",
+                        ),
+                        ValidationIssue(
+                            type="missing_positive_seed",
+                            scope="TEXT",
+                            reason="positive seed must appear with its exact tag",
+                            label="PERSON",
+                        ),
+                        ValidationIssue(
+                            type="duplicate_positive_seed",
+                            scope="TEXT",
+                            reason="positive seed appears outside its required tag",
+                            label="PERSON",
+                        ),
+                    ],
+                ),
+                "FIXABLE",
+                "low",
+            ),
+            (
+                DeterministicValidationResult(
+                    valid=False,
+                    issues=[
+                        ValidationIssue(
+                            type="missing_positive_seed",
+                            scope="TEXT",
+                            reason="positive seed must appear with its exact tag",
+                            label="PERSON",
+                        ),
+                        ValidationIssue(
+                            type="missing_entity_metadata",
+                            scope="TEXT",
+                            reason="positive seed is missing from entities",
+                            label="PERSON",
+                        ),
+                    ],
+                ),
+                "REGENERATE",
+                "high",
+            ),
+            (
+                DeterministicValidationResult(
+                    valid=False,
+                    issues=[
+                        ValidationIssue(
                             type="decoy_context_unclear",
                             scope="TEXT",
                             reason="The hard-negative cue is ambiguous.",
@@ -290,7 +337,7 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertIsNone(
             user_payload["deterministic_metrics"]["chat_turn_count"]
         )
-        self.assertIn("authoritative length measurement", system_prompt)
+        self.assertIn("Minimum length is enforced", system_prompt)
         self.assertIn("do not invent a", system_prompt)
 
     def test_authoritative_metrics_override_false_judge_rejections(self) -> None:
@@ -350,6 +397,199 @@ class VerifierServiceTests(unittest.TestCase):
             repair_result=repaired,
         )
 
+        with self.assertLogs(
+            "pii_factory.application.verification",
+            level="INFO",
+        ) as captured:
+            verified, trace = VerifierService(client).verify(
+                candidate=candidate(),
+                task=task(),
+                seed_pack=seed_pack(),
+                taxonomy_context=self.taxonomy_context,
+                revalidate=lambda _: DeterministicValidationResult(valid=True),
+            )
+
+        self.assertEqual(trace.outcome, "FIXED")
+        self.assertEqual(trace.repair, repaired)
+        self.assertEqual(trace.final_judge.status, "PASS")
+        self.assertEqual(verified.tagged_text, repaired.tagged_text)
+        self.assertEqual(len(client.judge_messages), 2)
+        self.assertEqual(len(client.repair_messages), 1)
+        diagnostic_log = "\n".join(captured.output)
+        self.assertIn("verifier judge feedback", diagnostic_log)
+        self.assertIn("verifier original tagged_text:", diagnostic_log)
+        self.assertIn("verifier fixed tagged_text:", diagnostic_log)
+        self.assertIn(repaired.tagged_text, diagnostic_log)
+
+    def test_missing_context_entity_is_fixed_and_added_to_metadata(self) -> None:
+        original = candidate().copy(update={
+            "tagged_text": (
+                "Chị <PERSON>Lò Thị Cẩy</PERSON> hẹn tái khám ngày 15/05/2024."
+            ),
+        })
+        repaired = RepairResult(
+            tagged_text=(
+                "Chị <PERSON>Lò Thị Cẩy</PERSON> hẹn tái khám ngày "
+                "<DATE>15/05/2024</DATE>."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value="Lò Thị Cẩy"),
+                GeneratedEntity(label="DATE", value="15/05/2024"),
+            ],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        taxonomy_context = self.taxonomy_context.copy(update={
+            "available_labels": [
+                LabelGenerationContext(
+                    label="DATE",
+                    definition="Ngày lịch cụ thể.",
+                    rule="Gắn toàn bộ biểu thức ngày.",
+                )
+            ],
+        })
+        client = FakeVerifierClient(
+            [
+                VerifierDecision(
+                    status="FIXABLE",
+                    score=85,
+                    issues=[VerificationIssue(
+                        type="MISSING_ANNOTATION",
+                        severity="low",
+                        field="tagged_text",
+                        reason="Ngày 15/05/2024 chưa được gắn nhãn.",
+                        suggested_fix="Gắn DATE và bổ sung entity metadata.",
+                    )],
+                    token_usage=token_usage(),
+                    latency_ms=2,
+                    model="offline-verifier",
+                    prompt_version="judge.test",
+                ),
+                decision("PASS"),
+            ],
+            repair_result=repaired,
+        )
+
+        verified, trace = VerifierService(client).verify(
+            candidate=original,
+            task=task().copy(update={"annotation_labels": ["PERSON", "DATE"]}),
+            seed_pack=seed_pack(),
+            taxonomy_context=taxonomy_context,
+            revalidate=lambda _: DeterministicValidationResult(valid=True),
+        )
+
+        self.assertEqual(trace.outcome, "FIXED")
+        self.assertEqual(verified.entities[-1].label, "DATE")
+        judge_payload = json.loads(client.judge_messages[0][1]["content"])
+        self.assertEqual(
+            judge_payload["taxonomy_context"]["available_labels"][0]["label"],
+            "DATE",
+        )
+        self.assertIn(
+            "MISSING_ANNOTATION",
+            client.judge_messages[0][0]["content"],
+        )
+
+    def test_repair_restores_every_repeated_seed_occurrence(self) -> None:
+        person = seed_pack().positive_entities[0].value
+        original = candidate().copy(update={
+            "tagged_text": (
+                f"<PERSON>{person}</PERSON> gọi cho <PERSON>{person}</PERSON>, "
+                f"sau đó <PERSON>{person}</PERSON> xác nhận ngày 15/05/2024."
+            ),
+            "entities": [
+                GeneratedEntity(label="PERSON", value=person),
+                GeneratedEntity(label="PERSON", value=person),
+                GeneratedEntity(label="PERSON", value=person),
+            ],
+        })
+        repaired = RepairResult(
+            tagged_text=(
+                f"<PERSON>{person}</PERSON> gọi cho {person}, sau đó {person} "
+                "xác nhận ngày <DATE>15/05/2024</DATE>."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value=person),
+                GeneratedEntity(label="DATE", value="15/05/2024"),
+            ],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        client = FakeVerifierClient(
+            [decision("FIXABLE"), decision("PASS")],
+            repair_result=repaired,
+        )
+
+        verified, trace = VerifierService(client).verify(
+            candidate=original,
+            task=task().copy(update={"annotation_labels": ["PERSON", "DATE"]}),
+            seed_pack=seed_pack(),
+            taxonomy_context=self.taxonomy_context,
+            revalidate=lambda _: DeterministicValidationResult(valid=True),
+        )
+
+        self.assertEqual(trace.outcome, "FIXED")
+        self.assertEqual(
+            verified.tagged_text.count(f"<PERSON>{person}</PERSON>"),
+            3,
+        )
+        self.assertEqual(
+            sum(entity.label == "PERSON" for entity in verified.entities),
+            3,
+        )
+        self.assertEqual(verified.entities[-1].label, "DATE")
+
+    def test_content_regenerate_and_rejected_route_without_repair(self) -> None:
+        content_regenerate = VerifierDecision(
+            status="REGENERATE",
+            score=45,
+            issues=[VerificationIssue(
+                type="INSUFFICIENT_CONTEXT",
+                severity="high",
+                field="tagged_text",
+                reason="Entity role cannot be determined from the context.",
+                suggested_fix="Regenerate with a coherent event.",
+            )],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="judge.test",
+        )
+        for expected_status, routed_decision in (
+            ("REGENERATE", content_regenerate),
+            ("REJECTED", decision("REJECTED")),
+        ):
+            with self.subTest(status=expected_status):
+                client = FakeVerifierClient([routed_decision])
+                with self.assertRaises(VerificationRoutingError) as raised:
+                    VerifierService(client).verify(
+                        candidate=candidate(),
+                        task=task(),
+                        seed_pack=seed_pack(),
+                        taxonomy_context=self.taxonomy_context,
+                        revalidate=lambda _: DeterministicValidationResult(valid=True),
+                    )
+                self.assertEqual(raised.exception.status, expected_status)
+                self.assertEqual(client.repair_messages, [])
+
+    def test_boundary_regenerate_is_normalized_to_fixed(self) -> None:
+        repaired = RepairResult(
+            tagged_text="Chị <PERSON>Lò Thị Cẩy</PERSON> đã gửi hồ sơ.",
+            entities=[GeneratedEntity(label="PERSON", value="Lò Thị Cẩy")],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        client = FakeVerifierClient(
+            [decision("REGENERATE"), decision("PASS")],
+            repair_result=repaired,
+        )
+
         verified, trace = VerifierService(client).verify(
             candidate=candidate(),
             task=task(),
@@ -359,26 +599,7 @@ class VerifierServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(trace.outcome, "FIXED")
-        self.assertEqual(trace.repair, repaired)
-        self.assertEqual(trace.final_judge.status, "PASS")
         self.assertEqual(verified.tagged_text, repaired.tagged_text)
-        self.assertEqual(len(client.judge_messages), 2)
-        self.assertEqual(len(client.repair_messages), 1)
-
-    def test_regenerate_and_rejected_decisions_route_without_repair(self) -> None:
-        for status in ("REGENERATE", "REJECTED"):
-            with self.subTest(status=status):
-                client = FakeVerifierClient([decision(status)])
-                with self.assertRaises(VerificationRoutingError) as raised:
-                    VerifierService(client).verify(
-                        candidate=candidate(),
-                        task=task(),
-                        seed_pack=seed_pack(),
-                        taxonomy_context=self.taxonomy_context,
-                        revalidate=lambda _: DeterministicValidationResult(valid=True),
-                    )
-                self.assertEqual(raised.exception.status, status)
-                self.assertEqual(client.repair_messages, [])
 
     def test_repair_that_changes_a_positive_seed_is_regenerated(self) -> None:
         unsafe_repair = RepairResult(

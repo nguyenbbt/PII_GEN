@@ -110,22 +110,23 @@ class DataGeneratorWorkerTests(unittest.TestCase):
             ["Nguyễn An", "nguyễn an"],
         )
 
-    def test_output_contract_still_rejects_exact_duplicate_values(self) -> None:
-        with self.assertRaisesRegex(ValueError, "duplicate entity value"):
-            validate_generated_output(
-                tagged_text=(
-                    "<PERSON>Nguyễn An</PERSON> dùng tên "
-                    "<USERNAME>Nguyễn An</USERNAME>."
-                ),
-                entities=[
-                    {"label": "PERSON", "value": "Nguyễn An"},
-                    {"label": "USERNAME", "value": "Nguyễn An"},
-                ],
-                allowed_labels=["PERSON", "USERNAME"],
-                required_labels=["PERSON", "USERNAME"],
-                sample_type="positive",
-                max_entities=2,
-            )
+    def test_output_contract_allows_repeated_values_per_tagged_occurrence(self) -> None:
+        validated = validate_generated_output(
+            tagged_text=(
+                "<PERSON>Nguyễn An</PERSON> xác nhận hồ sơ của "
+                "<PERSON>Nguyễn An</PERSON>."
+            ),
+            entities=[
+                {"label": "PERSON", "value": "Nguyễn An"},
+                {"label": "PERSON", "value": "Nguyễn An"},
+            ],
+            allowed_labels=["PERSON"],
+            required_labels=["PERSON"],
+            sample_type="positive",
+            max_entities=2,
+        )
+
+        self.assertEqual(len(validated), 2)
 
     def test_worker_allows_a_natural_decoy_repetition_in_decoy_only_mode(self) -> None:
         class RepeatedDecoyLLM:

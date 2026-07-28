@@ -76,10 +76,23 @@ class PiiFactoryCliTests(unittest.TestCase):
             self.assertEqual(payload["accepted_samples"], 1)
             self.assertEqual(payload["status"], "COMPLETED")
             self.assertIn("smoke", payload["output_path"].casefold())
+            diagnostic_log = Path(payload["diagnostic_log_path"])
+            self.assertTrue(diagnostic_log.is_file())
             self.assertIn("not a dataset", errors.getvalue().casefold())
             self.assertEqual(payload["diagnostics"]["generated_candidates"], 1)
             self.assertEqual(payload["diagnostics"]["discarded_candidates"], 0)
             self.assertEqual(payload["diagnostics"]["task_replacements"], 0)
+            progress_log = errors.getvalue()
+            self.assertIn("[run] started", progress_log)
+            self.assertIn("structure=", progress_log)
+            self.assertIn("[sample 1/1] generator attempt 1/3 started", progress_log)
+            self.assertIn("[sample 1/1] deterministic validation route=PASS", progress_log)
+            self.assertIn("[sample 1/1] accepted progress=1/1", progress_log)
+            persisted_log = diagnostic_log.read_text(encoding="utf-8")
+            self.assertIn("[run] detailed diagnostic log=", persisted_log)
+            self.assertIn("LLM raw tagged_text:", persisted_log)
+            self.assertIn("candidate after Value Bank binding:", persisted_log)
+            self.assertIn("[run] finished status=COMPLETED", persisted_log)
 
 
 if __name__ == "__main__":

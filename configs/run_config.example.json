@@ -43,6 +43,30 @@
     "type": "contract",
     "custom_instruction": null
   },
+  "sample_structures": [
+    {
+      "type": "contract"
+    },
+    {
+      "type": "chat"
+    },
+    {
+      "type": "custom",
+      "custom_instruction": "Viết dưới dạng email nghiệp vụ tự nhiên."
+    },
+    {
+      "type": "custom",
+      "custom_instruction": "Viết dưới dạng phiếu yêu cầu hoặc ticket hỗ trợ."
+    },
+    {
+      "type": "custom",
+      "custom_instruction": "Viết dưới dạng báo cáo sự việc hoặc nhật ký vận hành."
+    },
+    {
+      "type": "custom",
+      "custom_instruction": "Viết dưới dạng ghi chú hoặc tin nhắn nội bộ tự nhiên."
+    }
+  ],
   "optional_constraint_distribution": {
     "teen_code": 0.0,
     "light_typo": 0.05,
@@ -58,7 +82,7 @@
   "value_bank": {
     "path": "PII_Value_Bank",
     "max_seed_pack_attempts": 5,
-    "allow_additional_unseeded_pii": false
+    "allow_additional_unseeded_pii": true
   },
   "hard_negative": {
     "mode": "mixed_contrastive",

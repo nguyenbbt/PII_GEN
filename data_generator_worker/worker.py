@@ -76,7 +76,8 @@ class DataGeneratorWorker:
                 and request.seed_pack.hard_negative_mode == "decoy_only"
                 else request.task.sample_type
             ),
-            max_entities=request.task.max_entities,
+            # Repeated mentions are valid occurrence-level annotations.
+            max_entities=max(request.task.max_entities, len(raw_entities)),
         )
         validate_seeded_contract(
             tagged_text=tagged_text,

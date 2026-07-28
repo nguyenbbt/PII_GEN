@@ -167,9 +167,10 @@ bằng placeholder. `SeedPack` gốc vẫn giữ value thật.
 Replacement chỉ chạy một lần. Value được lấy từ Value Bank không thể vô tình kích
 hoạt một vòng replacement thứ hai.
 
-Placeholder lạ hoặc chưa resolve bị từ chối. Các lỗi như thiếu positive entity,
-placeholder lặp, sai tag hoặc metadata không khớp vẫn được chuyển cho deterministic
-validators hiện có xử lý.
+Placeholder lạ hoặc chưa resolve bị từ chối. Placeholder cùng class được phép lặp;
+sau replacement, mọi occurrence phải có tag và một metadata entry tương ứng. Các lỗi
+như thiếu positive entity, occurrence lặp nhưng chưa tag, sai tag hoặc metadata không
+khớp được chuyển cho deterministic validators xử lý.
 
 ## 7. Reproducibility và xử lý value lặp
 
@@ -283,7 +284,8 @@ Các bước sau vẫn được giữ trong pipeline:
 - `DeterministicOutputValidator`;
 - validation tag/metadata;
 - positive seed preservation;
-- duplicate entity validation;
+- occurrence-level entity validation; cùng value được phép lặp trong một sample nếu
+  mọi occurrence đều có tag và metadata;
 - decoy validation;
 - hard-negative context cue validation;
 - pure-negative structured PII scan;
@@ -324,7 +326,7 @@ Prompt version:
 
 ```text
 data-generator.v9.0.0
-→ data-generator.v11.0.0
+→ data-generator.v11.2.0
 ```
 
 Prompt mới yêu cầu:
@@ -436,7 +438,8 @@ tests/test_entity_variants.py
 - Replacement đồng bộ tagged text và entity metadata.
 - Existing validators chấp nhận output sau replacement.
 - Unknown placeholder bị từ chối.
-- Existing seed validator vẫn từ chối placeholder thiếu/lặp.
+- Existing seed validator từ chối placeholder thiếu hoặc occurrence chưa được tag;
+  occurrence lặp đã tag đầy đủ được chấp nhận.
 - Offset được tính đúng sau khi chèn Unicode và emoji value.
 
 Các test cũ về seed generation, hard-negative, prompt, worker, retry và config đã
@@ -450,10 +453,10 @@ Lệnh đã chạy:
 .\.venv310\Scripts\python.exe -m pytest -q
 ```
 
-Kết quả sau khi merge `origin/agent/generation-quality`:
+Kết quả hiện tại sau khi merge và bổ sung regression tests:
 
 ```text
-151 passed
+162 passed
 ```
 
 Offline diversity audit:
@@ -461,11 +464,13 @@ Offline diversity audit:
 ```text
 Requested samples: 100
 Generated samples: 100
-Prompt version: data-generator.v11.0.0
+Prompt version: data-generator.v11.2.0
 Random seed: 174
 ```
 
-Online Azure/OpenAI chưa được chạy vì cần credentials và sẽ phát sinh chi phí.
+Online Azure/OpenAI đã được chạy thủ công bằng config local. Log lần chạy này giúp
+phát hiện response JSON không ổn định ở Repair và lỗi bỏ tag khi cùng seed xuất hiện
+nhiều lần; cả hai trường hợp đã có parser/log chẩn đoán và regression test tương ứng.
 
 ## 17. Vấn đề hiện có trong Value Bank nhưng chưa sửa
 

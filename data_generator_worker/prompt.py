@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 from .contracts import DataGenerationRequest
 from .placeholders import placeholder_entities
 
-PROMPT_VERSION = "data-generator.v11.0.0"
+PROMPT_VERSION = "data-generator.v11.2.0"
 
 SYSTEM_PROMPT = """# Role
 You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
@@ -54,12 +54,14 @@ Return one valid JSON object only, with exactly these keys and no Markdown fence
 Internally reject and rewrite the draft if any required placeholder is missing or modified, a decoy is tagged,
 any decoy occurrence lacks at least one `required_context_cue` copied unchanged in the same sentence,
 a decoy is attached as a disclaimer instead of participating in the event, an unrelated sentence exists only to
-mention a seed, the clean text is outside `length_target`, required entities are presented as a list rather than
+mention a seed, the clean text is shorter than `length_target.min_words`, required entities are presented as a list rather than
 participating in the event, or the text does not describe one coherent event/document. Return only the final JSON.
 """
 
 POSITIVE_RULES = [
-    "Use exactly every placeholder in positive_entities and tag it with its specified label.",
+    "Use every placeholder in positive_entities and tag it with its specified label.",
+    "Square brackets are mandatory in every placeholder: write [PERSON_1], never PERSON_1.",
+    "If a placeholder is repeated naturally, tag every occurrence and include one entities entry for every tagged occurrence.",
     "Preserve every placeholder character-for-character; do not normalize, translate, replace, or correct it.",
     "Return the same placeholder as the matching entities[].value; never invent the final entity value.",
     "Do not invent additional PII.",
@@ -85,7 +87,8 @@ HARD_NEGATIVE_DECOY_ONLY_RULES = [
 ]
 
 HARD_NEGATIVE_MIXED_RULES = [
-    "Use and correctly tag every placeholder in positive_entities exactly once without changing any character.",
+    "Use and correctly tag every placeholder in positive_entities without changing any character; if repeated, tag every occurrence and repeat its metadata entry.",
+    "Square brackets are mandatory in every placeholder: write [PERSON_1], never PERSON_1.",
     "Use every decoy exactly once and leave it untagged.",
     "Place each decoy in its semantic_type role and copy at least one required_context_cue unchanged into the same sentence.",
     "The local context must clearly show that the decoy is not an entity of target_label.",
@@ -202,7 +205,10 @@ def _sample_structure_rules(task: Mapping[str, Any]) -> list[str]:
         return [
             "Write a realistic business or administrative document fragment, not a chat conversation.",
             variant_rule,
-            "Use enough connected clauses, fields, paragraphs, or action records to meet the word target in one coherent business process; content units are structural guidance, not a numeric quota.",
+            (
+                f"Aim for {target['min_units']} to {target['max_units']} connected content units. "
+                "Additional meaningful units are allowed; never add filler."
+            ),
         ]
     if structure_type == "chat":
         variant_rule = STRUCTURE_RULES.get(
@@ -211,8 +217,9 @@ def _sample_structure_rules(task: Mapping[str, Any]) -> list[str]:
         )
         return [
             (
-                "Write a realistic chat with exactly two speakers and "
-                f"{target['min_units']} to {target['max_units']} alternating message turns."
+                "Write a realistic chat with exactly two speakers and aim for "
+                f"{target['min_units']} to {target['max_units']} alternating turns. "
+                "Additional meaningful turns are allowed."
             ),
             variant_rule,
             "Keep both speakers in one coherent conversation and never introduce a third speaker.",
@@ -249,13 +256,12 @@ def _realization_rules(task: Mapping[str, Any]) -> list[str]:
         f"Write from the perspective of the {profile.get('speaker_role', 'participant')}.",
         f"The communicative intent is {profile.get('intent', 'provide_information')}.",
         (
-            f"Write between {target['min_words']} and {target['max_words']} words in clean text "
-            "after removing annotation tags; this numeric target overrides any old sentence cap in context metadata."
+            f"Aim for {target['min_words']} to {target['max_words']} clean-text words, "
+            f"with about {target_words} words preferred. The minimum of "
+            f"{target['min_words']} is mandatory; exceeding {target['max_words']} is allowed "
+            "when the extra detail is coherent and must never trigger a rewrite."
         ),
-        (
-            f"Aim for {target_words} whitespace-separated words. Count the clean-text draft before returning "
-            "and expand or trim meaningful business details until it remains inside the required range."
-        ),
+        "Before returning, expand meaningful context if the draft is below the minimum; never trim a coherent draft only because it exceeds the preferred maximum.",
         "Distribute entity seeds across multiple sentences or turns; never join them into a comma-separated entity inventory.",
         "Avoid a stock opening or sentence skeleton that could be reused across unrelated samples.",
     ])
