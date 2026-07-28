@@ -189,7 +189,7 @@ def main() -> None:
         accepted_with_verifier = sum(verification_outcomes.values())
         verifier_rejections = event_counts["data.verification.rejected"]
         verifier_decisions = accepted_with_verifier + verifier_rejections
-        print(json.dumps({
+        summary_payload = {
             "taxonomy_version_id": taxonomy.version_id,
             "labels": len(taxonomy.labels),
             "run_id": run.run_id,
@@ -223,6 +223,39 @@ def main() -> None:
                 ),
                 "rejection_issue_types": dict(issue_counts),
             },
+        }
+        if final_run.output_path:
+            dataset_path = Path(final_run.output_path)
+            summary_path = dataset_path.with_name(
+                f"{dataset_path.stem}-summary.json"
+            )
+        else:
+            summary_path = log_path.with_suffix(".summary.json")
+        summary_payload["summary_path"] = str(summary_path.resolve())
+        summary_temporary = summary_path.with_suffix(
+            f"{summary_path.suffix}.tmp"
+        )
+        summary_temporary.write_text(
+            json.dumps(
+                summary_payload,
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            ),
+            encoding="utf-8",
+        )
+        summary_temporary.replace(summary_path)
+        logging.getLogger(__name__).info(
+            "[run] token summary input_tokens=%s output_tokens=%s "
+            "total_tokens=%s money_cost=%s summary=%s",
+            total_input_tokens,
+            total_output_tokens,
+            total_tokens,
+            total_money_cost,
+            summary_path.resolve(),
+        )
+        print(json.dumps({
+            **summary_payload,
             "samples": [
                 result.formatted_sample.dict(exclude_none=True)
                 for result in results

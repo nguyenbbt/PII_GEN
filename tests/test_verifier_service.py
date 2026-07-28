@@ -139,7 +139,11 @@ def seed_pack() -> SeedPack:
 class FakeVerifierClient:
     def __init__(self, decisions, repair_result=None) -> None:
         self.decisions = list(decisions)
-        self.repair_result = repair_result
+        self.repair_results = (
+            list(repair_result)
+            if isinstance(repair_result, (list, tuple))
+            else [repair_result]
+        )
         self.judge_messages = []
         self.repair_messages = []
 
@@ -149,9 +153,11 @@ class FakeVerifierClient:
 
     def repair(self, messages):
         self.repair_messages.append(messages)
-        if self.repair_result is None:
+        if not self.repair_results or self.repair_results[0] is None:
             raise AssertionError("repair was not expected")
-        return self.repair_result
+        if len(self.repair_results) == 1:
+            return self.repair_results[0]
+        return self.repair_results.pop(0)
 
 
 class VerifierServiceTests(unittest.TestCase):
@@ -311,7 +317,7 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertNotIn("random_seed", user_payload["task"])
         self.assertNotIn("token_usage", user_payload["candidate"])
         self.assertNotIn("output_hash", user_payload["candidate"])
-        self.assertLess(len(system_prompt), 6000)
+        self.assertLess(len(system_prompt), 7000)
         legacy_envelope = {
             "task": task().dict(),
             "seed_pack": seed_pack().dict(),
@@ -498,6 +504,83 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertEqual(repair_payload["edits"][0]["action"], "add_tag")
         self.assertIn("hẹn tái khám", repair_payload["edits"][0]["reason"])
 
+    def test_second_local_repair_avoids_regeneration_and_aggregates_usage(self) -> None:
+        person = seed_pack().positive_entities[0].value
+        original = candidate().copy(update={
+            "tagged_text": (
+                f"<PERSON>{person}</PERSON> hẹn lúc 10:30 với kỹ thuật viên."
+            ),
+        })
+        first_repair = RepairResult(
+            tagged_text=(
+                f"<PERSON>{person}</PERSON> hẹn lúc "
+                "<TIME>10:30</TIME> với kỹ thuật viên."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value=person),
+                GeneratedEntity(label="TIME", value="10:30"),
+            ],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        second_repair = RepairResult(
+            tagged_text=(
+                f"<PERSON>{person}</PERSON> hẹn lúc "
+                "<TIME>10:30</TIME> với "
+                "<JOB_TITLE>kỹ thuật viên</JOB_TITLE>."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value=person),
+                GeneratedEntity(label="TIME", value="10:30"),
+                GeneratedEntity(
+                    label="JOB_TITLE",
+                    value="kỹ thuật viên",
+                ),
+            ],
+            token_usage=token_usage(),
+            latency_ms=3,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        client = FakeVerifierClient(
+            [
+                decision("FIXABLE"),
+                decision("FIXABLE"),
+                decision("PASS"),
+            ],
+            repair_result=[first_repair, second_repair],
+        )
+
+        verified, trace = VerifierService(
+            client,
+            max_repairs_per_candidate=2,
+        ).verify(
+            candidate=original,
+            task=task().copy(update={
+                "annotation_labels": [
+                    "PERSON",
+                    "TIME",
+                    "JOB_TITLE",
+                ],
+            }),
+            seed_pack=seed_pack(),
+            taxonomy_context=self.taxonomy_context,
+            revalidate=lambda _: DeterministicValidationResult(valid=True),
+        )
+
+        self.assertEqual(trace.outcome, "FIXED")
+        self.assertIn(
+            "<JOB_TITLE>kỹ thuật viên</JOB_TITLE>",
+            verified.tagged_text,
+        )
+        self.assertEqual(len(client.repair_messages), 2)
+        self.assertEqual(len(client.judge_messages), 3)
+        self.assertEqual(trace.repair.token_usage.total_tokens, 30)
+        self.assertEqual(trace.final_judge.token_usage.total_tokens, 30)
+        self.assertEqual(trace.repair.latency_ms, 5)
+
     def test_repair_restores_every_repeated_seed_occurrence(self) -> None:
         person = seed_pack().positive_entities[0].value
         original = candidate().copy(update={
@@ -548,6 +631,97 @@ class VerifierServiceTests(unittest.TestCase):
             3,
         )
         self.assertEqual(verified.entities[-1].label, "DATE")
+
+    def test_repair_restores_every_repeated_non_seed_entity_occurrence(self) -> None:
+        person = seed_pack().positive_entities[0].value
+        original = candidate().copy(update={
+            "tagged_text": (
+                f"<PERSON>{person}</PERSON> xác nhận ngày 15/05/2024, "
+                "sau đó nhắc lại ngày 15/05/2024."
+            ),
+        })
+        repaired = RepairResult(
+            tagged_text=(
+                f"<PERSON>{person}</PERSON> xác nhận ngày "
+                "<DATE>15/05/2024</DATE>, sau đó nhắc lại ngày 15/05/2024."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value=person),
+                GeneratedEntity(label="DATE", value="15/05/2024"),
+            ],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        client = FakeVerifierClient(
+            [decision("FIXABLE"), decision("PASS")],
+            repair_result=repaired,
+        )
+
+        verified, trace = VerifierService(client).verify(
+            candidate=original,
+            task=task().copy(update={"annotation_labels": ["PERSON", "DATE"]}),
+            seed_pack=seed_pack(),
+            taxonomy_context=self.taxonomy_context,
+            revalidate=lambda _: DeterministicValidationResult(valid=True),
+        )
+
+        self.assertEqual(trace.outcome, "FIXED")
+        self.assertEqual(
+            verified.tagged_text.count("<DATE>15/05/2024</DATE>"),
+            2,
+        )
+        self.assertEqual(
+            sum(entity.label == "DATE" for entity in verified.entities),
+            2,
+        )
+
+    def test_repair_removes_unsupported_added_ticket_id_but_keeps_support_ticket(self) -> None:
+        person = seed_pack().positive_entities[0].value
+        original = candidate().copy(update={
+            "tagged_text": (
+                f"<PERSON>{person}</PERSON> kiểm tra mã đơn hàng #MED789012 "
+                "và phiếu hỗ trợ SR-2026-001."
+            ),
+        })
+        repaired = RepairResult(
+            tagged_text=(
+                f"<PERSON>{person}</PERSON> kiểm tra mã đơn hàng "
+                "<TICKET_ID>#MED789012</TICKET_ID> và phiếu hỗ trợ "
+                "<TICKET_ID>SR-2026-001</TICKET_ID>."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value=person),
+                GeneratedEntity(label="TICKET_ID", value="#MED789012"),
+                GeneratedEntity(label="TICKET_ID", value="SR-2026-001"),
+            ],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        client = FakeVerifierClient(
+            [decision("FIXABLE"), decision("PASS")],
+            repair_result=repaired,
+        )
+
+        verified, _ = VerifierService(client).verify(
+            candidate=original,
+            task=task().copy(update={
+                "annotation_labels": ["PERSON", "TICKET_ID"],
+            }),
+            seed_pack=seed_pack(),
+            taxonomy_context=self.taxonomy_context,
+            revalidate=lambda _: DeterministicValidationResult(valid=True),
+        )
+
+        self.assertIn("mã đơn hàng #MED789012", verified.tagged_text)
+        self.assertNotIn("<TICKET_ID>#MED789012</TICKET_ID>", verified.tagged_text)
+        self.assertIn(
+            "<TICKET_ID>SR-2026-001</TICKET_ID>",
+            verified.tagged_text,
+        )
 
     def test_repair_may_split_composite_address_without_changing_seed_surface(self) -> None:
         address = "34 Nguyễn Chí Thanh, Ba Đình, Hà Nội"

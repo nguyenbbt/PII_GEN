@@ -176,6 +176,61 @@ def extract_occurrence_contexts(text: str, value: str) -> list[str]:
     return contexts
 
 
+def decoy_contexts_are_valid(
+    text: str,
+    value: str,
+    required_context_cues: Sequence[str],
+) -> bool:
+    """Validate cue placement for repeated hard-negative decoys.
+
+    The first occurrence must be explicitly introduced by a required cue.
+    A later occurrence may omit the cue only when it remains in the same
+    paragraph as the first occurrence. A later occurrence in another paragraph
+    must carry its own cue.
+    """
+    clean = _ANY_TAG.sub("", text)
+    cues = [
+        str(cue).casefold()
+        for cue in required_context_cues
+        if str(cue).strip()
+    ]
+    if not value or not cues:
+        return False
+
+    positions: list[int] = []
+    search_from = 0
+    while True:
+        start = clean.find(value, search_from)
+        if start < 0:
+            break
+        positions.append(start)
+        search_from = start + len(value)
+    contexts = extract_occurrence_contexts(clean, value)
+    if not positions or len(contexts) != len(positions):
+        return False
+
+    def has_cue(context: str) -> bool:
+        folded = context.casefold()
+        return any(cue in folded for cue in cues)
+
+    if not has_cue(contexts[0]):
+        return False
+
+    paragraph_breaks = [
+        match.start()
+        for match in re.finditer(r"(?:\r?\n)\s*(?:\r?\n)", clean)
+    ]
+
+    def paragraph_number(position: int) -> int:
+        return sum(boundary < position for boundary in paragraph_breaks)
+
+    first_paragraph = paragraph_number(positions[0])
+    return all(
+        paragraph_number(position) == first_paragraph or has_cue(context)
+        for position, context in zip(positions[1:], contexts[1:])
+    )
+
+
 def validate_generated_output(
     *,
     tagged_text: str,
@@ -259,10 +314,13 @@ def validate_seeded_contract(
             rf"<[A-Za-z][A-Za-z0-9_]*>{re.escape(value)}</[A-Za-z][A-Za-z0-9_]*>", tagged_text
         ):
             raise ValueError(f"decoy must remain untagged and absent from entities: {value}")
-        cues = [str(cue).casefold() for cue in decoy.get("required_context_cues", [])]
         contexts = extract_occurrence_contexts(text_without_tags, value)
-        if len(contexts) != occurrence_count or not cues or any(
-            not any(cue in context.casefold() for cue in cues)
-            for context in contexts
+        if (
+            len(contexts) != occurrence_count
+            or not decoy_contexts_are_valid(
+                text_without_tags,
+                value,
+                decoy.get("required_context_cues", []),
+            )
         ):
             raise ValueError(f"a decoy occurrence has no required context cue: {value}")

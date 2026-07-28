@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import random
 import re
 import subprocess
@@ -17,6 +18,9 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from .domain.models import FormattedSample, RunConfig
+
+
+logger = logging.getLogger(__name__)
 
 
 class ParallelGenerationError(RuntimeError):
@@ -163,6 +167,7 @@ def _run_shard(
     shard_index: int,
     taxonomy_path: Path,
     work_directory: Path,
+    shard_artifact_directory: Path,
     offline: bool,
 ) -> dict[str, Any]:
     last_message = "no provider response"
@@ -185,8 +190,20 @@ def _run_shard(
             ),
             encoding="utf-8",
         )
-        shard_output = work_directory / (
-            f"output-{shard_index:03d}-attempt-{attempt}"
+        # Keep child paths short for Windows installations under deep OneDrive
+        # workspaces, where the legacy MAX_PATH limit may still apply.
+        attempt_directory = shard_artifact_directory / (
+            f"s{shard_index:03d}-a{attempt}"
+        )
+        attempt_directory.mkdir(parents=True, exist_ok=True)
+        shard_output = attempt_directory / "output"
+        console_log_path = attempt_directory / "console.log"
+        logger.info(
+            "[parallel shard %s] attempt %s/%s started samples=%s",
+            shard_index,
+            attempt + 1,
+            shard.parallel_generation.max_shard_retries + 1,
+            attempt_config.num_samples,
         )
         command = [
             sys.executable,
@@ -210,6 +227,10 @@ def _run_shard(
             errors="replace",
             check=False,
         )
+        console_log_path.write_text(
+            completed.stderr,
+            encoding="utf-8",
+        )
         try:
             payload = json.loads(completed.stdout)
         except (TypeError, ValueError, json.JSONDecodeError):
@@ -224,10 +245,30 @@ def _run_shard(
             and payload.get("accepted_samples")
             == attempt_config.num_samples
         ):
-            return payload
+            logger.info(
+                "[parallel shard %s] completed attempt=%s accepted=%s "
+                "input_tokens=%s output_tokens=%s",
+                shard_index,
+                attempt + 1,
+                payload.get("accepted_samples"),
+                (payload.get("token_usage") or {}).get("input_tokens", 0),
+                (payload.get("token_usage") or {}).get("output_tokens", 0),
+            )
+            return {
+                **payload,
+                "_shard_index": shard_index,
+                "_console_log_path": str(console_log_path.resolve()),
+                "_diagnostic_log_path": payload.get("diagnostic_log_path"),
+            }
         last_message = (
             f"status={payload.get('status')}, "
             f"accepted={payload.get('accepted_samples')}"
+        )
+        logger.warning(
+            "[parallel shard %s] attempt %s failed: %s",
+            shard_index,
+            attempt + 1,
+            last_message,
         )
     raise ParallelGenerationError(
         f"shard {shard_index} exhausted retries: {last_message}"
@@ -247,12 +288,32 @@ def run_parallel_generation(
             f"taxonomy file does not exist: {taxonomy_path}"
         )
     output_directory.mkdir(parents=True, exist_ok=True)
+    safe_name = re.sub(
+        r"[^A-Za-z0-9._-]+",
+        "-",
+        config.run_name,
+    ).strip("._-") or "pii-run"
+    parallel_run_id = str(uuid4())
+    shard_artifact_directory = output_directory / (
+        f"shards-{parallel_run_id[:8]}"
+    )
+    shard_artifact_directory.mkdir(parents=True, exist_ok=True)
     shards = build_shard_configs(config)
     workers = min(
         config.parallel_generation.workers,
         len(shards),
     )
     payloads_by_index: dict[int, dict[str, Any]] = {}
+    logger.info(
+        "[parallel] started name=%s samples=%s workers=%s shards=%s "
+        "shard_size=%s artifacts=%s",
+        config.run_name,
+        config.num_samples,
+        workers,
+        len(shards),
+        config.parallel_generation.shard_size,
+        shard_artifact_directory.resolve(),
+    )
     with TemporaryDirectory(
         prefix=".parallel-",
         dir=output_directory,
@@ -266,6 +327,7 @@ def run_parallel_generation(
                     shard_index=index,
                     taxonomy_path=taxonomy_path,
                     work_directory=work_directory,
+                    shard_artifact_directory=shard_artifact_directory,
                     offline=offline,
                 ): index
                 for index, shard in enumerate(shards, start=1)
@@ -273,6 +335,17 @@ def run_parallel_generation(
             for future in as_completed(futures):
                 index = futures[future]
                 payloads_by_index[index] = future.result()
+                logger.info(
+                    "[parallel] progress completed_shards=%s/%s "
+                    "accepted_samples=%s/%s",
+                    len(payloads_by_index),
+                    len(shards),
+                    sum(
+                        int(payload.get("accepted_samples", 0))
+                        for payload in payloads_by_index.values()
+                    ),
+                    config.num_samples,
+                )
 
     payloads = [
         payloads_by_index[index]
@@ -282,13 +355,8 @@ def run_parallel_generation(
         payloads,
         expected_samples=config.num_samples,
     )
-    safe_name = re.sub(
-        r"[^A-Za-z0-9._-]+",
-        "-",
-        config.run_name,
-    ).strip("._-") or "pii-run"
     output_path = output_directory / (
-        f"{safe_name}-parallel-{uuid4()}.json"
+        f"{safe_name}-parallel-{parallel_run_id}.json"
     )
     temporary_path = output_path.with_suffix(".tmp")
     temporary_path.write_text(
@@ -300,20 +368,67 @@ def run_parallel_generation(
         encoding="utf-8",
     )
     temporary_path.replace(output_path)
-    return {
+    summary_path = output_path.with_name(
+        f"{output_path.stem}-summary.json"
+    )
+    summary = {
         "status": "COMPLETED",
         "output_path": str(output_path.resolve()),
+        "summary_path": str(summary_path.resolve()),
+        "shard_artifact_directory": str(
+            shard_artifact_directory.resolve()
+        ),
+        "shard_logs": [
+            {
+                "shard": payload.get("_shard_index"),
+                "console_log_path": payload.get("_console_log_path"),
+                "diagnostic_log_path": payload.get(
+                    "_diagnostic_log_path"
+                ),
+            }
+            for payload in payloads
+        ],
         "accepted_samples": len(merged["samples"]),
         "completed_shards": len(shards),
         "workers": workers,
         "token_usage": merged["token_usage"],
         "diagnostics": merged["diagnostics"],
     }
+    summary_temporary = summary_path.with_suffix(
+        f"{summary_path.suffix}.tmp"
+    )
+    summary_temporary.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    summary_temporary.replace(summary_path)
+    logger.info(
+        "[parallel] token summary input_tokens=%s output_tokens=%s "
+        "total_tokens=%s summary=%s",
+        merged["token_usage"]["input_tokens"],
+        merged["token_usage"]["output_tokens"],
+        merged["token_usage"]["total_tokens"],
+        summary_path.resolve(),
+    )
+    logger.info(
+        "[parallel] finished accepted=%s/%s output=%s",
+        len(merged["samples"]),
+        config.num_samples,
+        output_path.resolve(),
+    )
+    return summary
 
 
 def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%H:%M:%S",
+        stream=sys.stderr,
+        force=True,
+    )
     parser = argparse.ArgumentParser(
         description="Run PII generation shards concurrently and merge safely"
     )

@@ -9,6 +9,7 @@ from typing import Callable, Sequence
 from data_generator_worker.validation import (
     find_template_artifacts,
     seed_realization_status,
+    tagged_text_to_clean_and_spans,
 )
 
 from ..domain.models import (
@@ -34,8 +35,8 @@ _ENTITY_TAG_PATTERN = re.compile(
     re.DOTALL,
 )
 
-JUDGE_PROMPT_VERSION = "verifier-judge.v3.2.2"
-REPAIR_PROMPT_VERSION = "verifier-repair.v1.2.0"
+JUDGE_PROMPT_VERSION = "verifier-judge.v3.3.0"
+REPAIR_PROMPT_VERSION = "verifier-repair.v1.3.0"
 
 _JUDGE_SYSTEM_PROMPT = f"""You judge semantic quality of synthetic PII NER data.
 Prompt version: {JUDGE_PROMPT_VERSION}
@@ -69,6 +70,10 @@ Judge only:
    are available. Use nearby nouns and verbs to classify a span; for example, a value
    introduced by "biển số" is PLATE and a role such as "kỹ thuật viên hiện trường" is
    JOB_TITLE. A confident omission is always local MISSING_ANNOTATION/FIXABLE.
+   TICKET_ID is only a support request, service incident, or customer-care case
+   identifier. An order number, travel/reservation booking code, invoice number,
+   document reference, contract reference, or flight number is not TICKET_ID and
+   must remain untagged unless that exact value is an authoritative positive seed.
 2. The Vietnamese text is coherent and natural. Reject filler, repetitive
    scaffolding, unrelated clauses, unnatural seed insertion, or a comma-separated
    entity inventory.
@@ -107,6 +112,9 @@ Error examples (examples teach decisions, never copy their prose):
   MISSING_ANNOTATION/FIXABLE plus add_tag(PLATE, `51C-123.45`, occurrence=1);
   reason cites the explicit `biển số` cue. Apply the same rule to contextual
   TICKET_ID or JOB_TITLE.
+- `mã đơn hàng #MED789012`, `mã đặt chỗ 123456789`, an invoice reference,
+  or a flight number -> do not add TICKET_ID. Those identifiers lack support-request,
+  service-incident, or customer-care semantics.
 - `<ADDRESS>34 Nguyễn Chí Thanh, Ba Đình, Hà Nội</ADDRESS>` ->
   BOUNDARY/FIXABLE plus split_tag into ADDRESS `34 Nguyễn Chí Thanh` and LOCATION
   `Ba Đình, Hà Nội`; reason explains street detail versus administrative geography.
@@ -146,6 +154,10 @@ the smallest safe local change from issues for backward compatibility. For every
 MISSING_ANNOTATION,
 wrap the existing exact text span with the correct available taxonomy label and add the
 same label/value pair to entities. Do not invent, normalize, or replace its value.
+Only use TICKET_ID for an explicit support request, service incident, or
+customer-care case. Never convert an order number, booking/reservation code, invoice
+number, document/contract reference, or flight number into TICKET_ID unless it is an
+authoritative positive seed.
 For every TEMPLATE_ARTIFACT, replace only that bracket field with finished, natural,
 generic non-PII wording or remove the redundant field label. Never fill it with an
 invented person, company, date, title, address, identifier, or other PII. The repaired
@@ -341,6 +353,7 @@ class VerifierService:
         normalized_text, normalized_entities = self._normalize_repair_annotations(
             tagged_text=repair.tagged_text,
             seed_pack=seed_pack,
+            original=candidate,
         )
         if normalized_text != repair.tagged_text or normalized_entities != repair.entities:
             logger.info(
@@ -446,6 +459,158 @@ class VerifierService:
         )
         self._log_issue_feedback(task, "rejudge", final.issues)
         self._log_edit_feedback(task, "rejudge", final.edits)
+        if (
+            final.status == "FIXABLE"
+            and self.max_repairs_per_candidate >= 2
+        ):
+            logger.info(
+                "[sample %s] verifier second local repair started",
+                task.slot_no or task.sequence_no,
+            )
+            second_repair = self.client.repair(
+                self._repair_messages(
+                    candidate=repaired_candidate,
+                    task=task,
+                    seed_pack=seed_pack,
+                    taxonomy_context=taxonomy_context,
+                    issues=final.issues,
+                    edits=final.edits,
+                )
+            )
+            logger.info(
+                "[sample %s] verifier second LLM repair tagged_text:\n%s",
+                task.slot_no or task.sequence_no,
+                second_repair.tagged_text,
+            )
+            second_text, second_entities = self._normalize_repair_annotations(
+                tagged_text=second_repair.tagged_text,
+                seed_pack=seed_pack,
+                original=repaired_candidate,
+            )
+            second_repair = second_repair.copy(update={
+                "tagged_text": second_text,
+                "entities": second_entities,
+            })
+            combined_repair = second_repair.copy(update={
+                "token_usage": type(second_repair.token_usage).combine([
+                    repair.token_usage,
+                    second_repair.token_usage,
+                ]),
+                "latency_ms": repair.latency_ms + second_repair.latency_ms,
+            })
+            second_candidate = repaired_candidate.copy(update={
+                "tagged_text": second_text,
+                "entities": second_entities,
+                "output_hash": hashlib.sha256(
+                    second_text.encode("utf-8")
+                ).hexdigest(),
+            })
+            logger.info(
+                "[sample %s] verifier second fixed tagged_text:\n%s",
+                task.slot_no or task.sequence_no,
+                second_candidate.tagged_text,
+            )
+            second_preservation_issues = self._preservation_issues(
+                original=repaired_candidate,
+                repaired=second_candidate,
+                seed_pack=seed_pack,
+            )
+            if second_preservation_issues:
+                raise VerificationRoutingError(
+                    "REGENERATE",
+                    second_preservation_issues,
+                    VerificationTrace(
+                        initial_judge=initial,
+                        repair=combined_repair,
+                        final_judge=final,
+                        outcome="REGENERATE",
+                    ),
+                )
+            second_validation = revalidate(second_candidate)
+            if not second_validation.valid:
+                second_issues = [
+                    VerificationIssue(
+                        type=item.type,
+                        severity="high",
+                        field=item.scope,
+                        reason=item.reason,
+                        suggested_fix=(
+                            "Regenerate the candidate using deterministic "
+                            "validator feedback."
+                        ),
+                    )
+                    for item in second_validation.issues
+                ] or [
+                    VerificationIssue(
+                        type="DETERMINISTIC_RECHECK_FAILED",
+                        severity="high",
+                        field="candidate",
+                        reason=(
+                            "The second repaired candidate failed "
+                            "deterministic re-check."
+                        ),
+                        suggested_fix="Regenerate the candidate.",
+                    )
+                ]
+                raise VerificationRoutingError(
+                    "REGENERATE",
+                    second_issues,
+                    VerificationTrace(
+                        initial_judge=initial,
+                        repair=combined_repair,
+                        final_judge=final,
+                        outcome="REGENERATE",
+                    ),
+                )
+
+            logger.info(
+                "[sample %s] verifier second rejudge started",
+                task.slot_no or task.sequence_no,
+            )
+            second_final = self._reconcile_authoritative_metrics(
+                self.client.judge(
+                    self._judge_messages(
+                        candidate=second_candidate,
+                        task=task,
+                        seed_pack=seed_pack,
+                        taxonomy_context=taxonomy_context,
+                        deterministic_issues=(),
+                    )
+                ),
+                metrics=self._quality_metrics(
+                    second_candidate,
+                    task,
+                    seed_pack,
+                ),
+                deterministic_issues=(),
+            )
+            logger.info(
+                "[sample %s] verifier second rejudge status=%s "
+                "score=%s issues=%s",
+                task.slot_no or task.sequence_no,
+                second_final.status,
+                second_final.score,
+                len(second_final.issues),
+            )
+            self._log_issue_feedback(
+                task,
+                "second rejudge",
+                second_final.issues,
+            )
+            self._log_edit_feedback(
+                task,
+                "second rejudge",
+                second_final.edits,
+            )
+            final = second_final.copy(update={
+                "token_usage": type(second_final.token_usage).combine([
+                    final.token_usage,
+                    second_final.token_usage,
+                ]),
+                "latency_ms": final.latency_ms + second_final.latency_ms,
+            })
+            repair = combined_repair
+            repaired_candidate = second_candidate
         if final.status != "PASS":
             status = "REJECTED" if final.status == "REJECTED" else "REGENERATE"
             raise VerificationRoutingError(
@@ -797,11 +962,17 @@ class VerifierService:
         *,
         tagged_text: str,
         seed_pack: SeedPack,
+        original: GenerationCandidate,
     ) -> tuple[str, list[GeneratedEntity]]:
-        """Restore untagged seed occurrences and rebuild occurrence metadata."""
-        value_to_label: dict[str, str] = {}
+        """Restore exact repeated annotations and rebuild occurrence metadata."""
+        value_to_label: dict[str, str] = {
+            match.group(2): match.group(1)
+            for match in _ENTITY_TAG_PATTERN.finditer(tagged_text)
+        }
+        for match in _ENTITY_TAG_PATTERN.finditer(original.tagged_text):
+            value_to_label.setdefault(match.group(2), match.group(1))
         for seed in seed_pack.positive_entities:
-            value_to_label.setdefault(seed.value, seed.label)
+            value_to_label[seed.value] = seed.label
 
         if value_to_label:
             values = sorted(value_to_label, key=len, reverse=True)
@@ -828,11 +999,136 @@ class VerifierService:
             chunks.append(tag_plain_segment(tagged_text[cursor:]))
             tagged_text = "".join(chunks)
 
+        tagged_text = VerifierService._remove_invalid_added_ticket_tags(
+            original=original,
+            repaired_tagged_text=tagged_text,
+            seed_pack=seed_pack,
+        )
         entities = [
             GeneratedEntity(label=match.group(1), value=match.group(2))
             for match in _ENTITY_TAG_PATTERN.finditer(tagged_text)
         ]
         return tagged_text, entities
+
+    @staticmethod
+    def _remove_invalid_added_ticket_tags(
+        *,
+        original: GenerationCandidate,
+        repaired_tagged_text: str,
+        seed_pack: SeedPack,
+    ) -> str:
+        """Undo added TICKET_ID tags lacking support/service semantics."""
+        repaired_clean, _ = tagged_text_to_clean_and_spans(repaired_tagged_text)
+        _, original_spans = tagged_text_to_clean_and_spans(original.tagged_text)
+        original_tickets = {
+            (span.start, span.end, span.value)
+            for span in original_spans
+            if span.label == "TICKET_ID"
+        }
+        seeded_tickets = {
+            seed.value
+            for seed in seed_pack.positive_entities
+            if seed.label == "TICKET_ID"
+        }
+
+        chunks: list[str] = []
+        source_cursor = 0
+        clean_cursor = 0
+        removed = 0
+        for match in _ENTITY_TAG_PATTERN.finditer(repaired_tagged_text):
+            plain = repaired_tagged_text[source_cursor:match.start()]
+            chunks.append(plain)
+            clean_cursor += len(plain)
+            label, value = match.group(1), match.group(2)
+            start, end = clean_cursor, clean_cursor + len(value)
+            authoritative = (
+                value in seeded_tickets
+                or (start, end, value) in original_tickets
+            )
+            if (
+                label == "TICKET_ID"
+                and not authoritative
+                and not VerifierService._ticket_context_is_valid(
+                    repaired_clean,
+                    start,
+                    end,
+                )
+            ):
+                chunks.append(value)
+                removed += 1
+            else:
+                chunks.append(match.group(0))
+            clean_cursor = end
+            source_cursor = match.end()
+        chunks.append(repaired_tagged_text[source_cursor:])
+        if removed:
+            logger.warning(
+                "[verifier repair] removed %s unsupported added TICKET_ID tag(s)",
+                removed,
+            )
+        return "".join(chunks)
+
+    @staticmethod
+    def _ticket_context_is_valid(clean_text: str, start: int, end: int) -> bool:
+        left = max(
+            (
+                clean_text.rfind(mark, 0, start)
+                for mark in (".", "!", "?", ";", "\n")
+            ),
+            default=-1,
+        )
+        right_positions = [
+            clean_text.find(mark, end)
+            for mark in (".", "!", "?", ";", "\n")
+        ]
+        right_candidates = [
+            position for position in right_positions if position >= 0
+        ]
+        right = min(right_candidates) if right_candidates else len(clean_text)
+        context = clean_text[left + 1:right].casefold()
+        excluded_cues = (
+            "mã đơn hàng", "số đơn hàng", "mã đặt chỗ", "số đặt chỗ",
+            "mã booking", "hóa đơn", "số tham chiếu", "mã tham chiếu",
+            "hợp đồng", "biên bản", "chuyến bay", "số hiệu chuyến bay",
+            "order number", "order code", "booking code", "reservation code",
+            "invoice", "document reference", "contract reference", "flight number",
+            "bestellnummer", "bestellcode", "buchungscode", "reservierungscode",
+            "rechnung", "dokumentreferenz", "vertragsreferenz", "flugnummer",
+        )
+        support_cues = (
+            "phiếu hỗ trợ", "yêu cầu hỗ trợ", "mã yêu cầu", "mã sự cố",
+            "phiếu sự cố", "ticket hỗ trợ", "chăm sóc khách hàng",
+            "vụ việc hỗ trợ", "support ticket", "support request",
+            "service request", "service incident", "incident ticket",
+            "customer-care case", "customer care case", "support-ticket",
+            "supportanfrage", "serviceanfrage", "servicevorfall",
+            "kundendienstfall",
+        )
+
+        entity_center = ((start + end) / 2) - (left + 1)
+
+        def nearest_cue_distance(cues: tuple[str, ...]) -> float | None:
+            distances: list[float] = []
+            for cue in cues:
+                search_from = 0
+                while True:
+                    position = context.find(cue, search_from)
+                    if position < 0:
+                        break
+                    distances.append(
+                        abs((position + len(cue) / 2) - entity_center)
+                    )
+                    search_from = position + len(cue)
+            return min(distances) if distances else None
+
+        support_distance = nearest_cue_distance(support_cues)
+        if support_distance is None:
+            return False
+        excluded_distance = nearest_cue_distance(excluded_cues)
+        return (
+            excluded_distance is None
+            or support_distance < excluded_distance
+        )
 
     @staticmethod
     def _preservation_issues(

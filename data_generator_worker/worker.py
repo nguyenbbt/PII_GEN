@@ -85,7 +85,7 @@ class DataGeneratorWorker:
             positive_entities=[vars(seed) for seed in request.seed_pack.positive_entities],
             decoys=[vars(decoy) for decoy in request.seed_pack.decoys],
             max_decoy_occurrences=(
-                2 if request.seed_pack.hard_negative_mode == "decoy_only" else 1
+                3 if request.seed_pack.hard_negative_mode == "decoy_only" else 1
             ),
         )
         query = GenerationQuery(

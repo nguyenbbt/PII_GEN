@@ -1,32 +1,23 @@
 {
   "run_name": "vi-value-bank-online-10",
-  "num_samples": 10,
+  "num_samples": 50,
   "language": "vi",
   "minimum_per_label": 0,
   "batch_size": 2,
-  "focus_labels": [
-    "PERSON",
-    "PHONE",
-    "EMAIL",
-    "ADDRESS",
-    "LOCATION",
-    "DATE",
-    "TIME"
-  ],
   "sample_length_distribution": {
-    "short": 0.0,
+    "short": 0.1,
     "medium": 0.6,
-    "long": 0.4
+    "long": 0.3
   },
   "difficulty_distribution": {
     "easy": 0.0,
-    "medium": 1.0,
-    "hard": 0.0
+    "medium": 0.3,
+    "hard": 0.7
   },
   "sample_type_distribution": {
-    "positive": 0.6,
+    "positive": 0.2,
     "pure_negative": 0.2,
-    "hard_negative": 0.2
+    "hard_negative": 0.6
   },
   "sample_structures": [
     {
@@ -55,18 +46,18 @@
   "optional_constraint_distribution": {},
   "max_entities": {
     "easy": 5,
-    "medium": 5,
-    "hard": 5
+    "medium": 6,
+    "hard": 8
   },
-  "max_regenerate_attempts": 2,
+  "max_regenerate_attempts": 1,
   "max_task_replacements": 2,
   "value_bank": {
     "path": "PII_Value_Bank",
     "max_seed_pack_attempts": 5,
-    "allow_additional_unseeded_pii": true
+    "allow_additional_unseeded_pii": false
   },
   "hard_negative": {
-    "mode": "decoy_only",
+    "mode": "mixed_contrastive",
     "min_decoys": 1,
     "max_decoys": 1,
     "max_focus_labels": 5,
@@ -86,8 +77,8 @@
     "max_repairs_per_candidate": 1
   },
   "parallel_generation": {
-    "workers": 1,
-    "shard_size": 10,
+    "workers": 10,
+    "shard_size": 1,
     "max_shard_retries": 1
   },
   "random_seed": 174

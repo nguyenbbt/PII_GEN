@@ -456,7 +456,7 @@ Lệnh đã chạy:
 Kết quả hiện tại sau khi merge và bổ sung regression tests:
 
 ```text
-179 passed
+184 passed
 ```
 
 Offline diversity audit:
@@ -464,7 +464,7 @@ Offline diversity audit:
 ```text
 Requested samples: 100
 Generated samples: 100
-Prompt version: data-generator.v11.3.0
+Prompt version: data-generator.v11.4.0
 Random seed: 174
 ```
 
@@ -677,3 +677,29 @@ Các test hồi quy nằm trong `tests/test_quality_contracts.py`,
 Đây là usage của toàn logical slot: Generator, Judge, Repair, re-Judge và các retry
 đã thực sự phát sinh token. Mảng dataset, tagged/clean text, entity, privacy mask và
 offset không thay đổi. Terminal summary vẫn báo tổng token toàn run.
+
+## 22. Hardening sau khi phân tích run 10 sample
+
+- Deterministic validator phát hiện mọi exact case-sensitive occurrence của một
+  label/value đã có nhưng còn thiếu tag. Substring nằm bên trong một span cùng label
+  lớn hơn không bị gắn lồng; khác biệt hoa/thường vẫn được giữ là value khác nhau.
+- Sau Repair, code tự phủ tag cho mọi occurrence của cả seed và entity mới do Verifier
+  thêm, rồi dựng lại metadata theo occurrence trước khi tính offset.
+- TICKET_ID do Verifier thêm chỉ được giữ khi context gần nhất thể hiện support request,
+  service incident hoặc customer-care case. Mã đơn hàng, đặt chỗ, hóa đơn, tham chiếu
+  tài liệu/hợp đồng và số hiệu chuyến bay không bị đổi thành TICKET_ID. Positive seed
+  TICKET_ID từ Value Bank vẫn là authoritative.
+- Hard-negative decoy được phép xuất hiện tối đa ba lần. Occurrence đầu phải có cue;
+  occurrence sau được bỏ cue nếu vẫn trong cùng paragraph, còn sang paragraph khác
+  phải có cue riêng.
+- Usage được cộng ngay sau mỗi provider response, trước bước parse JSON. Response JSON
+  lỗi nhưng retry thành công vì vậy vẫn được tính vào input/output token toàn slot.
+- Mỗi run serial và parallel ghi thêm sidecar `*-summary.json`; schema dataset không
+  đổi. Summary chứa tổng input/output/total token toàn phiên.
+- Verifier hỗ trợ tối đa hai vòng repair cục bộ. Vòng hai chỉ chạy khi re-Judge còn
+  trả `FIXABLE` (ví dụ phát hiện thêm JOB_TITLE chưa tag), tránh bỏ cả candidate để
+  generate lại. Token/latency của các repair và re-Judge được cộng dồn trong trace.
+- Config online 10 sample dùng `workers=10`, `shard_size=1`,
+  `max_shard_retries=2`. Parallel runner lưu console/diagnostic log riêng cho từng
+  shard attempt và báo progress trên terminal. Tên thư mục artifact được giữ ngắn
+  (`shards-<id>/sNNN-aN`) để không vượt giới hạn đường dẫn trên Windows/OneDrive.

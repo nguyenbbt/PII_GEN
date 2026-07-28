@@ -110,13 +110,22 @@ class AzureOpenAIHttpErrorTests(unittest.TestCase):
             ) as mocked_urlopen,
             patch("pii_factory.infrastructure.clients.time.sleep"),
         ):
-            tagged_text, entities, *_ = AzureOpenAICompletionClient(
-                settings
-            ).generate([{"role": "user", "content": "Return JSON."}])
+            (
+                tagged_text,
+                entities,
+                input_tokens,
+                output_tokens,
+                total_tokens,
+            ) = AzureOpenAICompletionClient(settings).generate(
+                [{"role": "user", "content": "Return JSON."}]
+            )
 
         self.assertEqual(tagged_text, "test")
         self.assertEqual(entities, [])
         self.assertEqual(mocked_urlopen.call_count, 2)
+        self.assertEqual(input_tokens, 20)
+        self.assertEqual(output_tokens, 25)
+        self.assertEqual(total_tokens, 45)
 
     def test_generator_accepts_json_wrapped_in_markdown_fence(self) -> None:
         settings = AzureOpenAISettings(
@@ -127,9 +136,15 @@ class AzureOpenAIHttpErrorTests(unittest.TestCase):
             "pii_factory.infrastructure.clients.urlopen",
             return_value=_wrapped_json_response(),
         ):
-            tagged_text, entities, *_ = AzureOpenAICompletionClient(
-                settings
-            ).generate([{"role": "user", "content": "Return JSON."}])
+            (
+                tagged_text,
+                entities,
+                input_tokens,
+                output_tokens,
+                total_tokens,
+            ) = AzureOpenAICompletionClient(settings).generate(
+                [{"role": "user", "content": "Return JSON."}]
+            )
 
         self.assertEqual(tagged_text, "wrapped")
         self.assertEqual(entities, [])
@@ -186,6 +201,32 @@ class AzureOpenAIHttpErrorTests(unittest.TestCase):
         self.assertEqual(completion.tagged_text, "test")
         self.assertEqual(completion.entities, [])
         self.assertEqual(mocked_urlopen.call_count, 2)
+
+    def test_verifier_transport_counts_tokens_from_invalid_json_retry(self) -> None:
+        settings = AzureOpenAISettings(
+            api_key="top-secret-value",
+            base_url="https://gateway.example",
+            infrastructure_retries=1,
+        )
+        with (
+            patch(
+                "pii_factory.infrastructure.clients.urlopen",
+                side_effect=[
+                    _malformed_json_response(),
+                    _successful_response(),
+                ],
+            ),
+            patch("pii_factory.infrastructure.clients.time.sleep"),
+        ):
+            completion = AzureOpenAIJsonTransport(settings).complete(
+                [{"role": "user", "content": "Judge JSON."}],
+                temperature=0.0,
+                max_tokens=1200,
+            )
+
+        self.assertEqual(completion.input_tokens, 20)
+        self.assertEqual(completion.output_tokens, 25)
+        self.assertEqual(completion.total_tokens, 45)
 
     def test_generator_sends_configured_model_to_gateway(self) -> None:
         settings = AzureOpenAISettings(

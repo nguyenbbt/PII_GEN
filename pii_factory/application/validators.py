@@ -8,6 +8,7 @@ from typing import Iterable, Sequence
 from urllib.parse import urlparse
 
 from data_generator_worker.validation import (
+    decoy_contexts_are_valid,
     extract_occurrence_contexts,
     find_template_artifacts,
     seed_realization_status,
@@ -364,6 +365,7 @@ class DeterministicOutputValidator:
                 ))
 
         if not hard_decoy_only:
+            issues.extend(self._missing_repeated_annotations(tagged_text))
             issues.extend(self._missing_structured_annotations(
                 tagged_text=tagged_text,
                 allowed_labels=(allowed_labels or focus_labels),
@@ -373,7 +375,7 @@ class DeterministicOutputValidator:
         entity_values = {str(item.get("value", "")) for item in raw_entities}
         for decoy in seed_pack.decoys:
             occurrence_count = tagged_text.count(decoy.value)
-            max_occurrences = 2 if hard_decoy_only else 1
+            max_occurrences = 3 if hard_decoy_only else 1
             if occurrence_count < 1 or occurrence_count > max_occurrences:
                 issues.append(self._decoy_issue(
                     "decoy_occurrence",
@@ -385,17 +387,22 @@ class DeterministicOutputValidator:
             if decoy.value in entity_values:
                 issues.append(self._decoy_issue("decoy_in_entities", "decoy cannot appear in entities", decoy))
             contexts = extract_occurrence_contexts(tagged_text, decoy.value)
-            if len(contexts) != occurrence_count or any(
-                not any(cue.casefold() in context.casefold() for cue in decoy.required_context_cues)
-                for context in contexts
+            if (
+                len(contexts) != occurrence_count
+                or not decoy_contexts_are_valid(
+                    tagged_text,
+                    decoy.value,
+                    decoy.required_context_cues,
+                )
             ):
                 cues = ", ".join(repr(cue) for cue in decoy.required_context_cues)
                 observed = " | ".join(contexts) if contexts else "<not found>"
                 issues.append(self._decoy_issue(
                     "decoy_context_unclear",
                     (
-                        "every decoy occurrence must have one of these exact cues in "
-                        f"the same sentence: {cues}; observed context: {observed}"
+                        "the first decoy occurrence must have one of these exact "
+                        "cues; later occurrences may omit it only in the same "
+                        f"paragraph: {cues}; observed context: {observed}"
                     ),
                     decoy,
                 ))
@@ -447,6 +454,48 @@ class DeterministicOutputValidator:
     def _structured_detectors() -> Iterable[tuple[str, re.Pattern[str]]]:
         return (("EMAIL", _EMAIL), ("PHONE", _PHONE), ("URL", _URL), ("DATE", _DATE),
                 ("TIME", _TIME), ("IP", _IP), ("ACCOUNT_ID", _IDENTIFIER))
+
+    @staticmethod
+    def _missing_repeated_annotations(
+        tagged_text: str,
+    ) -> list[ValidationIssue]:
+        """Report exact, case-sensitive repeats left outside same-label spans."""
+        clean, spans = tagged_text_to_clean_and_spans(tagged_text)
+        issues: list[ValidationIssue] = []
+        for label, value in dict.fromkeys(
+            (span.label, span.value)
+            for span in spans
+            if span.value
+        ):
+            search_from = 0
+            occurrence = 0
+            while True:
+                start = clean.find(value, search_from)
+                if start < 0:
+                    break
+                occurrence += 1
+                end = start + len(value)
+                search_from = end
+                covered_by_same_label = any(
+                    span.label == label
+                    and span.start <= start
+                    and span.end >= end
+                    for span in spans
+                )
+                if covered_by_same_label:
+                    continue
+                issues.append(ValidationIssue(
+                    type="missing_annotation_candidate",
+                    scope="TEXT",
+                    reason=(
+                        f"exact repeated {label} value {value!r} at occurrence "
+                        f"{occurrence} is untagged; every case-sensitive standalone "
+                        "occurrence must be annotated"
+                    ),
+                    label=label,
+                    value=value,
+                ))
+        return issues
 
     @staticmethod
     def _missing_structured_annotations(

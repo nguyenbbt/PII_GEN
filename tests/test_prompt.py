@@ -50,7 +50,7 @@ class DataGeneratorPromptTests(unittest.TestCase):
 
         messages = build_messages(request)
 
-        self.assertEqual(PROMPT_VERSION, "data-generator.v11.3.0")
+        self.assertEqual(PROMPT_VERSION, "data-generator.v11.4.0")
         self.assertEqual(messages[0], {"role": "system", "content": SYSTEM_PROMPT})
         self.assertNotIn("task-1", messages[0]["content"])
         self.assertIn("# Generation Request", messages[1]["content"])

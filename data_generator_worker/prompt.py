@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 from .contracts import DataGenerationRequest
 from .placeholders import placeholder_entities
 
-PROMPT_VERSION = "data-generator.v11.3.0"
+PROMPT_VERSION = "data-generator.v11.4.0"
 
 SYSTEM_PROMPT = """# Role
 You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
@@ -56,7 +56,8 @@ Return one valid JSON object only, with exactly these keys and no Markdown fence
 
 # Mandatory Self-Check
 Internally reject and rewrite the draft if any required placeholder is missing or modified, a decoy is tagged,
-any decoy occurrence lacks at least one `required_context_cue` copied unchanged in the same sentence,
+the first decoy occurrence lacks a `required_context_cue` copied unchanged in the
+same sentence, a later cue-free occurrence moves to another paragraph,
 a decoy is attached as a disclaimer instead of participating in the event, an unrelated sentence exists only to
 mention a seed, the clean text is shorter than `length_target.min_words`, required entities are presented as a list rather than
 participating in the event, a human-readable bracket field remains, or the text does
@@ -83,9 +84,9 @@ PURE_NEGATIVE_RULES = [
 
 HARD_NEGATIVE_DECOY_ONLY_RULES = [
     "Use every decoy once by default; preserve it character-for-character and leave every occurrence untagged.",
-    "A decoy may appear twice only when the same event naturally requires a confirmation, correction, quotation, or cross-reference of the exact value.",
+    "A decoy may appear up to three times only when the same event naturally requires a confirmation, correction, quotation, or cross-reference of the exact value.",
     "Return no XML tags and return entities as an empty array.",
-    "Use each decoy as the semantic_type stated in its metadata and copy at least one required_context_cue unchanged into the same sentence as every occurrence.",
+    "Use each decoy as the semantic_type stated in its metadata. Copy at least one required_context_cue unchanged into the sentence containing its first occurrence. A later occurrence may omit the cue only in the same paragraph; when it moves to another paragraph, give that occurrence its own required cue.",
     "Make the non-PII role clear through natural business context; do not add meta explanations such as 'this is not PII'.",
     "Do not generate any positive PII, additional lookalikes, or additional identifiers.",
     "All content must form one coherent event or document; repetition must serve the event and must never be filler added merely to mention a decoy.",

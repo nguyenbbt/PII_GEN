@@ -175,7 +175,7 @@ class ValidationConfig(Schema):
 
 class VerifierConfig(Schema):
     enabled: bool = False
-    max_repairs_per_candidate: int = Field(default=1, ge=0, le=1)
+    max_repairs_per_candidate: int = Field(default=1, ge=0, le=2)
 
 
 class ParallelGenerationConfig(Schema):

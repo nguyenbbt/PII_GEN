@@ -581,7 +581,7 @@ Các field chính:
 | `complexity_limits` | Complexity budget theo sample type |
 | `validation.quality_checks_enabled` | Cờ legacy cho NoveltyGuard; migrate sang Verifier nếu config không có `verifier` |
 | `verifier.enabled` | Bật/tắt LLM Judge/Repair; config mẫu bật |
-| `verifier.max_repairs_per_candidate` | Hiện chỉ cho phép `0` hoặc `1` |
+| `verifier.max_repairs_per_candidate` | Cho phép `0`, `1` hoặc `2`; vòng hai chỉ chạy khi re-Judge còn trả lỗi cục bộ `FIXABLE` |
 | `parallel_generation` | Số worker, kích thước shard và số lần retry mỗi shard |
 | `random_seed` | Tái lập task/seed selection |
 
@@ -742,6 +742,10 @@ CLI in:
   verification outcome và issue-type counts;
 - các formatted sample.
 
+Ngoài JSON trên stdout, mỗi phiên còn ghi file `*-summary.json` cạnh dataset. File
+này giữ tổng `input_tokens`, `output_tokens`, `total_tokens`, chi phí, diagnostics,
+đường dẫn dataset và diagnostic log mà không thay đổi schema mảng sample.
+
 ### 7.4 Chạy online
 
 Bỏ `--offline`:
@@ -770,7 +774,25 @@ Online mode gọi Generator và Verifier nên phát sinh chi phí.
 ```
 
 Mỗi shard dùng một `random_seed` độc lập. Runner kiểm tra số lượng, schema, offset
-và duplicate text trước khi ghi một file JSON hợp nhất vào `gen_data`.
+và duplicate text trước khi ghi một file JSON hợp nhất vào `gen_data`. Với test 10
+sample cần 10 tiến trình thật, đặt:
+
+```json
+{
+  "parallel_generation": {
+    "workers": 10,
+    "shard_size": 1,
+    "max_shard_retries": 2
+  }
+}
+```
+
+`shard_size=1` tạo 10 shard và `workers=10` cho phép chạy đồng thời cả 10 process.
+Terminal báo tiến độ shard đã hoàn tất. Thư mục `shards-<id-ngắn>` giữ `console.log`,
+diagnostic log và output riêng của từng attempt; file `*-summary.json` giữ tổng token
+toàn phiên cùng đường dẫn các log này. Token của response provider có usage vẫn được
+cộng ngay cả khi JSON/response contract lỗi rồi phải retry; HTTP error không có usage
+được tính là 0.
 
 ## 8. State và events
 

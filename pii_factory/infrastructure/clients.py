@@ -315,6 +315,9 @@ class AzureOpenAIJsonTransport:
         )
         last_error: Exception | None = None
         content = ""
+        accumulated_input = 0
+        accumulated_output = 0
+        accumulated_total = 0
         for attempt in range(self.settings.infrastructure_retries + 1):
             started = time.perf_counter()
             logger.info(
@@ -327,28 +330,37 @@ class AzureOpenAIJsonTransport:
             try:
                 with urlopen(request, timeout=self.settings.timeout_seconds) as response:
                     raw = json.loads(response.read().decode("utf-8"))
+                usage = raw.get("usage", {})
+                response_input = int(usage.get("prompt_tokens", 0))
+                response_output = int(usage.get("completion_tokens", 0))
+                response_total = int(
+                    usage.get(
+                        "total_tokens",
+                        response_input + response_output,
+                    )
+                )
+                accumulated_input += response_input
+                accumulated_output += response_output
+                accumulated_total += response_total
                 content = raw["choices"][0]["message"]["content"]
                 payload = _load_json_object_content(content)
                 if not isinstance(payload, dict):
                     raise VerifierInfrastructureError(
                         "Azure OpenAI verifier response must be a JSON object"
                     )
-                usage = raw.get("usage", {})
-                input_tokens = int(usage.get("prompt_tokens", 0))
-                output_tokens = int(usage.get("completion_tokens", 0))
                 elapsed_ms = round((time.perf_counter() - started) * 1000)
                 logger.info(
-                    "[llm verifier] response received latency_ms=%s tokens=%s",
+                    "[llm verifier] response received latency_ms=%s "
+                    "tokens=%s cumulative_tokens=%s",
                     elapsed_ms,
-                    int(usage.get("total_tokens", input_tokens + output_tokens)),
+                    response_total,
+                    accumulated_total,
                 )
                 return JsonCompletion(
                     payload=payload,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    total_tokens=int(
-                        usage.get("total_tokens", input_tokens + output_tokens)
-                    ),
+                    input_tokens=accumulated_input,
+                    output_tokens=accumulated_output,
+                    total_tokens=accumulated_total,
                     latency_ms=elapsed_ms,
                 )
             except HTTPError as exc:
@@ -384,7 +396,13 @@ class AzureOpenAIJsonTransport:
             self.settings.infrastructure_retries + 1,
         )
         raise VerifierInfrastructureError(
-            "Azure OpenAI verifier request failed after infrastructure retries"
+            "Azure OpenAI verifier request failed after infrastructure retries",
+            token_usage=TokenUsage(
+                input_tokens=accumulated_input,
+                output_tokens=accumulated_output,
+                total_tokens=accumulated_total,
+                money_cost=Decimal("0"),
+            ),
         ) from last_error
 
 
@@ -551,6 +569,9 @@ class AzureOpenAICompletionClient:
         )
         last_error: Exception | None = None
         content = ""
+        accumulated_input = 0
+        accumulated_output = 0
+        accumulated_total = 0
         for attempt in range(self.settings.infrastructure_retries + 1):
             started = time.perf_counter()
             logger.info(
@@ -563,6 +584,18 @@ class AzureOpenAICompletionClient:
             try:
                 with urlopen(request, timeout=self.settings.timeout_seconds) as response:
                     raw = json.loads(response.read().decode("utf-8"))
+                usage = raw.get("usage", {})
+                response_input = int(usage.get("prompt_tokens", 0))
+                response_output = int(usage.get("completion_tokens", 0))
+                response_total = int(
+                    usage.get(
+                        "total_tokens",
+                        response_input + response_output,
+                    )
+                )
+                accumulated_input += response_input
+                accumulated_output += response_output
+                accumulated_total += response_total
                 content = raw["choices"][0]["message"]["content"]
                 parsed = _load_json_object_content(content)
                 tagged_text = parsed["tagged_text"]
@@ -580,16 +613,20 @@ class AzureOpenAICompletionClient:
                     }
                     for entity in entities
                 ]
-                usage = raw.get("usage", {})
-                input_tokens = int(usage.get("prompt_tokens", 0))
-                output_tokens = int(usage.get("completion_tokens", 0))
-                total_tokens = int(usage.get("total_tokens", input_tokens + output_tokens))
                 logger.info(
-                    "[llm generator] response received latency_ms=%s tokens=%s",
+                    "[llm generator] response received latency_ms=%s "
+                    "tokens=%s cumulative_tokens=%s",
                     round((time.perf_counter() - started) * 1000),
-                    total_tokens,
+                    response_total,
+                    accumulated_total,
                 )
-                return tagged_text, parsed_entities, input_tokens, output_tokens, total_tokens
+                return (
+                    tagged_text,
+                    parsed_entities,
+                    accumulated_input,
+                    accumulated_output,
+                    accumulated_total,
+                )
             except HTTPError as exc:
                 if exc.code not in {408, 429, 500, 502, 503, 504}:
                     raise RuntimeError(

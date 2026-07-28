@@ -469,7 +469,7 @@ class DeterministicValidatorTests(unittest.TestCase):
             max_decoy_occurrences=2,
         )
 
-    def test_decoy_only_rejects_excessive_or_context_free_repetition(self) -> None:
+    def test_decoy_only_rejects_excessive_or_cross_paragraph_cueless_repetition(self) -> None:
         pack = SeedPack(
             task_id="hard-repeat-invalid", sample_type="hard_negative", hard_negative_mode="decoy_only",
             context_frame=frame(),
@@ -483,17 +483,35 @@ class DeterministicValidatorTests(unittest.TestCase):
         context_free = self.output.validate(
             tagged_text=(
                 "Bộ kiểm thử ghi nhận dữ liệu lỗi 32/13/2026 trong trường đầu vào. "
-                "Nhân viên đọc lại chuỗi 32/13/2026."
+                "\n\nNhân viên đọc lại chuỗi 32/13/2026."
             ),
             entities=[], seed_pack=pack, focus_labels=["DATE"], max_entities=2,
         )
         excessive = self.output.validate(
-            tagged_text="Dữ liệu lỗi 32/13/2026 được đối chiếu với dữ liệu lỗi 32/13/2026 và dữ liệu lỗi 32/13/2026.",
+            tagged_text=(
+                "Dữ liệu lỗi 32/13/2026 được đối chiếu với 32/13/2026, "
+                "32/13/2026 và 32/13/2026."
+            ),
             entities=[], seed_pack=pack, focus_labels=["DATE"], max_entities=2,
         )
 
         self.assertIn("decoy_context_unclear", {issue.type for issue in context_free.issues})
         self.assertIn("decoy_occurrence", {issue.type for issue in excessive.issues})
+
+    def test_repeated_entity_annotation_is_case_sensitive_and_ignores_nested_substrings(self) -> None:
+        missing = self.output._missing_repeated_annotations(
+            "<PERSON>Nguyễn Thị Lan</PERSON> xác nhận Nguyễn Thị Lan."
+        )
+        nested = self.output._missing_repeated_annotations(
+            "<PERSON>Lan</PERSON> gặp <PERSON>Nguyễn Thị Lan</PERSON>, "
+            "còn LAN là mã nội bộ."
+        )
+
+        self.assertEqual(len(missing), 1)
+        self.assertEqual(missing[0].label, "PERSON")
+        self.assertEqual(missing[0].value, "Nguyễn Thị Lan")
+        self.assertIn("occurrence 2", missing[0].reason)
+        self.assertEqual(nested, [])
 
     def test_seed_validator_detects_collision_with_another_taxonomy_label(self) -> None:
         pack = SeedPack(

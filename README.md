@@ -49,6 +49,18 @@ Chạy với taxonomy JSON mặc định và distribution config:
 Output offline nằm trong `gen_data/offline-smoke` và chỉ dùng để smoke test, không
 dùng làm dataset. Chạy online bằng cách bỏ `--offline`.
 
+Config test 10 sample có thể chạy thật 10 tiến trình bằng runner song song:
+
+```powershell
+python -m pii_factory.parallel `
+  --config configs\run_config.online-test.local.json `
+  --output-dir gen_data\online-vi-10
+```
+
+Config này dùng `workers=10`, `shard_size=1`: mỗi sample là một shard/process độc
+lập. Runner lưu log từng shard, file dataset hợp nhất và file `*-summary.json` chứa
+tổng input/output token của toàn phiên.
+
 Đo độ đa dạng 100 sample mà không gọi Azure:
 
 ```powershell

@@ -256,6 +256,15 @@ class ParallelGenerationTests(unittest.TestCase):
             self.assertEqual(summary["status"], "COMPLETED")
             self.assertEqual(summary["accepted_samples"], 4)
             self.assertEqual(summary["completed_shards"], 2)
+            self.assertTrue(Path(summary["summary_path"]).is_file())
+            self.assertTrue(
+                Path(summary["shard_artifact_directory"]).is_dir()
+            )
+            self.assertEqual(len(summary["shard_logs"]), 2)
+            self.assertTrue(all(
+                Path(item["console_log_path"]).is_file()
+                for item in summary["shard_logs"]
+            ))
             self.assertEqual(len(dataset), 4)
             self.assertEqual(
                 len({sample["text"] for sample in dataset}),
