@@ -4,9 +4,10 @@ import json
 from pathlib import Path
 from typing import List
 
-from pydantic import Field, validator
+from pydantic import Field, root_validator, validator
 
 from ..domain.models import (
+    DecoyBlueprint,
     FewShotExample,
     Schema,
     TaxonomyExamples,
@@ -48,6 +49,10 @@ class _JsonTaxonomyEntry(Schema):
     definition: str = Field(..., alias="DEFINITION", min_length=1)
     rule: str = Field(..., alias="RULE", min_length=1)
     examples: _JsonExampleGroups = Field(..., alias="EXAMPLES")
+    decoy_blueprints: List[DecoyBlueprint] = Field(
+        default_factory=list,
+        alias="DECOY_BLUEPRINTS",
+    )
 
     @validator("code")
     def normalize_code(cls, code: str) -> str:
@@ -55,6 +60,38 @@ class _JsonTaxonomyEntry(Schema):
         if normalized != code:
             raise ValueError("LABEL must already be uppercase and trimmed")
         return normalized
+
+    @root_validator
+    def blueprints_reference_local_hard_negative_examples(
+        cls,
+        values: dict,
+    ) -> dict:
+        blueprints = values.get("decoy_blueprints") or []
+        if not blueprints:
+            return values
+        if len(blueprints) < 3:
+            raise ValueError("each taxonomy label requires at least three decoy blueprints")
+        if sum(not blueprint.technical for blueprint in blueprints) < 2:
+            raise ValueError("each taxonomy label requires at least two non-technical blueprints")
+        blueprint_ids = [blueprint.id for blueprint in blueprints]
+        if len(blueprint_ids) != len(set(blueprint_ids)):
+            raise ValueError("decoy blueprint ids must be unique within each label")
+        examples = values.get("examples")
+        known_ids = {
+            example.id for example in (examples.hard_negative if examples else [])
+        }
+        unknown = {
+            source_id
+            for blueprint in blueprints
+            for source_id in blueprint.source_example_ids
+            if source_id not in known_ids
+        }
+        if unknown:
+            raise ValueError(
+                "decoy blueprints reference unknown hard-negative examples: "
+                f"{sorted(unknown)}"
+            )
+        return values
 
     def to_taxonomy_label(self) -> TaxonomyLabel:
         return TaxonomyLabel(
@@ -66,6 +103,7 @@ class _JsonTaxonomyEntry(Schema):
                 pure_negative=self.examples.pure_negative,
                 hard_negative=self.examples.hard_negative,
             ),
+            decoy_blueprints=self.decoy_blueprints,
         )
 
 

@@ -29,6 +29,18 @@ class JsonTaxonomyParserTests(unittest.TestCase):
             api_key.examples.positive[0].id,
             "api_key_positive_1",
         )
+        self.assertGreaterEqual(len(api_key.decoy_blueprints), 3)
+        self.assertGreaterEqual(
+            sum(not blueprint.technical for blueprint in api_key.decoy_blueprints),
+            2,
+        )
+        hard_negative_ids = {
+            example.id for example in api_key.examples.hard_negative
+        }
+        self.assertTrue(all(
+            set(blueprint.source_example_ids) <= hard_negative_ids
+            for blueprint in api_key.decoy_blueprints
+        ))
 
     def test_rejects_duplicate_labels(self) -> None:
         source = json.loads(
@@ -55,6 +67,23 @@ class JsonTaxonomyParserTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "duplicate-example.json"
+            path.write_text(
+                json.dumps(source, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValidationError):
+                JsonTaxonomyParser().parse_file(path)
+
+    def test_rejects_blueprint_with_unknown_source_example(self) -> None:
+        source = json.loads(
+            Path("pii_taxonomy_rules.json").read_text(encoding="utf-8")
+        )
+        source[0]["DECOY_BLUEPRINTS"][0]["source_example_ids"] = [
+            "missing-hard-negative-example"
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid-blueprint-reference.json"
             path.write_text(
                 json.dumps(source, ensure_ascii=False),
                 encoding="utf-8",
@@ -111,6 +140,33 @@ class TaxonomyContextSelectorTests(unittest.TestCase):
         self.assertTrue(all(label.definition for label in context.robin_labels))
         self.assertTrue(all(label.rule for label in context.robin_labels))
         self.assertTrue(all(not label.examples for label in context.robin_labels))
+        self.assertEqual(context.decoy_labels, [])
+
+    def test_selected_decoy_target_gets_its_three_hard_negative_examples(self) -> None:
+        context = TaxonomyContextSelector().select(
+            self.taxonomy,
+            self._task(sample_type="hard_negative"),
+            decoy_target_codes=["EMAIL"],
+        )
+        email = next(
+            label for label in self.taxonomy.labels if label.code == "EMAIL"
+        )
+
+        self.assertEqual(
+            [label.label for label in context.decoy_labels],
+            ["EMAIL"],
+        )
+        self.assertEqual(
+            context.decoy_labels[0].examples,
+            email.examples.hard_negative,
+        )
+        self.assertEqual(
+            [label.label for label in context.robin_labels],
+            ["EMAIL", "PHONE"],
+        )
+        self.assertTrue(all(
+            not label.examples for label in context.robin_labels
+        ))
 
     def test_selection_is_reproducible_for_the_same_task_seed(self) -> None:
         task = self._task(sample_type="positive")

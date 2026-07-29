@@ -68,11 +68,47 @@ class TaxonomyExamples(Schema):
     hard_negative: List[FewShotExample] = Field(default_factory=list)
 
 
+class DecoyBlueprint(Schema):
+    id: str = Field(..., min_length=1, max_length=160)
+    source_example_ids: List[str] = Field(..., min_items=1)
+    family: Literal[
+        "semantic_ambiguity",
+        "business_reference",
+        "operational_code",
+        "technical_schema",
+    ]
+    contrast_principle: str = Field(..., min_length=1)
+    surface_templates: List[str] = Field(..., min_items=1)
+    evidence_cues: List[str] = Field(..., min_items=1)
+    forbidden_cues: List[str] = Field(default_factory=list)
+    compatible_domains: List[str] = Field(default_factory=list)
+    compatible_structures: List[Literal["contract", "chat", "custom"]] = Field(
+        default_factory=lambda: ["contract", "chat", "custom"]
+    )
+    integration_relations: List[str] = Field(..., min_items=1)
+    technical: bool = False
+
+    @validator(
+        "source_example_ids",
+        "surface_templates",
+        "evidence_cues",
+        "forbidden_cues",
+        "compatible_domains",
+        "compatible_structures",
+        "integration_relations",
+    )
+    def list_values_are_unique(cls, values: List[str]) -> List[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("decoy blueprint list values must be unique")
+        return values
+
+
 class TaxonomyLabel(Schema):
     code: str = Field(..., min_length=1, max_length=100)
     definition: str = Field(..., min_length=1)
     rules: List[str] = Field(default_factory=list)
     examples: TaxonomyExamples = Field(default_factory=TaxonomyExamples)
+    decoy_blueprints: List[DecoyBlueprint] = Field(default_factory=list)
 
 
 class TaxonomySnapshot(Schema):
@@ -101,6 +137,7 @@ class GenerationTaxonomyContext(Schema):
     focus_label: LabelGenerationContext
     robin_labels: List[LabelGenerationContext] = Field(default_factory=list)
     available_labels: List[LabelGenerationContext] = Field(default_factory=list)
+    decoy_labels: List[LabelGenerationContext] = Field(default_factory=list)
 
 
 class ValueBankConfig(Schema):
@@ -157,6 +194,9 @@ class HardNegativeConfig(Schema):
     max_decoys: int = Field(default=1, ge=1, le=3)
     max_focus_labels: int = Field(default=1, ge=1, le=10)
     unsupported_label_policy: Literal["rebuild_task"] = "rebuild_task"
+    technical_decoy_max_ratio: float = Field(default=0.15, ge=0.0, le=1.0)
+    require_context_compatible_decoy: bool = True
+    reject_detachable_decoy: bool = True
 
     @root_validator
     def min_does_not_exceed_max(cls, values: Dict[str, Any]) -> Dict[str, Any]:
@@ -611,6 +651,17 @@ class PositiveEntitySeed(Schema):
     format_variant: str = "default"
 
 
+class DecoyRealizationPlan(Schema):
+    blueprint_id: str = Field(..., min_length=1)
+    family: str = Field(..., min_length=1)
+    contrast_principle: str = Field(..., min_length=1)
+    anchor_label: str = Field(..., min_length=1, max_length=100)
+    relation: str = Field(..., min_length=1)
+    discourse_stage: Literal["intake", "processing", "decision"]
+    evidence_cues: List[str] = Field(..., min_items=1)
+    source_example_ids: List[str] = Field(..., min_items=1)
+
+
 class DecoySeed(Schema):
     strategy_id: str = Field(..., min_length=1)
     target_label: str = Field(..., min_length=1, max_length=100)
@@ -622,6 +673,7 @@ class DecoySeed(Schema):
     required_context_cues: List[str] = Field(..., min_items=1)
     forbidden_context_cues: List[str] = Field(default_factory=list)
     must_remain_untagged: bool = True
+    realization_plan: Optional[DecoyRealizationPlan] = None
 
 
 class ContentSeeds(Schema):

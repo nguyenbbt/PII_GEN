@@ -55,7 +55,92 @@
           "rationale": "Cụm “Kỹ sư trưởng” đầu tiên là tên của một gói dịch vụ trong hệ thống, không gắn với danh tính của người nào nên không phải PREFIX hay JOB_TITLE. “Kỹ sư” đứng ngay trước tên Lê Minh Quân để xưng danh người ký nên được gán PREFIX, trong khi “kỹ sư trưởng cơ khí” mô tả vai trò nghề nghiệp đầy đủ của anh và thuộc JOB_TITLE. Case này buộc mô hình phân biệt tên gói dịch vụ, tiền tố trước tên và chức danh dựa trên chức năng ngữ nghĩa."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "prefix_semantic_ambiguity",
+        "source_example_ids": [
+          "prefix_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by prefix_1: the supplied surface serves the stated non-PREFIX role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "TS-01"
+        ],
+        "evidence_cues": [
+          "mã mẫu hàng"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "prefix_business_reference",
+        "source_example_ids": [
+          "prefix_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by prefix_2: the supplied surface serves the stated non-PREFIX role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Ông Bầu"
+        ],
+        "evidence_cues": [
+          "tên quán"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "prefix_technical_schema",
+        "source_example_ids": [
+          "prefix_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by prefix_3: the supplied surface serves the stated non-PREFIX role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Kỹ sư trưởng"
+        ],
+        "evidence_cues": [
+          "tên gói dịch vụ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "PERSON",
@@ -113,7 +198,92 @@
           "rationale": "“Minh Anh” đầu tiên là tên của một dự án, nên dù giống tên người phổ biến, nó không đại diện cho một cá nhân và phải để không gán. Đỗ Minh Anh và Vũ Ngọc Hà là hai người cụ thể có hành động và vai trò trong cuộc họp nên được gán PERSON với toàn bộ họ tên. Ngữ cảnh về loại đối tượng và hành động là căn cứ quyết định, không phải việc chuỗi có giống tên người hay không."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "person_semantic_ambiguity",
+        "source_example_ids": [
+          "person_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by person_1: the supplied surface serves the stated non-PERSON role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Nguyễn Văn Trỗi"
+        ],
+        "evidence_cues": [
+          "tên tàu"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "person_business_reference",
+        "source_example_ids": [
+          "person_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by person_2: the supplied surface serves the stated non-PERSON role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Hùng Vương"
+        ],
+        "evidence_cues": [
+          "tên cơ sở"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "person_technical_schema",
+        "source_example_ids": [
+          "person_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by person_3: the supplied surface serves the stated non-PERSON role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Minh Anh"
+        ],
+        "evidence_cues": [
+          "tên dự án"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "GENDER",
@@ -171,7 +341,92 @@
           "rationale": "Các từ “đực” và “cái” ở câu đầu là thuật ngữ kỹ thuật dùng cho đầu cắm, không phải thuộc tính nhận dạng của người. “Nữ” ở câu sau được liên kết trực tiếp với mục giới tính do Trần Khánh Linh tự khai nên được gán GENDER. Hard negative nằm ở việc cùng trường từ vựng xuất hiện trong hai miền khác nhau, buộc mô hình đọc chủ thể và mục đích sử dụng."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "gender_semantic_ambiguity",
+        "source_example_ids": [
+          "gender_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by gender_1: the supplied surface serves the stated non-GENDER role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "cái"
+        ],
+        "evidence_cues": [
+          "đầu nối"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "gender_business_reference",
+        "source_example_ids": [
+          "gender_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by gender_2: the supplied surface serves the stated non-GENDER role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "đực"
+        ],
+        "evidence_cues": [
+          "giống vật nuôi"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "gender_technical_schema",
+        "source_example_ids": [
+          "gender_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by gender_3: the supplied surface serves the stated non-GENDER role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "nam"
+        ],
+        "evidence_cues": [
+          "loại phụ kiện"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "AGE",
@@ -229,7 +484,92 @@
           "rationale": "Hai số 25 và 2 đều gắn với vòng đời, thời gian vận hành hoặc bảo hành của thiết bị, nên không biểu thị tuổi cá nhân. Số 36 mô tả trực tiếp tuổi của Nguyễn Quốc Huy trong hồ sơ người kiểm định và phải được gán AGE với boundary chỉ lấy chữ số. Case này kiểm tra việc mô hình không đánh đồng mọi biểu thức “năm” với tuổi và không kéo từ “tuổi” vào span."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "age_semantic_ambiguity",
+        "source_example_ids": [
+          "age_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by age_1: the supplied surface serves the stated non-AGE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "12 năm"
+        ],
+        "evidence_cues": [
+          "thời gian sử dụng"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "age_business_reference",
+        "source_example_ids": [
+          "age_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by age_2: the supplied surface serves the stated non-AGE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "18 năm"
+        ],
+        "evidence_cues": [
+          "thời hạn hiệu lực"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "age_technical_schema",
+        "source_example_ids": [
+          "age_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by age_3: the supplied surface serves the stated non-AGE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "25 năm"
+        ],
+        "evidence_cues": [
+          "tuổi thiết bị"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "BIRTHDATE",
@@ -287,7 +627,92 @@
           "rationale": "Ngày 03/03/2026 gắn với hành động cập nhật ứng dụng nên là DATE thông thường. Ngày 03/03/1996 nằm trong trường ngày sinh của Hoàng Minh Châu nên là BIRTHDATE, còn mã lô 03031996 không thực hiện chức năng thời gian dù chứa cùng dãy số. Rationale này nhấn mạnh rằng ngữ cảnh tài liệu và quan hệ với con người quan trọng hơn sự giống nhau về hình thức."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "birthdate_semantic_ambiguity",
+        "source_example_ids": [
+          "birthdate_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by birthdate_1: the supplied surface serves the stated non-BIRTHDATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "12/05/2026"
+        ],
+        "evidence_cues": [
+          "ngày lập hồ sơ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "birthdate_business_reference",
+        "source_example_ids": [
+          "birthdate_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by birthdate_2: the supplied surface serves the stated non-BIRTHDATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "2001-09-09"
+        ],
+        "evidence_cues": [
+          "phiên bản sản phẩm"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "birthdate_technical_schema",
+        "source_example_ids": [
+          "birthdate_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by birthdate_3: the supplied surface serves the stated non-BIRTHDATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "03031996"
+        ],
+        "evidence_cues": [
+          "mã lô"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "PHONE",
@@ -345,7 +770,92 @@
           "rationale": "Mã thùng 093-455-6677 được dùng để nhận diện một kiện hàng trong nghiệp vụ kiểm kê, nên không phải PHONE dù có cấu trúc số quen thuộc. 0934 556 677 là số mà Nguyễn Thảo Vy sử dụng để gọi cho đại diện nhà cung cấp, vì vậy có chức năng liên lạc và được gán PHONE. Case này ngăn mô hình gán nhãn chỉ bằng pattern mà không đọc hành động xung quanh."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "phone_semantic_ambiguity",
+        "source_example_ids": [
+          "phone_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by phone_1: the supplied surface serves the stated non-PHONE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "0909-123-456"
+        ],
+        "evidence_cues": [
+          "mã kiện hàng"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "phone_business_reference",
+        "source_example_ids": [
+          "phone_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by phone_2: the supplied surface serves the stated non-PHONE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "+84-912-345-678"
+        ],
+        "evidence_cues": [
+          "số sê-ri"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "phone_technical_schema",
+        "source_example_ids": [
+          "phone_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by phone_3: the supplied surface serves the stated non-PHONE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "093-455-6677"
+        ],
+        "evidence_cues": [
+          "mã thùng"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "EMAIL",
@@ -403,7 +913,92 @@
           "rationale": "Chuỗi tennguoidung@congty.vn xuất hiện trong một mẫu tên tệp và được mô tả là dữ liệu kiểm thử, nên không thực hiện chức năng liên lạc. vanhanh@congty.vn là đích nhận báo cáo trong quy trình thật, vì vậy nó mới đáp ứng vai trò của EMAIL. Case này buộc mô hình phân biệt cú pháp giống email với ngữ nghĩa thực tế của một địa chỉ thư."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "email_semantic_ambiguity",
+        "source_example_ids": [
+          "email_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by email_1: the supplied surface serves the stated non-EMAIL role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "support@abc.vn.log"
+        ],
+        "evidence_cues": [
+          "tên tệp nhật ký"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "email_business_reference",
+        "source_example_ids": [
+          "email_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by email_2: the supplied surface serves the stated non-EMAIL role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "user@example.com"
+        ],
+        "evidence_cues": [
+          "dữ liệu minh họa"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "email_technical_schema",
+        "source_example_ids": [
+          "email_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by email_3: the supplied surface serves the stated non-EMAIL role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "tennguoidung@congty.vn.csv"
+        ],
+        "evidence_cues": [
+          "mẫu tên tệp"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "LOCATION",
@@ -461,7 +1056,92 @@
           "rationale": "“Singapore” đầu tiên mô tả quốc tịch pháp lý của khách hàng nên là NATIONALITY, còn “Singapore Xanh” là tên chiến dịch và không phải địa điểm. Nam Từ Liêm, Hà Nội là một cụm hành chính không có thông tin đường phố nên là một LOCATION span; 25 phố Mễ Trì có số nhà và tên đường nên là ADDRESS. Case này kiểm tra đồng thời role, boundary và việc không tách cụm địa lý hành chính."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "location_semantic_ambiguity",
+        "source_example_ids": [
+          "location_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by location_1: the supplied surface serves the stated non-LOCATION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Singapore Xanh"
+        ],
+        "evidence_cues": [
+          "tên chiến dịch"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "location_business_reference",
+        "source_example_ids": [
+          "location_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by location_2: the supplied surface serves the stated non-LOCATION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Tây Hồ 69"
+        ],
+        "evidence_cues": [
+          "tên dự án"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "location_technical_schema",
+        "source_example_ids": [
+          "location_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by location_3: the supplied surface serves the stated non-LOCATION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Hà Nội Logistics"
+        ],
+        "evidence_cues": [
+          "tên thương hiệu"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "ADDRESS",
@@ -519,7 +1199,92 @@
           "rationale": "Phòng, tòa nhà, số nhà và tên đường tạo thành thông tin street-level cụ thể nên được gộp trong ADDRESS. Tây Hồ, Hà Nội là cụm hành chính và phải tách thành LOCATION; 100000 là mã bưu chính nên thuộc ZIP_CODE. Tên dự án có chứa địa danh và số nhưng không đóng vai trò nơi nhận, vì vậy không được gán ADDRESS chỉ dựa vào hình thức."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "address_semantic_ambiguity",
+        "source_example_ids": [
+          "address_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by address_1: the supplied surface serves the stated non-ADDRESS role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Tây Hồ 69"
+        ],
+        "evidence_cues": [
+          "tên dự án"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "address_business_reference",
+        "source_example_ids": [
+          "address_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by address_2: the supplied surface serves the stated non-ADDRESS role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Đường Thành Công"
+        ],
+        "evidence_cues": [
+          "tên ấn phẩm"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "address_technical_schema",
+        "source_example_ids": [
+          "address_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by address_3: the supplied surface serves the stated non-ADDRESS role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Sun Plaza 69"
+        ],
+        "evidence_cues": [
+          "mã công trình"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "ZIP_CODE",
@@ -577,7 +1342,92 @@
           "rationale": "Số 10001 đầu tiên nhận diện một vị trí kệ bên trong kho và không liên kết với địa lý hay chuyển phát. Lần thứ hai nằm trong biểu mẫu vận chuyển và được gọi rõ là mã ZIP của nơi nhận, nên mới được gán ZIP_CODE. Hard negative này cho thấy độ dài năm chữ số không đủ để xác định nhãn nếu thiếu vai trò bưu chính."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "zip_code_semantic_ambiguity",
+        "source_example_ids": [
+          "zip_code_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by zip_code_1: the supplied surface serves the stated non-ZIP_CODE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "700000"
+        ],
+        "evidence_cues": [
+          "mã phòng thử nghiệm"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "zip_code_business_reference",
+        "source_example_ids": [
+          "zip_code_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by zip_code_2: the supplied surface serves the stated non-ZIP_CODE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "90210"
+        ],
+        "evidence_cues": [
+          "model cảm biến"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "zip_code_technical_schema",
+        "source_example_ids": [
+          "zip_code_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by zip_code_3: the supplied surface serves the stated non-ZIP_CODE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "10001"
+        ],
+        "evidence_cues": [
+          "mã vị trí kệ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "COORDINATE",
@@ -635,7 +1485,92 @@
           "rationale": "Các số 10.762 và 106.681 được mô tả rõ là hệ số hiệu chỉnh trong phép đo, nên không mang vai trò vị trí. Cặp tọa độ ở câu sau có ký hiệu hướng và dùng để xác định nơi đặt van ngầm, vì vậy thuộc COORDINATE. Case này yêu cầu mô hình đọc toàn bộ mô tả kỹ thuật và phân biệt đại lượng đo với thông tin không gian."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "coordinate_semantic_ambiguity",
+        "source_example_ids": [
+          "coordinate_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by coordinate_1: the supplied surface serves the stated non-COORDINATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "21.02, 105.85"
+        ],
+        "evidence_cues": [
+          "chỉ số áp suất"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "coordinate_business_reference",
+        "source_example_ids": [
+          "coordinate_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by coordinate_2: the supplied surface serves the stated non-COORDINATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "16.067, 108.220"
+        ],
+        "evidence_cues": [
+          "phiên bản firmware"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "coordinate_technical_schema",
+        "source_example_ids": [
+          "coordinate_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by coordinate_3: the supplied surface serves the stated non-COORDINATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "10.762, 106.681"
+        ],
+        "evidence_cues": [
+          "hệ số hiệu chỉnh"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "USERNAME",
@@ -693,7 +1628,92 @@
           "rationale": "Captain Minh là tên hiển thị của một cá nhân nên được gán PERSON, captain_minh88 là handle mà người dùng chọn để xuất hiện và đăng nhập trên diễn đàn nên là USERNAME. ACC-009821 là mã do hệ thống sinh để quản lý bản ghi nên là ACCOUNT_ID. Case này ngăn mô hình gom mọi định danh liên quan đến một người vào USERNAME."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "username_semantic_ambiguity",
+        "source_example_ids": [
+          "username_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by username_1: the supplied surface serves the stated non-USERNAME role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "lan.nguyen"
+        ],
+        "evidence_cues": [
+          "tên mẫu báo cáo"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "username_business_reference",
+        "source_example_ids": [
+          "username_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by username_2: the supplied surface serves the stated non-USERNAME role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "captain_minh88"
+        ],
+        "evidence_cues": [
+          "tên chiến dịch"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "username_technical_schema",
+        "source_example_ids": [
+          "username_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by username_3: the supplied surface serves the stated non-USERNAME role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "minh.khoa"
+        ],
+        "evidence_cues": [
+          "khóa tra cứu"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "ACCOUNT_ID",
@@ -751,7 +1771,92 @@
           "rationale": "PORTAL-771 nhận diện hồ sơ đăng nhập của khách trên một dịch vụ số nên là ACCOUNT_ID. INC-928173 theo dõi một sự cố hỗ trợ nên là TICKET_ID, còn 880077665544 là tài khoản tài chính nhận hoàn tiền nên thuộc BANK_ACCOUNT. Case này buộc mô hình đọc chức năng của từng identifier thay vì gom mọi mã trong một quy trình thành ACCOUNT_ID."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "account_id_semantic_ambiguity",
+        "source_example_ids": [
+          "account_id_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by account_id_1: the supplied surface serves the stated non-ACCOUNT_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "GW-009"
+        ],
+        "evidence_cues": [
+          "mã gateway"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "account_id_business_reference",
+        "source_example_ids": [
+          "account_id_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by account_id_2: the supplied surface serves the stated non-ACCOUNT_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "CRM-ACC-882"
+        ],
+        "evidence_cues": [
+          "mã bản ghi CRM"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "account_id_technical_schema",
+        "source_example_ids": [
+          "account_id_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by account_id_3: the supplied surface serves the stated non-ACCOUNT_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "PORTAL-771"
+        ],
+        "evidence_cues": [
+          "mã luồng xử lý"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "TICKET_ID",
@@ -809,7 +1914,92 @@
           "rationale": "CASE-7788 là mã vụ án trong quy trình tư pháp, còn PTW-230914-CSM-001 là số giấy phép công việc trong vận hành công trường; cả hai đều không theo dõi tương tác hỗ trợ khách hàng. INC-552901 được mở bởi bộ phận chăm sóc để quản lý lỗi tải hồ sơ, nên đáp ứng đúng vai trò của TICKET_ID. Hard negative này kiểm tra việc mô hình không gán nhãn chỉ vì thấy từ “case”, “permit” hoặc một pattern mã quen thuộc."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "ticket_id_semantic_ambiguity",
+        "source_example_ids": [
+          "ticket_id_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by ticket_id_1: the supplied surface serves the stated non-TICKET_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "TKT-8842"
+        ],
+        "evidence_cues": [
+          "mã vé xem phim"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "ticket_id_business_reference",
+        "source_example_ids": [
+          "ticket_id_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by ticket_id_2: the supplied surface serves the stated non-TICKET_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "INV-2026-998"
+        ],
+        "evidence_cues": [
+          "số hóa đơn"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "ticket_id_technical_schema",
+        "source_example_ids": [
+          "ticket_id_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by ticket_id_3: the supplied surface serves the stated non-TICKET_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "CASE-7788"
+        ],
+        "evidence_cues": [
+          "mã hồ sơ pháp lý"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "PASSWORD",
@@ -867,7 +2057,92 @@
           "rationale": "“Mật khẩu Mùa Thu” là tên riêng của một trò chơi nên cụm Mùa Thu không thực hiện chức năng credential, dù đứng sau từ “mật khẩu”. LabGate#908 được gắn trực tiếp với tài khoản quản trị và dùng để đăng nhập nhiều lần, vì vậy thuộc PASSWORD; mã SMS dùng một lần không thuộc nhãn này. Case này kiểm tra keyword trap và vai trò xác thực thực tế."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "password_semantic_ambiguity",
+        "source_example_ids": [
+          "password_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by password_1: the supplied surface serves the stated non-PASSWORD role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Mật khẩu Mùa Thu"
+        ],
+        "evidence_cues": [
+          "dữ liệu minh họa"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "password_business_reference",
+        "source_example_ids": [
+          "password_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by password_2: the supplied surface serves the stated non-PASSWORD role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Chuỗi minh họa đăng nhập"
+        ],
+        "evidence_cues": [
+          "tên trò chơi"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "password_technical_schema",
+        "source_example_ids": [
+          "password_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by password_3: the supplied surface serves the stated non-PASSWORD role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "OTP-554433"
+        ],
+        "evidence_cues": [
+          "mã dùng một lần"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "PIN",
@@ -925,7 +2200,92 @@
           "rationale": "7878 và 3341 lần lượt là số thứ tự hồ sơ và mã kệ, nên dù đều có bốn chữ số, chúng không phải credential. 9083 được nhập trên keypad để mở cửa khu vực hạn chế, cung cấp đúng cue access/lock đã chốt cho PIN. Hard negative này kiểm tra việc mô hình không gán mọi số bốn chữ số thành PIN."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "pin_semantic_ambiguity",
+        "source_example_ids": [
+          "pin_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by pin_1: the supplied surface serves the stated non-PIN role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "778899"
+        ],
+        "evidence_cues": [
+          "mã dùng một lần"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "pin_business_reference",
+        "source_example_ids": [
+          "pin_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by pin_2: the supplied surface serves the stated non-PIN role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "6405"
+        ],
+        "evidence_cues": [
+          "mã phòng họp"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "pin_technical_schema",
+        "source_example_ids": [
+          "pin_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by pin_3: the supplied surface serves the stated non-PIN role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "7878"
+        ],
+        "evidence_cues": [
+          "số thứ tự hồ sơ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "API_KEY",
@@ -983,7 +2343,92 @@
           "rationale": "api_test_000000 là dữ liệu thử không gắn với quyền truy cập, tài khoản hay endpoint vận hành, nên không phải API_KEY dù tên gọi rất giống token. pay_live_X7q9Lm22 được lấy từ biến môi trường để xác thực lời gọi dịch vụ thanh toán, vì vậy có vai trò secret truy cập và được gán API_KEY. Case này ngăn mô hình dựa vào prefix “api” hoặc “test” mà bỏ qua chức năng thực tế."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "api_key_semantic_ambiguity",
+        "source_example_ids": [
+          "api_key_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by api_key_1: the supplied surface serves the stated non-API_KEY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "SKU-A8F93"
+        ],
+        "evidence_cues": [
+          "mã sản phẩm"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "api_key_business_reference",
+        "source_example_ids": [
+          "api_key_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by api_key_2: the supplied surface serves the stated non-API_KEY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "API-ACC-771"
+        ],
+        "evidence_cues": [
+          "mã tài khoản dịch vụ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "api_key_technical_schema",
+        "source_example_ids": [
+          "api_key_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by api_key_3: the supplied surface serves the stated non-API_KEY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "VECTOR-000000"
+        ],
+        "evidence_cues": [
+          "test vector"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "URL",
@@ -1041,7 +2486,92 @@
           "rationale": "portal.abc.vn trong tên tệp là một thành phần của file log, không phải liên kết mà người dùng được yêu cầu mở. https://portal.abc.vn/kich-hoat là địa chỉ dẫn tới trang kích hoạt nên có vai trò URL, còn xacnhan@abc.vn là kênh thư điện tử. Case này kiểm tra việc không cắt một domain-like substring khỏi filename rồi gán URL."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "url_semantic_ambiguity",
+        "source_example_ids": [
+          "url_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by url_1: the supplied surface serves the stated non-URL role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "C:\\bao_cao\\2026\\tonghop.pdf"
+        ],
+        "evidence_cues": [
+          "đường dẫn tệp"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "url_business_reference",
+        "source_example_ids": [
+          "url_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by url_2: the supplied surface serves the stated non-URL role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "portal.abc.vn.log"
+        ],
+        "evidence_cues": [
+          "tên tệp nhật ký"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "url_technical_schema",
+        "source_example_ids": [
+          "url_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by url_3: the supplied surface serves the stated non-URL role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "docs.example.module"
+        ],
+        "evidence_cues": [
+          "tên module"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "IP",
@@ -1099,7 +2629,92 @@
           "rationale": "192.168.10.0/24 biểu thị một dải CIDR chứ không phải địa chỉ endpoint đơn lẻ, nên không được lấy thành IP trong rule project. 10.0.0.5 là mã phiên bản bo mạch và không mang chức năng mạng. 192.168.10.37 xác định máy trạm thực hiện đăng nhập, vì vậy mới được gán IP."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "ip_semantic_ambiguity",
+        "source_example_ids": [
+          "ip_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by ip_1: the supplied surface serves the stated non-IP role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "10.10.0.8"
+        ],
+        "evidence_cues": [
+          "phiên bản firmware"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "ip_business_reference",
+        "source_example_ids": [
+          "ip_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by ip_2: the supplied surface serves the stated non-IP role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "192.168.1.44"
+        ],
+        "evidence_cues": [
+          "part number"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "ip_technical_schema",
+        "source_example_ids": [
+          "ip_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by ip_3: the supplied surface serves the stated non-IP role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "10.0.0.5"
+        ],
+        "evidence_cues": [
+          "tên phiên bản"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "BANK_ACCOUNT",
@@ -1157,7 +2772,92 @@
           "rationale": "880077665544 đầu tiên là mã truy xuất một bản scan chứng từ, không tham gia nhận hoặc giữ tiền nên không phải BANK_ACCOUNT. 880077665599 là đích nhận khoản hoàn tiền nên có vai trò tài khoản ngân hàng; PORTAL-8821 là identifier của tài khoản số và thuộc ACCOUNT_ID. Case này buộc mô hình xác định chức năng của từng mã thay vì suy nhãn từ độ dài."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "bank_account_semantic_ambiguity",
+        "source_example_ids": [
+          "bank_account_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by bank_account_1: the supplied surface serves the stated non-BANK_ACCOUNT role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "ACC-CHAIN-9001"
+        ],
+        "evidence_cues": [
+          "tài khoản portal"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "bank_account_business_reference",
+        "source_example_ids": [
+          "bank_account_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by bank_account_2: the supplied surface serves the stated non-BANK_ACCOUNT role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "4111111111111111"
+        ],
+        "evidence_cues": [
+          "mã thanh toán thử"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "bank_account_technical_schema",
+        "source_example_ids": [
+          "bank_account_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by bank_account_3: the supplied surface serves the stated non-BANK_ACCOUNT role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "880077665544"
+        ],
+        "evidence_cues": [
+          "mã scan hóa đơn"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "MONEY",
@@ -1215,7 +2915,92 @@
           "rationale": "“$1200” đầu tiên được dùng như token kiểm thử ký tự, không tham gia mua bán, thanh toán hay định giá nên không phải MONEY. 1.200 USD được mô tả rõ là chi phí mà nhà cung cấp báo cho việc thay đầu dò, vì vậy có vai trò tiền tệ thực. Case này kiểm tra việc không gán nhãn chỉ vì có ký hiệu hoặc mã tiền."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "money_semantic_ambiguity",
+        "source_example_ids": [
+          "money_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by money_1: the supplied surface serves the stated non-MONEY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "USD-1200"
+        ],
+        "evidence_cues": [
+          "model cảm biến"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "money_business_reference",
+        "source_example_ids": [
+          "money_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by money_2: the supplied surface serves the stated non-MONEY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "500000"
+        ],
+        "evidence_cues": [
+          "mã lô"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "money_technical_schema",
+        "source_example_ids": [
+          "money_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by money_3: the supplied surface serves the stated non-MONEY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "$1200"
+        ],
+        "evidence_cues": [
+          "literal kiểm thử"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "CARD_ISSUER",
@@ -1273,7 +3058,92 @@
           "rationale": "Vietcombank đầu tiên là ngân hàng phát hành thẻ và theo policy của project phải được gán CARD_ISSUER. Cụm “Vietcombank Xanh” là tên chiến dịch, nên không được tách riêng substring Vietcombank thành một entity khác nếu toàn cụm chỉ đóng vai trò tên chương trình. Case này kiểm tra cả project override và boundary của tên riêng chứa thương hiệu ngân hàng."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "card_issuer_semantic_ambiguity",
+        "source_example_ids": [
+          "card_issuer_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by card_issuer_1: the supplied surface serves the stated non-CARD_ISSUER role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "JCB"
+        ],
+        "evidence_cues": [
+          "model máy xúc"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "card_issuer_business_reference",
+        "source_example_ids": [
+          "card_issuer_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by card_issuer_2: the supplied surface serves the stated non-CARD_ISSUER role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Visa"
+        ],
+        "evidence_cues": [
+          "hồ sơ du lịch"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "card_issuer_technical_schema",
+        "source_example_ids": [
+          "card_issuer_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by card_issuer_3: the supplied surface serves the stated non-CARD_ISSUER role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Vietcombank Xanh"
+        ],
+        "evidence_cues": [
+          "tên chiến dịch"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "CARD_NUMBER",
@@ -1331,7 +3201,92 @@
           "rationale": "5200828282828210 là mã theo dõi của nhà vận chuyển và dùng để nhận diện kiện hàng, nên không có chức năng thanh toán dù dài 16 chữ số. 4111111111111111 được nhập vào trường số thẻ để thanh toán phí nên mới là CARD_NUMBER. Hard negative này ngăn mô hình dùng regex hoặc kiểm tra độ dài mà bỏ qua mục đích của chuỗi."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "card_number_semantic_ambiguity",
+        "source_example_ids": [
+          "card_number_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by card_number_1: the supplied surface serves the stated non-CARD_NUMBER role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "4111111111111111"
+        ],
+        "evidence_cues": [
+          "mã vận đơn"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "card_number_business_reference",
+        "source_example_ids": [
+          "card_number_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by card_number_2: the supplied surface serves the stated non-CARD_NUMBER role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "1234567890123456"
+        ],
+        "evidence_cues": [
+          "mã quyết toán"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "card_number_technical_schema",
+        "source_example_ids": [
+          "card_number_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by card_number_3: the supplied surface serves the stated non-CARD_NUMBER role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "5200828282828210"
+        ],
+        "evidence_cues": [
+          "mã theo dõi"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "CVV",
@@ -1389,7 +3344,92 @@
           "rationale": "CVC-882 chỉ là mã sản phẩm có prefix dễ gây nhầm, còn 204 là mã vị trí lưu trữ; cả hai không tham gia xác minh giao dịch. 482 nằm trong trường mã bảo mật mặt sau thẻ nên thực hiện đúng vai trò CVV. Case này kiểm tra việc mô hình không dựa vào prefix CVC hoặc độ dài ba chữ số."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "cvv_semantic_ambiguity",
+        "source_example_ids": [
+          "cvv_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by cvv_1: the supplied surface serves the stated non-CVV role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "123"
+        ],
+        "evidence_cues": [
+          "mã phòng họp"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "cvv_business_reference",
+        "source_example_ids": [
+          "cvv_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by cvv_2: the supplied surface serves the stated non-CVV role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "6405"
+        ],
+        "evidence_cues": [
+          "mã cửa kho"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "cvv_technical_schema",
+        "source_example_ids": [
+          "cvv_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by cvv_3: the supplied surface serves the stated non-CVV role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "CVC-882"
+        ],
+        "evidence_cues": [
+          "mã sản phẩm"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "IBAN",
@@ -1447,7 +3487,92 @@
           "rationale": "GB82WEST12345698765432 có cấu trúc IBAN hoàn chỉnh nhưng chỉ là ví dụ minh họa, không đại diện cho tài khoản hoặc chủ thể thực trong quy trình. GB33BUKB20201555555555 là tài khoản nhận của lệnh chuyển tiền cho nhà cung cấp nên mới có vai trò IBAN. Hard negative này cho thấy tính hợp lệ về hình thức không đồng nghĩa với dữ liệu PII vận hành."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "iban_semantic_ambiguity",
+        "source_example_ids": [
+          "iban_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by iban_1: the supplied surface serves the stated non-IBAN role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "DE89370400440532013000"
+        ],
+        "evidence_cues": [
+          "mã bản vẽ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "iban_business_reference",
+        "source_example_ids": [
+          "iban_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by iban_2: the supplied surface serves the stated non-IBAN role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "DE00123456789012345678"
+        ],
+        "evidence_cues": [
+          "dữ liệu kiểm thử"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "iban_technical_schema",
+        "source_example_ids": [
+          "iban_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by iban_3: the supplied surface serves the stated non-IBAN role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "GB82WEST12345698765432"
+        ],
+        "evidence_cues": [
+          "test vector"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "SWIFT",
@@ -1505,7 +3630,92 @@
           "rationale": "DEUTDEFF đầu tiên là tên của test case phần mềm, không thực hiện vai trò nhận diện tổ chức tài chính. DEUTDEFF500 được nhập vào lệnh thanh toán để định tuyến tới ngân hàng nhận, vì vậy đáp ứng đúng chức năng SWIFT. Case này ngăn mô hình gán nhãn chỉ vì mã có độ dài và cấu trúc giống BIC."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "swift_semantic_ambiguity",
+        "source_example_ids": [
+          "swift_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by swift_1: the supplied surface serves the stated non-SWIFT role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "BARCGB54"
+        ],
+        "evidence_cues": [
+          "mã dự án"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "swift_business_reference",
+        "source_example_ids": [
+          "swift_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by swift_2: the supplied surface serves the stated non-SWIFT role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "CITIBGB2"
+        ],
+        "evidence_cues": [
+          "tài khoản nội bộ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "swift_technical_schema",
+        "source_example_ids": [
+          "swift_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by swift_3: the supplied surface serves the stated non-SWIFT role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "DEUTDEFF"
+        ],
+        "evidence_cues": [
+          "tên kịch bản kiểm thử"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "WALLET",
@@ -1563,7 +3773,92 @@
           "rationale": "Chuỗi đầu là dữ liệu kiểm thử dùng lặp lại trong tài liệu và không hoạt động như ví thật, dù hoàn toàn giống địa chỉ Bitcoin. Chuỗi thứ hai là đích nhận coin trong một giao dịch cụ thể nên có chức năng wallet và được gán. Hard negative này kiểm tra khả năng phân biệt test vector với dữ liệu blockchain vận hành."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "wallet_semantic_ambiguity",
+        "source_example_ids": [
+          "wallet_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by wallet_1: the supplied surface serves the stated non-WALLET role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "TX-0xABC-7788"
+        ],
+        "evidence_cues": [
+          "mã giao dịch"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "wallet_business_reference",
+        "source_example_ids": [
+          "wallet_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by wallet_2: the supplied surface serves the stated non-WALLET role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+        ],
+        "evidence_cues": [
+          "build hash"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "wallet_technical_schema",
+        "source_example_ids": [
+          "wallet_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by wallet_3: the supplied surface serves the stated non-WALLET role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+        ],
+        "evidence_cues": [
+          "test vector"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "JOB_TITLE",
@@ -1621,7 +3916,92 @@
           "rationale": "Tên đội và tên nhiệm vụ không phải chức danh cá nhân dù đều liên quan đến công việc. “giám sát vận hành ngoài khơi” được gắn trực tiếp với vai trò chính thức của Nguyễn Thành Công nên toàn bộ cụm thuộc JOB_TITLE. Case này kiểm tra cả phân loại ngữ nghĩa và boundary phải giữ các thành phần bổ nghĩa cần thiết."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "job_title_semantic_ambiguity",
+        "source_example_ids": [
+          "job_title_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by job_title_1: the supplied surface serves the stated non-JOB_TITLE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Field Engineering"
+        ],
+        "evidence_cues": [
+          "tên bộ phận"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "job_title_business_reference",
+        "source_example_ids": [
+          "job_title_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by job_title_2: the supplied surface serves the stated non-JOB_TITLE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "offshore inspection"
+        ],
+        "evidence_cues": [
+          "tên hoạt động"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "job_title_technical_schema",
+        "source_example_ids": [
+          "job_title_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by job_title_3: the supplied surface serves the stated non-JOB_TITLE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "kiểm tra đường ống"
+        ],
+        "evidence_cues": [
+          "tên nhiệm vụ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "ORGANIZATION",
@@ -1679,7 +4059,92 @@
           "rationale": "Phật giáo trong trường tôn giáo mô tả thuộc tính tín ngưỡng của Trần Đức Anh nên thuộc RELIGION. Học viện Phật giáo Việt Nam là tên một cơ sở/tổ chức thực hiện hành động xác nhận giấy tờ, vì vậy toàn bộ tên thuộc ORGANIZATION. Case này ngăn mô hình gán mọi cụm chứa từ tôn giáo vào cùng một nhãn."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "organization_semantic_ambiguity",
+        "source_example_ids": [
+          "organization_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by organization_1: the supplied surface serves the stated non-ORGANIZATION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Vietcombank Xanh"
+        ],
+        "evidence_cues": [
+          "tên chiến dịch"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "organization_business_reference",
+        "source_example_ids": [
+          "organization_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by organization_2: the supplied surface serves the stated non-ORGANIZATION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Phật giáo Việt Nam"
+        ],
+        "evidence_cues": [
+          "tên chuyên đề"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "organization_technical_schema",
+        "source_example_ids": [
+          "organization_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by organization_3: the supplied surface serves the stated non-ORGANIZATION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Liên hiệp Công nhân Biển"
+        ],
+        "evidence_cues": [
+          "tên chương trình"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "EMPLOYEE_ID",
@@ -1737,7 +4202,92 @@
           "rationale": "NV-1028 đầu tiên là mã tài sản của xe đẩy nên không phải EMPLOYEE_ID dù có prefix NV thường dùng cho nhân viên. NV-8821 được dùng trong bảng chấm công để nhận diện Phạm Quốc Bảo nên thuộc EMPLOYEE_ID, còn bao.pham là tên đăng nhập và thuộc USERNAME. Case này kiểm tra việc đọc đối tượng được mã nhận diện."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "employee_id_semantic_ambiguity",
+        "source_example_ids": [
+          "employee_id_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by employee_id_1: the supplied surface serves the stated non-EMPLOYEE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "EMP-20491"
+        ],
+        "evidence_cues": [
+          "mã tài sản"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "employee_id_business_reference",
+        "source_example_ids": [
+          "employee_id_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by employee_id_2: the supplied surface serves the stated non-EMPLOYEE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "HR-ACC-771"
+        ],
+        "evidence_cues": [
+          "tài khoản HR"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "employee_id_technical_schema",
+        "source_example_ids": [
+          "employee_id_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by employee_id_3: the supplied surface serves the stated non-EMPLOYEE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "NV-1028"
+        ],
+        "evidence_cues": [
+          "nhãn xe đẩy"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "NATIONAL_ID",
@@ -1795,7 +4345,92 @@
           "rationale": "079203001234 đầu tiên là mã bệnh nhân do bệnh viện tự sinh để quản lý hồ sơ và không có vai trò định danh công dân chính thức. 079203009876 được giới thiệu là số căn cước của Nguyễn Hải Yến, vì vậy thuộc NATIONAL_ID. Case này cho thấy độ dài và cấu trúc số không đủ nếu không xác định cơ quan cấp và đối tượng được nhận diện."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "national_id_semantic_ambiguity",
+        "source_example_ids": [
+          "national_id_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by national_id_1: the supplied surface serves the stated non-NATIONAL_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "RES-001"
+        ],
+        "evidence_cues": [
+          "mã cư dân nội bộ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "national_id_business_reference",
+        "source_example_ids": [
+          "national_id_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by national_id_2: the supplied surface serves the stated non-NATIONAL_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "02748866"
+        ],
+        "evidence_cues": [
+          "số đăng ký doanh nghiệp"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "national_id_technical_schema",
+        "source_example_ids": [
+          "national_id_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by national_id_3: the supplied surface serves the stated non-NATIONAL_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "079203001234"
+        ],
+        "evidence_cues": [
+          "mã bệnh nhân"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "PASSPORT",
@@ -1853,7 +4488,92 @@
           "rationale": "PAS-2026-8842 chứa prefix PAS và liên quan đến dịch vụ hộ chiếu nhưng chỉ là mã hồ sơ nội bộ của đại lý, nên không phải PASSPORT. N2468013 là số được in trên hộ chiếu của Trương Minh Hà và thực hiện vai trò định danh du lịch do nhà nước cấp. Case này ngăn mô hình dùng từ khóa “hộ chiếu” hoặc prefix để gán nhãn sai."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "passport_semantic_ambiguity",
+        "source_example_ids": [
+          "passport_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by passport_1: the supplied surface serves the stated non-PASSPORT role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "DS-160"
+        ],
+        "evidence_cues": [
+          "mã biểu mẫu"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "passport_business_reference",
+        "source_example_ids": [
+          "passport_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by passport_2: the supplied surface serves the stated non-PASSPORT role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "BKG-A1234567"
+        ],
+        "evidence_cues": [
+          "mã đặt chỗ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "passport_technical_schema",
+        "source_example_ids": [
+          "passport_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by passport_3: the supplied surface serves the stated non-PASSPORT role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "PAS-2026-8842"
+        ],
+        "evidence_cues": [
+          "mã hồ sơ dịch vụ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "LICENSE",
@@ -1911,7 +4631,92 @@
           "rationale": "WA-2026-118 và CS-5541 là chứng nhận hoặc permit an toàn công việc, không nhận diện quyền lái hay vận hành phương tiện. FL-908821 được cấp cho Đỗ Quang Huy để vận hành xe nâng, vì vậy mới phù hợp LICENSE. Case này buộc mô hình phân biệt nhiều loại giấy phép dựa trên phạm vi sử dụng."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "license_semantic_ambiguity",
+        "source_example_ids": [
+          "license_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by license_1: the supplied surface serves the stated non-LICENSE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "PTW-8872-A"
+        ],
+        "evidence_cues": [
+          "giấy phép làm việc"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "license_business_reference",
+        "source_example_ids": [
+          "license_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by license_2: the supplied surface serves the stated non-LICENSE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "CA-MED-77102"
+        ],
+        "evidence_cues": [
+          "chứng chỉ hành nghề"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "license_technical_schema",
+        "source_example_ids": [
+          "license_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by license_3: the supplied surface serves the stated non-LICENSE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "WA-2026-118"
+        ],
+        "evidence_cues": [
+          "chứng nhận an toàn"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "PLATE",
@@ -1969,7 +4774,92 @@
           "rationale": "PLATE-CHECK-01 là tên/mã biểu mẫu chứa từ PLATE nhưng không phải số đăng ký phương tiện. 60C-888.99 được mô tả là mã khung/cụm linh kiện thử nghiệm nên cũng không thuộc PLATE, dù hình dạng gần giống biển số Việt Nam. 60C-777.88 được liên kết trực tiếp với xe tải ra vào cổng nên mới có vai trò biển đăng ký."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "plate_semantic_ambiguity",
+        "source_example_ids": [
+          "plate_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by plate_1: the supplied surface serves the stated non-PLATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "VN-A771"
+        ],
+        "evidence_cues": [
+          "số đuôi máy bay"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "plate_business_reference",
+        "source_example_ids": [
+          "plate_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by plate_2: the supplied surface serves the stated non-PLATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "B-126"
+        ],
+        "evidence_cues": [
+          "số thứ tự khám"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "plate_technical_schema",
+        "source_example_ids": [
+          "plate_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by plate_3: the supplied surface serves the stated non-PLATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "PLATE-CHECK-01"
+        ],
+        "evidence_cues": [
+          "mã biểu mẫu"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "TIN",
@@ -2027,7 +4917,92 @@
           "rationale": "TAX-001 có từ khóa TAX nhưng chỉ nhận diện nhà cung cấp trong phần mềm, không do cơ quan thuế cấp. 0314567890 nằm trong trường mã số thuế trên hóa đơn nên được gán TIN, còn 0314567891 là số đơn hàng và phải để không gán. Case này kiểm tra việc không dựa vào prefix hoặc độ dài số."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "tin_semantic_ambiguity",
+        "source_example_ids": [
+          "tin_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by tin_1: the supplied surface serves the stated non-TIN role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "0123456789"
+        ],
+        "evidence_cues": [
+          "số hóa đơn"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "tin_business_reference",
+        "source_example_ids": [
+          "tin_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by tin_2: the supplied surface serves the stated non-TIN role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "02748866"
+        ],
+        "evidence_cues": [
+          "số đăng ký doanh nghiệp"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "tin_technical_schema",
+        "source_example_ids": [
+          "tin_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by tin_3: the supplied surface serves the stated non-TIN role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "TAX-001"
+        ],
+        "evidence_cues": [
+          "mã nhà cung cấp"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "DATE",
@@ -2085,7 +5060,92 @@
           "rationale": "2026.09.18 là số phiên bản firmware và không timestamp một sự kiện, dù nhìn giống ngày. 18/09/2026 là ngày nghiệm thu, còn 20/09/2026 và 22/09/2026 là hai mốc của khoảng tái kiểm tra nên đều thuộc DATE và phải tách riêng. Case này kiểm tra cả context lẫn boundary của date range."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "date_semantic_ambiguity",
+        "source_example_ids": [
+          "date_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by date_1: the supplied surface serves the stated non-DATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "2026-03-15"
+        ],
+        "evidence_cues": [
+          "model thiết bị"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "date_business_reference",
+        "source_example_ids": [
+          "date_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by date_2: the supplied surface serves the stated non-DATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "2026.09.18"
+        ],
+        "evidence_cues": [
+          "phiên bản firmware"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "date_technical_schema",
+        "source_example_ids": [
+          "date_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by date_3: the supplied surface serves the stated non-DATE role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "18-09-2026"
+        ],
+        "evidence_cues": [
+          "mã đợt sản xuất"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "TIME",
@@ -2143,7 +5203,92 @@
           "rationale": "14:30 ở câu đầu là tỷ lệ số phiếu giữa hai lựa chọn và 09:45 là thời lượng tệp, nên không phải TIME dù có cùng format số. 14:30 và 18:00 ở câu sau là hai mốc bắt đầu và kết thúc ca trực, vì vậy đều thuộc TIME và phải tách riêng; CET chỉ bổ sung múi giờ. Case này kiểm tra semantic role, range boundary và quy tắc không lấy timezone."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "time_semantic_ambiguity",
+        "source_example_ids": [
+          "time_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by time_1: the supplied surface serves the stated non-TIME role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "10:44"
+        ],
+        "evidence_cues": [
+          "tỷ lệ pha"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "time_business_reference",
+        "source_example_ids": [
+          "time_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by time_2: the supplied surface serves the stated non-TIME role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "08:30"
+        ],
+        "evidence_cues": [
+          "thời lượng bản ghi"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "time_technical_schema",
+        "source_example_ids": [
+          "time_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by time_3: the supplied surface serves the stated non-TIME role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "14:30"
+        ],
+        "evidence_cues": [
+          "tỷ lệ bỏ phiếu"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "MARITAL",
@@ -2201,7 +5346,92 @@
           "rationale": "“Độc thân vui vẻ” là tên thương mại của một gói dịch vụ, không khẳng định người mua đang độc thân. “đã kết hôn” xuất hiện trong trường tình trạng hôn nhân của Nguyễn Thùy Linh nên mới có vai trò thuộc tính cá nhân và được gán MARITAL. Case này ngăn mô hình suy diễn trạng thái quan hệ từ tên sản phẩm hoặc chiến dịch."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "marital_semantic_ambiguity",
+        "source_example_ids": [
+          "marital_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by marital_1: the supplied surface serves the stated non-MARITAL role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Combo Độc thân"
+        ],
+        "evidence_cues": [
+          "tên món ăn"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "marital_business_reference",
+        "source_example_ids": [
+          "marital_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by marital_2: the supplied surface serves the stated non-MARITAL role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Ly thân"
+        ],
+        "evidence_cues": [
+          "tên bộ phim"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "marital_technical_schema",
+        "source_example_ids": [
+          "marital_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by marital_3: the supplied surface serves the stated non-MARITAL role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Độc thân vui vẻ"
+        ],
+        "evidence_cues": [
+          "tên chương trình"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "RELIGION",
@@ -2259,7 +5489,92 @@
           "rationale": "Việc tham gia một khóa học về Phật giáo chỉ phản ánh hoạt động đào tạo, không khẳng định niềm tin của Lê Hải Nam. Công giáo được điền trong trường tôn giáo của Phạm Ngọc Mai nên là thuộc tính cá nhân rõ ràng và được gán RELIGION. Case này kiểm tra khả năng tránh suy diễn từ chủ đề, hoạt động hoặc tiếp xúc với tôn giáo."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "religion_semantic_ambiguity",
+        "source_example_ids": [
+          "religion_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by religion_1: the supplied surface serves the stated non-RELIGION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Giáo xứ Tân Định"
+        ],
+        "evidence_cues": [
+          "tên đơn vị tổ chức"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "religion_business_reference",
+        "source_example_ids": [
+          "religion_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by religion_2: the supplied surface serves the stated non-RELIGION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Phật giáo An Lạc"
+        ],
+        "evidence_cues": [
+          "tên hội từ thiện"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "religion_technical_schema",
+        "source_example_ids": [
+          "religion_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by religion_3: the supplied surface serves the stated non-RELIGION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Phật giáo Việt Nam"
+        ],
+        "evidence_cues": [
+          "tên khóa học"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "ETHNICITY",
@@ -2317,7 +5632,92 @@
           "rationale": "Tham gia lễ hội hoặc mặc trang phục văn hóa chỉ mô tả hoạt động, không xác lập nguồn gốc dân tộc của Nguyễn Thu Hà. “Chăm” ở câu cuối nằm trong trường dân tộc do Đặng Thị Sương tự khai nên mới là ETHNICITY. Case này ngăn suy diễn sensitive attribute từ hành vi văn hóa hoặc sự kiện tham dự."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "ethnicity_semantic_ambiguity",
+        "source_example_ids": [
+          "ethnicity_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by ethnicity_1: the supplied surface serves the stated non-ETHNICITY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Việt Nam"
+        ],
+        "evidence_cues": [
+          "quốc tịch trên hộ chiếu"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "ethnicity_business_reference",
+        "source_example_ids": [
+          "ethnicity_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by ethnicity_2: the supplied surface serves the stated non-ETHNICITY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "tiếng Tày"
+        ],
+        "evidence_cues": [
+          "ngôn ngữ gia đình"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "ethnicity_technical_schema",
+        "source_example_ids": [
+          "ethnicity_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by ethnicity_3: the supplied surface serves the stated non-ETHNICITY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Văn hóa Chăm"
+        ],
+        "evidence_cues": [
+          "tên ngày hội"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "TRADE_UNION",
@@ -2375,7 +5775,92 @@
           "rationale": "Công đoàn Du lịch Thành phố ở câu đầu chỉ đóng vai trò đơn vị tổ chức sự kiện, và quan hệ thành viên của Mai Lan còn bị phủ định, nên trong occurrence đó nó được xử lý như ORGANIZATION. Công đoàn Dầu khí Việt Nam được liên kết trực tiếp với quan hệ “đang là thành viên của” của Nguyễn Quốc Khánh nên mới thuộc TRADE_UNION. Case này kiểm tra membership context, negation và boundary chỉ lấy tên nghiệp đoàn."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "trade_union_semantic_ambiguity",
+        "source_example_ids": [
+          "trade_union_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by trade_union_1: the supplied surface serves the stated non-TRADE_UNION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "UnionPay"
+        ],
+        "evidence_cues": [
+          "mạng thẻ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "trade_union_business_reference",
+        "source_example_ids": [
+          "trade_union_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by trade_union_2: the supplied surface serves the stated non-TRADE_UNION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Liên hiệp Công nhân Biển"
+        ],
+        "evidence_cues": [
+          "tên doanh nghiệp"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "trade_union_technical_schema",
+        "source_example_ids": [
+          "trade_union_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by trade_union_3: the supplied surface serves the stated non-TRADE_UNION role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Công đoàn Du lịch Thành phố"
+        ],
+        "evidence_cues": [
+          "đơn vị tổ chức sự kiện"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "NATIONALITY",
@@ -2433,7 +5918,92 @@
           "rationale": "Nhật Bản và Việt Nam trong câu đầu là địa điểm làm việc và cư trú nên thuộc LOCATION. Thời gian sống ở một quốc gia không tạo ra bằng chứng đủ về citizenship, vì vậy không được gán NATIONALITY theo suy diễn. Brazil được nêu trực tiếp là quốc tịch trong giấy tờ nên mới thuộc NATIONALITY."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "nationality_semantic_ambiguity",
+        "source_example_ids": [
+          "nationality_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by nationality_1: the supplied surface serves the stated non-NATIONALITY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Singapore Xanh"
+        ],
+        "evidence_cues": [
+          "tên chiến dịch"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "nationality_business_reference",
+        "source_example_ids": [
+          "nationality_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by nationality_2: the supplied surface serves the stated non-NATIONALITY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "tiếng Đức"
+        ],
+        "evidence_cues": [
+          "ngôn ngữ báo cáo"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "nationality_technical_schema",
+        "source_example_ids": [
+          "nationality_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by nationality_3: the supplied surface serves the stated non-NATIONALITY role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Nhật Bản Mới"
+        ],
+        "evidence_cues": [
+          "tên dự án"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "INSURANCE_ID",
@@ -2491,7 +6061,92 @@
           "rationale": "CLM-2026-0098 theo dõi một claim cụ thể và ACC-INS-77 nhận diện tài khoản cổng, nên lần lượt không phải insurance policy/member ID. VN-HI-882901 nằm trên thẻ bảo hiểm của Nguyễn Minh Trang và nhận diện tư cách thành viên bảo hiểm nên mới thuộc INSURANCE_ID. Case này kiểm tra collision giữa claim code, account code và bảo hiểm cá nhân."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "insurance_id_semantic_ambiguity",
+        "source_example_ids": [
+          "insurance_id_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by insurance_id_1: the supplied surface serves the stated non-INSURANCE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "CL-2209"
+        ],
+        "evidence_cues": [
+          "mã yêu cầu bồi thường"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "insurance_id_business_reference",
+        "source_example_ids": [
+          "insurance_id_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by insurance_id_2: the supplied surface serves the stated non-INSURANCE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "CLAIM-HELP-3322"
+        ],
+        "evidence_cues": [
+          "phiếu hỗ trợ"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "insurance_id_technical_schema",
+        "source_example_ids": [
+          "insurance_id_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by insurance_id_3: the supplied surface serves the stated non-INSURANCE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "CLM-2026-0098"
+        ],
+        "evidence_cues": [
+          "mã hồ sơ bồi thường"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   },
   {
     "LABEL": "MEDICAL_INFO",
@@ -2549,6 +6204,91 @@
           "rationale": "Cụm “Tiểu đường Care Plus” là tên thương mại của sản phẩm và không khẳng định bất kỳ ai mắc bệnh. “đái tháo đường type 2” ở phiếu khám là chẩn đoán cụ thể của Trần Văn Hải nên thuộc MEDICAL_INFO. Case này kiểm tra việc phân biệt disease term trong product name với dữ liệu y tế cá nhân."
         }
       ]
-    }
+    },
+    "DECOY_BLUEPRINTS": [
+      {
+        "id": "medical_info_semantic_ambiguity",
+        "source_example_ids": [
+          "medical_info_1"
+        ],
+        "family": "semantic_ambiguity",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by medical_info_1: the supplied surface serves the stated non-MEDICAL_INFO role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Bảo vệ Hô hấp"
+        ],
+        "evidence_cues": [
+          "tên hội thảo"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "classification",
+          "comparison"
+        ],
+        "technical": false
+      },
+      {
+        "id": "medical_info_business_reference",
+        "source_example_ids": [
+          "medical_info_2"
+        ],
+        "family": "business_reference",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by medical_info_2: the supplied surface serves the stated non-MEDICAL_INFO role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Trung tâm Ung thư"
+        ],
+        "evidence_cues": [
+          "tên chương trình tuyển dụng"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "lookup",
+          "reference"
+        ],
+        "technical": false
+      },
+      {
+        "id": "medical_info_technical_schema",
+        "source_example_ids": [
+          "medical_info_3"
+        ],
+        "family": "technical_schema",
+        "contrast_principle": "Apply only the semantic distinction demonstrated by medical_info_3: the supplied surface serves the stated non-MEDICAL_INFO role in this event, so spelling or shape alone must not trigger the label.",
+        "surface_templates": [
+          "Tiểu đường Care Plus"
+        ],
+        "evidence_cues": [
+          "tên dòng sản phẩm"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration",
+          "customer_support"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "validation",
+          "correction"
+        ],
+        "technical": true
+      }
+    ]
   }
 ]

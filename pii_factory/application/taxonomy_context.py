@@ -22,6 +22,8 @@ class TaxonomyContextSelector:
         self,
         taxonomy: TaxonomySnapshot,
         task: GenerationTask,
+        *,
+        decoy_target_codes: Sequence[str] = (),
     ) -> GenerationTaxonomyContext:
         labels_by_code = {label.code: label for label in taxonomy.labels}
         focus_code = task.focus_label or task.focus_labels[0]
@@ -34,7 +36,8 @@ class TaxonomyContextSelector:
                 if label != focus_code
             ]
         )
-        requested_codes = [focus_code, *robin_codes]
+        decoy_codes = list(dict.fromkeys(decoy_target_codes))
+        requested_codes = [focus_code, *robin_codes, *decoy_codes]
         missing = set(requested_codes) - set(labels_by_code)
         if missing:
             raise ValueError(
@@ -59,6 +62,17 @@ class TaxonomyContextSelector:
                 self._guidance(labels_by_code[code])
                 for code in (task.annotation_labels or requested_codes)
                 if code not in requested_codes
+            ],
+            decoy_labels=[
+                self._guidance(
+                    labels_by_code[code],
+                    self._examples_for_sample_type(
+                        labels_by_code[code],
+                        "hard_negative",
+                        task.random_seed,
+                    ),
+                )
+                for code in decoy_codes
             ],
         )
 
