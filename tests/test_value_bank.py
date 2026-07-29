@@ -118,6 +118,42 @@ class ValueBankEntityProviderTests(unittest.TestCase):
             self.assertEqual(values, ("Visa", "VISA", "Visa"))
             self.assertEqual(path.read_bytes(), before)
 
+    def test_address_sampling_excludes_embedded_location_suffixes(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "vi_pii_value_pools.json"
+            self._write_bank(
+                path,
+                {
+                    "ADDRESS": [
+                        "15 Thái Hà, Đống Đa, Hà Nội",
+                        "Phòng 512, 15 Thái Hà",
+                        "28 đường Nguyễn Văn Linh",
+                    ],
+                    "LOCATION": [
+                        "Đống Đa",
+                        "Hà Nội",
+                        "Đống Đa, Hà Nội",
+                    ],
+                },
+            )
+            before = path.read_bytes()
+
+            values = ValueBankEntityProvider(directory).values_for(
+                "vi",
+                "ADDRESS",
+            )
+
+            self.assertEqual(
+                values,
+                (
+                    "Phòng 512, 15 Thái Hà",
+                    "28 đường Nguyễn Văn Linh",
+                ),
+            )
+            self.assertEqual(path.read_bytes(), before)
+
     def test_exclusions_are_case_sensitive(self) -> None:
         with TemporaryDirectory() as directory:
             self._write_bank(

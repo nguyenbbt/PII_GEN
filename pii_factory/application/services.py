@@ -190,6 +190,7 @@ class CoverageController:
         )
         difficulties = ["easy", "medium", "hard"]
         sample_types = ["positive", "pure_negative", "hard_negative"]
+        hard_negative_ordinal = 0
         for sequence_no in range(1, run.config.num_samples + 1):
             difficulty = rng.choices(
                 difficulties,
@@ -199,6 +200,8 @@ class CoverageController:
                 sample_types,
                 weights=[run.config.sample_type_distribution[name] for name in sample_types], k=1,
             )[0]
+            if sample_type == "hard_negative":
+                hard_negative_ordinal += 1
             entity_limit = run.config.max_entities[difficulty]
             planned_constraints = [
                 name for name, probability in run.config.optional_constraint_distribution.items()
@@ -237,6 +240,11 @@ class CoverageController:
             task = GenerationTask(
                 run_id=run.run_id, sequence_no=sequence_no, language=run.config.language,
                 slot_no=sequence_no,
+                hard_negative_ordinal=(
+                    hard_negative_ordinal
+                    if sample_type == "hard_negative"
+                    else None
+                ),
                 focus_labels=focus_labels,
                 annotation_labels=(
                     annotation_labels
@@ -608,7 +616,10 @@ class Pipeline:
         run.status = RunStatus.RUNNING
         self.repository.update_run(run)
         taxonomy = self.taxonomy_service.get(run.taxonomy_version_id).labels
-        output_validator = DeterministicOutputValidator(run.config.validation)
+        output_validator = DeterministicOutputValidator(
+            run.config.validation,
+            run.config.hard_negative,
+        )
         effective_limit = min(limit, run.config.batch_size)
         results: List[DataGenerationResult] = []
         while len(results) < effective_limit and run.status == RunStatus.RUNNING:
@@ -681,9 +692,27 @@ class Pipeline:
             self._reject_task(run, task, exc.regeneration_scope, exc.issues)
             return None
 
+        decoy_source_example_ids: dict[str, list[str]] = {}
+        for decoy in seed_pack.decoys:
+            if decoy.realization_plan is None:
+                continue
+            source_ids = decoy_source_example_ids.setdefault(
+                decoy.target_label,
+                [],
+            )
+            for example_id in (
+                decoy.realization_plan.source_example_ids
+            ):
+                if example_id not in source_ids:
+                    source_ids.append(example_id)
         generation_taxonomy_context = self.taxonomy_service.generation_context(
             run.taxonomy_version_id,
             task,
+            decoy_target_codes=[
+                decoy.target_label
+                for decoy in seed_pack.decoys
+            ],
+            decoy_source_example_ids=decoy_source_example_ids,
         )
         retry_rng = random.Random(task.random_seed ^ 0x5EED_77)
         retry_router = RegenerationRouter(
@@ -1169,9 +1198,19 @@ class Pipeline:
             ),
         )
         if candidate.taxonomy_context_used is not None:
+            supplied_examples = [
+                *candidate.taxonomy_context_used.focus_label.examples,
+                *[
+                    example
+                    for label in (
+                        candidate.taxonomy_context_used.decoy_labels
+                    )
+                    for example in label.examples
+                ],
+            ]
             imitation_issue = FewShotImitationGuard().find_imitation(
                 candidate.tagged_text,
-                candidate.taxonomy_context_used.focus_label.examples,
+                supplied_examples,
             )
             if imitation_issue is not None:
                 validation = DeterministicValidationResult(

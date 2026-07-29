@@ -836,15 +836,37 @@ class OfflineCompletionClient:
             {"label": item["label"], "value": item["value"]}
             for item in payload["positive_entities"]
         ]
-        tagged_parts = [f"<{item['label']}>{item['value']}</{item['label']}>" for item in entities]
+        tagged_parts = [
+            f"<{item['label']}>{item['value']}</{item['label']}>"
+            for item in entities
+        ]
+        content = " và ".join(tagged_parts)
+        planned_decoys = [
+            decoy
+            for decoy in payload["decoys"]
+            if decoy.get("realization_plan")
+        ]
+        if planned_decoys:
+            integrated = " và ".join(
+                (
+                    f"tham chiếu nghiệp vụ {decoy['value']} được "
+                    "đối chiếu trong cùng bước xử lý"
+                )
+                for decoy in planned_decoys
+            )
+            content = (
+                f"{content}; {integrated} để hoàn tất yêu cầu"
+            )
         text = self._render(
             profile,
             frame["document_type"],
             self._role(profile),
-            ", ".join(tagged_parts),
+            content,
             sample_structure,
         )
         for decoy in payload["decoys"]:
+            if decoy.get("realization_plan"):
+                continue
             text += f" {decoy['required_context_cues'][0].capitalize()} của hệ thống là {decoy['value']}."
         return self._completion(text, entities)
 

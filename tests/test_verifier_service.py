@@ -11,6 +11,8 @@ from pii_factory.application.verification import (
 )
 from pii_factory.domain.models import (
     ContextFrame,
+    DecoyRealizationPlan,
+    DecoySeed,
     DeterministicValidationResult,
     DiversityProfile,
     GeneratedEntity,
@@ -18,10 +20,12 @@ from pii_factory.domain.models import (
     GenerationQuery,
     GenerationTask,
     GenerationTaxonomyContext,
+    FewShotExample,
     LabelGenerationContext,
     LengthTarget,
     PositiveEntitySeed,
     RepairResult,
+    SampleStructureConfig,
     SeedPack,
     TokenUsage,
     ValidationIssue,
@@ -433,6 +437,27 @@ class VerifierServiceTests(unittest.TestCase):
                     expected_severity,
                 )
 
+    def test_decoy_integration_issues_always_regenerate(self) -> None:
+        for issue_type in (
+            "decoy_integration_weak",
+            "decoy_stock_scaffold",
+            "decoy_context_mismatch",
+        ):
+            with self.subTest(issue_type=issue_type):
+                route, issues = DeterministicIssueRouter.route(
+                    DeterministicValidationResult(
+                        valid=False,
+                        issues=[ValidationIssue(
+                            type=issue_type,
+                            scope="CONTEXT",
+                            reason="Decoy integration is invalid.",
+                        )],
+                    )
+                )
+
+                self.assertEqual(route, "REGENERATE")
+                self.assertEqual(issues[0].severity, "high")
+
     def test_pass_candidate_is_returned_without_repair(self) -> None:
         client = FakeVerifierClient([decision("PASS")])
         original_candidate = candidate()
@@ -459,7 +484,10 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertIn("unnatural", system_prompt)
         self.assertIn("mixed_contrastive keeps tagged", system_prompt)
         self.assertIn("never apply decoy_only rules", system_prompt)
-        self.assertIn("may later be called `field`", system_prompt)
+        self.assertIn(
+            "technical_schema blueprint",
+            system_prompt,
+        )
         self.assertIn("at most 10 issues", system_prompt)
         self.assertIn("suggested_fix must always be a non-empty string", system_prompt)
         self.assertIn("never", system_prompt)
@@ -504,6 +532,118 @@ class VerifierServiceTests(unittest.TestCase):
         )
         self.assertIn("Minimum length is enforced", system_prompt)
         self.assertIn("do not invent a", system_prompt)
+
+    def test_judge_receives_taxonomy_decoy_plan_examples_and_metrics(
+        self,
+    ) -> None:
+        mixed_task = task().copy(update={
+            "sample_type": "hard_negative",
+            "sample_structure": SampleStructureConfig(
+                type="contract"
+            ),
+        })
+        mixed_pack = seed_pack().copy(update={
+            "sample_type": "hard_negative",
+            "hard_negative_mode": "mixed_contrastive",
+            "decoys": [DecoySeed(
+                strategy_id="person_semantic_ambiguity",
+                target_label="PERSON",
+                value="Nguyễn Văn Trỗi",
+                family="semantic_ambiguity",
+                semantic_type="taxonomy_few_shot_contrast",
+                negative_labels=["PERSON"],
+                required_context_cues=["tuyến giao nhận"],
+                realization_plan=DecoyRealizationPlan(
+                    blueprint_id="person_semantic_ambiguity",
+                    family="semantic_ambiguity",
+                    contrast_principle=(
+                        "The surface is a street name, not a person."
+                    ),
+                    anchor_label="PERSON",
+                    relation="delivery_route",
+                    discourse_stage="processing",
+                    evidence_cues=["tuyến giao nhận"],
+                    source_example_ids=[
+                        "person_hard_negative_1",
+                    ],
+                    compatible_domains=["support"],
+                ),
+            )],
+        })
+        mixed_candidate = candidate().copy(update={
+            "tagged_text": (
+                "<PERSON>Lò Thị Cẩy</PERSON> xác nhận yêu cầu đi qua "
+                "phố Nguyễn Văn Trỗi trước khi xử lý."
+            ),
+        })
+        examples = [
+            FewShotExample(
+                id=f"person_hard_negative_{index}",
+                expected_tagged_text=f"Ví dụ đối chiếu {index}.",
+                rationale=(
+                    "Bề mặt giống tên người nhưng giữ vai trò phi cá nhân."
+                ),
+            )
+            for index in range(1, 4)
+        ]
+        taxonomy_context = self.taxonomy_context.copy(update={
+            "sample_type": "hard_negative",
+            "decoy_labels": [
+                LabelGenerationContext(
+                    label="PERSON",
+                    definition="Tên của một người.",
+                    rule="Gắn khi bề mặt chỉ một người.",
+                    examples=examples,
+                )
+            ],
+        })
+
+        messages = VerifierService._judge_messages(
+            candidate=mixed_candidate,
+            task=mixed_task,
+            seed_pack=mixed_pack,
+            taxonomy_context=taxonomy_context,
+            deterministic_issues=(),
+        )
+        payload = json.loads(messages[1]["content"])
+        decoy_contract = payload["seed_contract"]["decoys"][0]
+
+        self.assertEqual(
+            decoy_contract["realization_plan"]["anchor_label"],
+            "PERSON",
+        )
+        self.assertEqual(
+            decoy_contract["realization_plan"]["relation"],
+            "delivery_route",
+        )
+        self.assertEqual(
+            len(
+                payload["taxonomy_context"]["decoy_labels"][0][
+                    "examples"
+                ]
+            ),
+            3,
+        )
+        self.assertIn(
+            "rationale",
+            payload["taxonomy_context"]["decoy_labels"][0][
+                "examples"
+            ][0],
+        )
+        self.assertEqual(
+            payload["deterministic_metrics"]["planned_decoy_count"],
+            1,
+        )
+        self.assertEqual(
+            payload["deterministic_metrics"][
+                "decoy_integration_weak_count"
+            ],
+            0,
+        )
+        system_prompt = messages[0]["content"]
+        self.assertIn("DECOY_DETACHED", system_prompt)
+        self.assertIn("DECOY_CONTEXT_MISMATCH", system_prompt)
+        self.assertIn("same contrast principle", system_prompt)
 
     def test_authoritative_metrics_override_false_judge_rejections(self) -> None:
         false_issues = [

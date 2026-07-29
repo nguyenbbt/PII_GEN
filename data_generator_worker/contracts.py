@@ -63,6 +63,7 @@ class DecoySeed:
     possible_collision_labels: list[str] = field(default_factory=list)
     forbidden_context_cues: list[str] = field(default_factory=list)
     must_remain_untagged: bool = True
+    realization_plan: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

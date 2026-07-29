@@ -54,10 +54,27 @@ _TICKET_WITH_CONTEXT = re.compile(
     r"\s*(?:là|số|:)?\s*"
     r"(?P<value>[A-Z]{2,10}-[A-Z0-9]+(?:-[A-Z0-9]+)+)"
 )
+_HARD_NEGATIVE_TARGET_MEANING = (
+    r"(?:email|số\s+điện\s+thoại|PII|thông\s+tin\s+cá\s+nhân|"
+    r"địa\s+chỉ(?:\s+(?:mạng|giao\s+hàng))?|tên\s+người|"
+    r"số\s+thẻ|tài\s+khoản|hộ\s+chiếu|ngày|giờ|địa\s+điểm)"
+)
 _HARD_NEGATIVE_META = re.compile(
-    r"(?i)(?:đây|giá\s+trị\s+này|chuỗi\s+này|dữ\s+liệu\s+này)?\s*"
-    r"(?:không\s+phải\s+(?:là\s+)?(?:email|số\s+điện\s+thoại|PII|thông\s+tin\s+cá\s+nhân)"
-    r"|chỉ\s+là\s+(?:dữ\s+liệu|chuỗi|giá\s+trị)\s+giả)"
+    rf"(?i)(?:"
+    rf"(?:tôi\s+xin\s+)?(?:nhấn\s+mạnh|lưu\s+ý)(?:\s+rằng)?\s+"
+    rf"(?:đây|giá\s+trị\s+này|chuỗi\s+này|dữ\s+liệu\s+này)\s+"
+    rf"(?:là\s+[^.!?;\n]{{0,120}}?,?\s*)?"
+    rf"không\s+phải\s+(?:là\s+)?{_HARD_NEGATIVE_TARGET_MEANING}"
+    rf"|(?:nhưng\s+)?(?:đây|đó)\s+không\s+phải\s+(?:là\s+)?"
+    rf"{_HARD_NEGATIVE_TARGET_MEANING}"
+    rf"|không\s+phải\s+(?:là\s+)?{_HARD_NEGATIVE_TARGET_MEANING}"
+    rf"|(?:đây|giá\s+trị\s+này|chuỗi\s+này|dữ\s+liệu\s+này)?\s*"
+    rf"chỉ\s+là\s+(?:dữ\s+liệu|chuỗi|giá\s+trị)\s+giả"
+    rf"|(?:it|this|that)\s+is\s+not\s+(?:an?\s+)?"
+    rf"(?:email|phone\s+number|PII|personal\s+information|network\s+address|"
+    rf"shipping\s+address|person(?:'s)?\s+name|card\s+number|account|"
+    rf"passport|date|time|location)"
+    rf")"
 )
 _ADDRESS = re.compile(r"(?=.*\d)(?=.*[^\W\d_]).*\s+.*", re.UNICODE)
 _TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9_]*>")
@@ -147,20 +164,59 @@ class SeedPackValidator:
                 issues.append(self._issue("unsupported_decoy", "hard_negative has too few decoys"))
             if len(pack.decoys) > self.hard_negative.max_decoys:
                 issues.append(self._issue("unsupported_decoy", "hard_negative exceeds max_decoys"))
+            taxonomy_by_code = {
+                label.code: label
+                for label in taxonomy
+            }
             for decoy in pack.decoys:
                 if decoy.value in seen:
                     issues.append(self._issue("invalid_seed", "decoy duplicates a positive seed", decoy.target_label, decoy.value))
                 strategies = HARD_NEGATIVE_STRATEGIES.get(decoy.target_label, ())
                 strategy = next((item for item in strategies if item.strategy_id == decoy.strategy_id), None)
-                if strategy is None:
+                taxonomy_label = taxonomy_by_code.get(
+                    decoy.target_label
+                )
+                taxonomy_blueprint = next(
+                    (
+                        item
+                        for item in (
+                            taxonomy_label.decoy_blueprints
+                            if taxonomy_label is not None
+                            else ()
+                        )
+                        if item.id == decoy.strategy_id
+                    ),
+                    None,
+                )
+                if strategy is None and taxonomy_blueprint is None:
                     issues.append(self._issue("unsupported_decoy", "decoy strategy is not registered", decoy.target_label, decoy.value))
-                else:
+                elif strategy is not None:
                     try:
                         strategy_matches = strategy.validator(decoy.value)
                     except (IndexError, TypeError, ValueError):
                         strategy_matches = False
                     if not strategy_matches:
                         issues.append(self._issue("malformed_seed", "decoy value does not match its strategy", decoy.target_label, decoy.value))
+                else:
+                    assert taxonomy_blueprint is not None
+                    if decoy.value not in taxonomy_blueprint.surface_templates:
+                        issues.append(self._issue(
+                            "malformed_seed",
+                            "decoy value does not match its taxonomy blueprint",
+                            decoy.target_label,
+                            decoy.value,
+                        ))
+                    if (
+                        decoy.realization_plan is None
+                        or decoy.realization_plan.blueprint_id
+                        != taxonomy_blueprint.id
+                    ):
+                        issues.append(self._issue(
+                            "unsupported_decoy",
+                            "taxonomy decoy requires a matching realization plan",
+                            decoy.target_label,
+                            decoy.value,
+                        ))
                 if not decoy.required_context_cues:
                     issues.append(self._issue("unsupported_decoy", "decoy requires contextual cues", decoy.target_label, decoy.value))
                 if re.fullmatch(r"[a-z_]+-\d+(?:-beta)?", decoy.value, re.IGNORECASE):
@@ -265,9 +321,275 @@ class SeedPackValidator:
         return labels
 
 
+class DecoyIntegrationValidator:
+    """Check structural integration for taxonomy-backed mixed decoys."""
+
+    _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+    _STOCK_TAIL = re.compile(
+        r"^\s*(?:ngoài\s+ra|ghi\s+chú|lưu\s+ý)\s*[:;,\-]?",
+        re.IGNORECASE,
+    )
+    _STOCK_TECHNICAL_SCAFFOLD = re.compile(
+        r"(?:tên\s+trường|mã\s+danh\s+mục|"
+        r"schema(?:\s+field)?|database\s+column|"
+        r"data\s+field|trường\s+dữ\s+liệu|cột\s+dữ\s+liệu)",
+        re.IGNORECASE,
+    )
+
+    def __init__(
+        self,
+        *,
+        require_context_compatible: bool = True,
+        reject_detachable: bool = True,
+    ) -> None:
+        self.require_context_compatible = (
+            require_context_compatible
+        )
+        self.reject_detachable = reject_detachable
+
+    def validate(
+        self,
+        *,
+        tagged_text: str,
+        seed_pack: SeedPack,
+    ) -> list[ValidationIssue]:
+        if (
+            SampleType(seed_pack.sample_type)
+            != SampleType.HARD_NEGATIVE
+            or seed_pack.hard_negative_mode != "mixed_contrastive"
+        ):
+            return []
+
+        clean = _TAG.sub("", tagged_text).strip()
+        units = self._discourse_units(clean)
+        issues: list[ValidationIssue] = []
+        anchor_values_by_label: dict[str, list[str]] = {}
+        for entity in seed_pack.positive_entities:
+            anchor_values_by_label.setdefault(
+                entity.label,
+                [],
+            ).append(entity.value)
+
+        for decoy in seed_pack.decoys:
+            plan = decoy.realization_plan
+            if plan is None:
+                continue
+
+            if (
+                self.require_context_compatible
+                and plan.compatible_domains
+                and seed_pack.context_frame.domain
+                not in plan.compatible_domains
+            ):
+                issues.append(self._issue(
+                    "decoy_context_mismatch",
+                    (
+                        f"context domain {seed_pack.context_frame.domain!r} "
+                        "is incompatible with the selected decoy blueprint"
+                    ),
+                    decoy,
+                    scope="CONTEXT",
+                ))
+
+            decoy_units = self._containing_units(
+                units,
+                decoy.value,
+            )
+            anchor_units = sorted({
+                index
+                for value in anchor_values_by_label.get(
+                    plan.anchor_label,
+                    [],
+                )
+                for index in self._containing_units(units, value)
+            })
+            if (
+                self.reject_detachable
+                and (
+                    not decoy_units
+                    or not anchor_units
+                    or any(
+                        min(
+                            abs(decoy_index - anchor_index)
+                            for anchor_index in anchor_units
+                        ) > 1
+                        for decoy_index in decoy_units
+                    )
+                )
+            ):
+                issues.append(self._issue(
+                    "decoy_integration_weak",
+                    (
+                        "decoy must share a discourse unit with its positive "
+                        "anchor or appear in an immediately adjacent unit"
+                    ),
+                    decoy,
+                    scope="TEXT",
+                ))
+
+            for unit_index in decoy_units:
+                unit = units[unit_index]
+                if (
+                    self.reject_detachable
+                    and self._has_stock_scaffold(
+                        unit,
+                        decoy.value,
+                    )
+                ):
+                    issues.append(self._issue(
+                        "decoy_stock_scaffold",
+                        (
+                            "decoy is introduced through a stock trailing "
+                            "note instead of the main event"
+                        ),
+                        decoy,
+                        scope="TEXT",
+                    ))
+                if self._STOCK_TECHNICAL_SCAFFOLD.search(unit):
+                    if (
+                        self.require_context_compatible
+                        and (
+                        plan.family != "technical_schema"
+                        or seed_pack.context_frame.domain
+                        not in plan.compatible_domains
+                        )
+                    ):
+                        issues.append(self._issue(
+                            "decoy_context_mismatch",
+                            (
+                                "technical schema/field wording is not "
+                                "compatible with this decoy blueprint and "
+                                "context"
+                            ),
+                            decoy,
+                            scope="CONTEXT",
+                        ))
+            if (
+                self.reject_detachable
+                and self._is_short_detached_final_sentence(
+                    clean,
+                    decoy.value,
+                    anchor_values_by_label.get(
+                        plan.anchor_label,
+                        [],
+                    ),
+                )
+            ):
+                issues.append(self._issue(
+                    "decoy_integration_weak",
+                    (
+                        "decoy is isolated in a short final sentence "
+                        "and fails the deletion test"
+                    ),
+                    decoy,
+                    scope="TEXT",
+                ))
+        return issues
+
+    @staticmethod
+    def _discourse_units(clean_text: str) -> list[str]:
+        line_units = [
+            unit.strip()
+            for unit in re.split(r"(?:\r?\n)+", clean_text)
+            if unit.strip()
+        ]
+        if len(line_units) > 1:
+            return line_units
+        return [
+            unit.strip()
+            for unit in DecoyIntegrationValidator._SENTENCE_SPLIT.split(
+                clean_text
+            )
+            if unit.strip()
+        ]
+
+    @staticmethod
+    def _containing_units(
+        units: Sequence[str],
+        value: str,
+    ) -> list[int]:
+        return [
+            index
+            for index, unit in enumerate(units)
+            if value in unit
+        ]
+
+    @classmethod
+    def _has_stock_scaffold(
+        cls,
+        unit: str,
+        decoy_value: str,
+    ) -> bool:
+        return any(
+            decoy_value in sentence
+            and cls._STOCK_TAIL.search(sentence)
+            for sentence in cls._SENTENCE_SPLIT.split(unit)
+        )
+
+    @classmethod
+    def _is_short_detached_final_sentence(
+        cls,
+        clean_text: str,
+        decoy_value: str,
+        anchor_values: Sequence[str],
+    ) -> bool:
+        sentences = [
+            sentence.strip()
+            for sentence in re.split(
+                r"(?<=[.!?])\s+|(?:\r?\n)+",
+                clean_text,
+            )
+            if sentence.strip()
+        ]
+        if not sentences:
+            return False
+        final_sentence = sentences[-1]
+        return (
+            decoy_value in final_sentence
+            and not any(
+                value in final_sentence
+                for value in anchor_values
+            )
+            and len(
+                re.findall(
+                    r"\w+",
+                    final_sentence.replace(
+                        decoy_value,
+                        " ",
+                    ),
+                    re.UNICODE,
+                )
+            )
+            <= 8
+        )
+
+    @staticmethod
+    def _issue(
+        issue_type: str,
+        reason: str,
+        decoy: object,
+        *,
+        scope: str,
+    ) -> ValidationIssue:
+        return ValidationIssue(
+            type=issue_type,
+            scope=scope,
+            reason=reason,
+            label=getattr(decoy, "target_label"),
+            value=getattr(decoy, "value"),
+        )
+
+
 class DeterministicOutputValidator:
-    def __init__(self, config: ValidationConfig) -> None:
+    def __init__(
+        self,
+        config: ValidationConfig,
+        hard_negative: HardNegativeConfig | None = None,
+    ) -> None:
         self.config = config
+        self.hard_negative = (
+            hard_negative or HardNegativeConfig()
+        )
 
     def validate(
         self,
@@ -395,9 +717,13 @@ class DeterministicOutputValidator:
             if decoy.value in entity_values:
                 issues.append(self._decoy_issue("decoy_in_entities", "decoy cannot appear in entities", decoy))
             contexts = extract_occurrence_contexts(tagged_text, decoy.value)
-            if (
-                len(contexts) != occurrence_count
-                or not decoy_contexts_are_valid(
+            taxonomy_mixed_decoy = (
+                seed_pack.hard_negative_mode == "mixed_contrastive"
+                and decoy.realization_plan is not None
+            )
+            if len(contexts) != occurrence_count or (
+                not taxonomy_mixed_decoy
+                and not decoy_contexts_are_valid(
                     tagged_text,
                     decoy.value,
                     decoy.required_context_cues,
@@ -431,6 +757,18 @@ class DeterministicOutputValidator:
                 for cue in decoy.forbidden_context_cues
             ):
                 issues.append(self._decoy_issue("decoy_used_as_pii", "forbidden PII cue directly introduces decoy", decoy))
+
+        issues.extend(DecoyIntegrationValidator(
+            require_context_compatible=(
+                self.hard_negative.require_context_compatible_decoy
+            ),
+            reject_detachable=(
+                self.hard_negative.reject_detachable_decoy
+            ),
+        ).validate(
+            tagged_text=tagged_text,
+            seed_pack=seed_pack,
+        ))
 
         if SampleType(seed_pack.sample_type) == SampleType.HARD_NEGATIVE:
             meta_match = _HARD_NEGATIVE_META.search(clean_text)

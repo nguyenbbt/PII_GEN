@@ -36,7 +36,11 @@ class FewShotImitationGuard:
         candidate = self._normalize(tagged_text)
         closest: tuple[float, float, FewShotExample] | None = None
 
-        for example in examples:
+        unique_examples = {
+            example.id: example
+            for example in examples
+        }
+        for example in unique_examples.values():
             reference = self._normalize(example.expected_tagged_text)
             sequence_similarity = SequenceMatcher(
                 None,

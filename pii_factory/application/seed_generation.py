@@ -9,6 +9,7 @@ from .decoy_localization import localize_decoy
 from .value_bank import ValueBankEntityProvider
 from .hard_negative_base import DecoyStrategy, digits as _digits, strategy as _strategy
 from .hard_negative_variants import ADDITIONAL_HARD_NEGATIVE_STRATEGIES
+from .mixed_decoy_planner import MixedContrastiveDecoyPlanner
 from ..domain.models import (
     ContextFrame,
     DecoySeed,
@@ -30,6 +31,7 @@ class SeedPackFactory(Protocol):
         rng: random.Random,
         *,
         excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
+        excluded_decoy_strategy_ids: Collection[str] = (),
     ) -> SeedPack: ...
 
 
@@ -61,10 +63,19 @@ class ContextFrameSelector:
         rng: random.Random,
         *,
         decoy_semantic_types: Sequence[str] = (),
+        compatible_domains: Sequence[str] = (),
         excluded_frame_ids: Sequence[str] = (),
         preferred_frame_id: str | None = None,
     ) -> ContextFrame:
+        del decoy_semantic_types
         candidates = compatible_context_frames(focus_labels, excluded_frame_ids)
+        if compatible_domains:
+            allowed_domains = set(compatible_domains)
+            candidates = [
+                frame
+                for frame in candidates
+                if frame.domain in allowed_domains
+            ]
         if not candidates:
             raise ContextSelectionError(f"no context frame supports labels: {sorted(set(focus_labels))}")
         if preferred_frame_id:
@@ -391,7 +402,9 @@ class PositiveSeedFactory:
         rng: random.Random,
         *,
         excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
+        excluded_decoy_strategy_ids: Collection[str] = (),
     ) -> SeedPack:
+        del excluded_decoy_strategy_ids
         return SeedPack(
             task_id=task.task_id,
             sample_type=SampleType.POSITIVE,
@@ -419,8 +432,9 @@ class PureNegativeContentFactory:
         rng: random.Random,
         *,
         excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
+        excluded_decoy_strategy_ids: Collection[str] = (),
     ) -> SeedPack:
-        del excluded_values_by_label
+        del excluded_values_by_label, excluded_decoy_strategy_ids
         frame = self.selector.select(
             task.focus_labels, rng, preferred_frame_id=task.diversity_profile.context_frame_id
         )
@@ -450,6 +464,7 @@ class HardNegativeSeedFactory:
         rng: random.Random,
         *,
         excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
+        excluded_decoy_strategy_ids: Collection[str] = (),
     ) -> SeedPack:
         taxonomy_codes = {label.code for label in taxonomy}
         unknown = set(task.focus_labels) - taxonomy_codes
@@ -465,15 +480,61 @@ class HardNegativeSeedFactory:
             )
             if self.config.mode == "mixed_contrastive" else []
         )
-        supported = [label for label in task.focus_labels if HARD_NEGATIVE_SUPPORT.get(label, False)]
+        count = rng.randint(
+            self.config.min_decoys,
+            self.config.max_decoys,
+        )
+        if (
+            self.config.mode == "mixed_contrastive"
+            and any(
+                label.code in task.focus_labels
+                and label.decoy_blueprints
+                for label in taxonomy
+            )
+        ):
+            plan = MixedContrastiveDecoyPlanner(self.config).plan(
+                task=task,
+                taxonomy=taxonomy,
+                positive_entities=positives,
+                rng=rng,
+                count=count,
+                excluded_blueprint_ids=excluded_decoy_strategy_ids,
+            )
+            return SeedPack(
+                task_id=task.task_id,
+                sample_type=SampleType.HARD_NEGATIVE,
+                hard_negative_mode=self.config.mode,
+                positive_entities=positives,
+                decoys=list(plan.decoys),
+                context_frame=plan.context_frame,
+            )
+        supported = [
+            label
+            for label in task.focus_labels
+            if HARD_NEGATIVE_SUPPORT.get(label, False)
+            and any(
+                strategy.strategy_id not in excluded_decoy_strategy_ids
+                for strategy in HARD_NEGATIVE_STRATEGIES[label]
+            )
+        ]
         if not supported:
             raise UnsupportedDecoyError("none of the taxonomy focus labels supports a hard-negative strategy")
-        count = rng.randint(self.config.min_decoys, self.config.max_decoys)
         decoys: List[DecoySeed] = []
         seen: set[str] = set()
         for _ in range(count):
             target = rng.choice(supported)
-            strategy = rng.choice(HARD_NEGATIVE_STRATEGIES[target])
+            available_strategies = [
+                strategy
+                for strategy in HARD_NEGATIVE_STRATEGIES[target]
+                if strategy.strategy_id
+                not in excluded_decoy_strategy_ids
+            ]
+            if not available_strategies:
+                raise UnsupportedDecoyError(
+                    "no unused hard-negative strategy remains for "
+                    f"taxonomy label {target}"
+                )
+            strategy = rng.choice(available_strategies)
             for _ in range(10):
                 decoy = localize_decoy(
                     strategy.build(rng),
@@ -522,12 +583,14 @@ class SampleTypeRouter:
         rng: random.Random,
         *,
         excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
+        excluded_decoy_strategy_ids: Collection[str] = (),
     ) -> SeedPack:
         return self.factories[SampleType(task.sample_type)].build(
             task,
             taxonomy,
             rng,
             excluded_values_by_label=excluded_values_by_label,
+            excluded_decoy_strategy_ids=excluded_decoy_strategy_ids,
         )
 
 

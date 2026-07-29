@@ -119,6 +119,12 @@ gate được bật.
 44 label; mỗi label phải có ít nhất ba example cho từng nhóm `POSITIVE`,
 `PURE_NEGATIVE` và `HARD_NEGATIVE`.
 
+Mỗi label còn có `DECOY_BLUEPRINTS`. Một blueprint lưu `source_example_ids`,
+`family`, `contrast_principle`, các surface/cue, context/structure tương thích và
+quan hệ tích hợp. Parser từ chối blueprint tham chiếu example không tồn tại trong
+`EXAMPLES.HARD_NEGATIVE` của chính label; nếu label khai báo blueprint thì phải có
+ít nhất ba blueprint và ít nhất hai blueprint phi kỹ thuật.
+
 Label từ tài liệu hard-negative bên ngoài không được thêm vào hệ thống. Chỉ label có
 trong taxonomy snapshot của run được sử dụng.
 
@@ -167,6 +173,19 @@ Run chỉ `COMPLETED` khi mỗi slot có một sample `ACCEPTED`.
 - `hard_negative/decoy_only`: chỉ có decoy không gắn tag;
 - `hard_negative/mixed_contrastive`: có positive PII và decoy dễ nhầm.
 
+Riêng `mixed_contrastive`,
+`pii_factory/application/mixed_decoy_planner.py` chọn đồng thời:
+
+```text
+(context frame, taxonomy decoy blueprint, positive anchor, integration relation)
+```
+
+Planner ưu tiên family `semantic_ambiguity/business_reference/operational_code`
+và dành khoảng 10% slot phù hợp cho `technical_schema`, luôn bị chặn bởi
+`hard_negative.technical_decoy_max_ratio`. Blueprint kỹ thuật chỉ được dùng trong
+domain kỹ thuật/data/system tương thích. Retry scope `CONTEXT` giữ blueprint và chỉ
+đổi sang frame tương thích; retry scope `SEEDS` chọn lại seed và blueprint.
+
 `ValueBankEntityProvider` đọc lazy và cache file được khai báo tại
 `value_bank.language_files[language]`. Tên file tương đối được resolve từ
 `value_bank.path`; đường dẫn tuyệt đối cũng được hỗ trợ. Mapping mặc định là
@@ -206,6 +225,11 @@ chọn nếu chuỗi mới giống hoàn toàn; `Visa`, `VISA` và `visa` vẫn 
 nhau. Thiếu directory/language/class, class rỗng, JSON lỗi, version sai hoặc locale
 sai đều tạo `value_bank_error` scope `SEEDS` và dừng retry vô ích.
 
+Riêng khi chọn `ADDRESS`, provider loại khỏi tập sampling những source có hậu tố
+phân tách bằng dấu phẩy trùng với một value trong pool `LOCATION`. File Value Bank
+không bị sửa; đây là boundary gate để địa chỉ đường/tòa/phòng không nuốt quận,
+tỉnh hoặc thành phố.
+
 `SeedPackValidator` kiểm tra:
 
 - label thuộc taxonomy;
@@ -215,6 +239,7 @@ sai đều tạo `value_bank_error` scope `SEEDS` và dừng retry vô ích.
 - seed từ Value Bank phải mang `format_variant=value_bank`, sau khi file đã được
   provider validate;
 - decoy strategy tồn tại;
+- taxonomy decoy khớp blueprint và `realization_plan`;
 - decoy không va chạm positive seed hoặc label cấu trúc khác;
 - required/forbidden context cues.
 
@@ -232,6 +257,12 @@ Faker name. Quy tắc taxonomy phân tách địa chỉ như sau:
 - label neo nhận `definition`, `rule` và đúng ba example tương ứng với
   `task.sample_type` đã được random;
 - robin labels chỉ nhận `definition` và `rule`;
+- trong `mixed_contrastive`, chỉ label thực sự được chọn làm decoy target mới nhận
+  đúng ba `HARD_NEGATIVE` examples kèm rationale trong `decoy_labels`;
+- example được blueprint tham chiếu qua `source_example_ids` luôn được ưu tiên
+  trong bộ ba; nếu taxonomy có nhiều hơn ba mẫu, phần còn lại được chọn
+  deterministic theo `task.random_seed`;
+- robin label không được chọn làm decoy vẫn không nhận example;
 - nếu một nhóm có hơn ba example, selector dùng `task.random_seed` để chọn ba mẫu
   có thể tái lập;
 - context thực tế được lưu trong `taxonomy_context_used`.
@@ -279,8 +310,18 @@ Generator chỉ:
 
 Generator không quyết định candidate có được accept hay không.
 
+Với taxonomy-backed mixed decoy, Generator đọc ba hard-negative few-shot của
+decoy target, rút ra `contrast_principle` trong nội bộ rồi áp dụng nguyên tắc đó vào
+actor, action, opening, clause order và document structure mới. Prompt cấm sao chép
+sentence skeleton/few-shot wording, cấm stock tail `Ngoài ra`/`Ghi chú`, cấm câu
+cuối chỉ chứa decoy và không còn ép cue phải được chép nguyên văn. Contract phải
+đưa decoy vào xử lý nghiệp vụ chính; chat phải có người còn lại phản hồi hoặc hành
+động dựa trên decoy. Mỗi decoy nhận một `anchor_placeholder` cụ thể; Generator phải
+đặt đúng placeholder đã gắn tag trong cùng câu/lượt chat khi có thể và chỉ mô tả vai
+trò nghiệp vụ khẳng định của decoy, không giải thích kiểu “không phải [nghĩa nhãn]”.
+
 Few-shot chỉ dạy ngữ nghĩa label và ranh giới annotation. Prompt version
-`data-generator.v11.6.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
+`data-generator.v12.0.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
 opening phrase, clause order và sentence structure của example.
 Prompt cấm ghép seed thành danh sách dấu phẩy; mỗi entity phải có vai trò nghiệp vụ
 và được phân bố qua nhiều câu/lượt trong cùng một sự kiện.
@@ -318,12 +359,21 @@ Technical gate luôn chạy trước Formatter:
 - clean-text word count đạt tối thiểu của `length_target`; vượt cận trên được bỏ qua;
 - positive seed xuất hiện nguyên văn; nếu cùng value lặp lại trong câu thì mọi
   occurrence đều phải có tag và một metadata entry tương ứng;
-- decoy luôn untagged và có context cue;
+- decoy luôn untagged; decoy legacy cần exact cue, taxonomy-backed mixed decoy
+  được kiểm tra theo `realization_plan`;
+- `DecoyIntegrationValidator` yêu cầu positive anchor ở cùng hoặc discourse unit
+  liền kề, context tương thích và không có stock/detached tail; khi văn bản có xuống
+  dòng, một paragraph hoặc một lượt chat là một discourse unit, nếu không mới tách
+  theo câu;
 - pure-negative/hard-negative structured PII scan;
 - structured PII scan cho negative sample.
 - `FewShotImitationGuard` che tagged entity rồi so sánh sequence/token n-gram với
-  ba focus examples; candidate quá giống phải regenerate ngay cả khi Judge
-  đang tắt.
+  ba focus examples và toàn bộ decoy examples đã cấp, deduplicate theo example ID;
+  candidate quá giống phải regenerate ngay cả khi Judge đang tắt.
+
+Các issue `decoy_integration_weak`, `decoy_stock_scaffold` và
+`decoy_context_mismatch` là lỗi nội dung, luôn route `REGENERATE`, không đưa qua
+Repair.
 
 Khi `novelty.enabled=true`, NoveltyGuard kiểm tra entity value giữa các sample đã
 accept và sentence/entity novelty trong cùng run. `mode=audit` chỉ ghi assessment;
@@ -360,9 +410,23 @@ Repair thêm tag và entity, deterministic gate kiểm tra lại, rồi Formatte
 start/end offset. Deterministic issue là bằng chứng bắt buộc: Judge không được trả
 `PASS` khi danh sách này còn issue.
 
+Với mixed decoy, Judge nhận `contrast_principle`, `realization_plan`, ba decoy
+few-shot đã chọn cùng deterministic integration metrics. Cùng một nguyên tắc tương
+phản trong sự kiện mới là hợp lệ; sao chép cấu trúc few-shot, decoy nối thêm,
+technical wording sai context hoặc decoy tách khỏi anchor đều phải `REGENERATE`.
+
 Sau Repair, code bảo toàn mọi occurrence của positive seed và dựng lại metadata từ
 tag trước khi re-check. Vì vậy nếu LLM vô tình bỏ tag ở lần nhắc lại thứ hai hoặc thứ
 ba, code tự khôi phục thay vì regenerate cả nội dung.
+
+Ngay sau Generator, placeholder binder cũng có một repair deterministic giới hạn:
+nếu `entities` khai báo đúng cặp label/placeholder nhưng placeholder đó chưa có bất
+kỳ occurrence được tag nào, Python khôi phục tag trước khi chèn Value Bank value.
+Nếu LLM tự phát minh một surface trong tag, binder chỉ rebind surface đó sang seed
+khi cặp label/value cũng được khai báo trong `entities` và đúng label đang còn
+thiếu; entity bổ sung sau khi seed đã được bind không bị thay đổi.
+Placeholder không được khai báo hoặc một tham chiếu phụ bên ngoài occurrence đã tag
+vẫn được thay bằng mô tả generic, nên không làm rò seed value vào vị trí mơ hồ.
 
 Với Value Bank entry ghép nhiều taxonomy boundary, Repair được phép tách tag nhưng
 không được đổi clean surface. Ví dụ
@@ -635,7 +699,7 @@ Các field chính:
 | `max_regenerate_attempts` | Số lần sinh lại trong cùng task |
 | `max_task_replacements` | Số task thay thế tối đa cho mỗi slot |
 | `value_bank` | `path`, `language_files`, seed-pack retry và unseeded-PII policy; bật `allow_additional_unseeded_pii` để verifier gắn nhãn PII phát sinh trong context |
-| `hard_negative` | Mode, decoy count và focus limits |
+| `hard_negative` | Mode, decoy count, focus limits, technical hard cap và context/integration policy |
 | `complexity_limits` | Complexity budget theo sample type |
 | `validation` | Technical validator settings; technical validation luôn chạy |
 | `validation.quality_checks_enabled` | Cờ legacy; chỉ migrate sang `novelty.enabled`/`verifier.enabled` khi section mới tương ứng chưa khai báo |
@@ -645,6 +709,23 @@ Các field chính:
 | `verifier.max_repairs_per_candidate` | Cho phép `0`, `1` hoặc `2`; vòng hai chỉ chạy khi re-Judge còn trả lỗi cục bộ `FIXABLE` |
 | `parallel_generation` | Số worker, kích thước shard và số lần retry mỗi shard |
 | `random_seed` | Tái lập task/seed selection |
+
+Thiết lập mixed decoy khuyến nghị:
+
+```json
+{
+  "hard_negative": {
+    "mode": "mixed_contrastive",
+    "min_decoys": 1,
+    "max_decoys": 1,
+    "max_focus_labels": 8,
+    "unsupported_label_policy": "rebuild_task",
+    "technical_decoy_max_ratio": 0.15,
+    "require_context_compatible_decoy": true,
+    "reject_detachable_decoy": true
+  }
+}
+```
 
 Ví dụ:
 

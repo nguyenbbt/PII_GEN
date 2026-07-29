@@ -80,12 +80,77 @@ def replace_entity_placeholders(
     for raw in entities:
         if not isinstance(raw, Mapping):
             raise ValueError("each generated entity must be an object")
+    declared_pairs = {
+        (
+            str(raw.get("label", "")).strip().upper(),
+            str(raw.get("value", "")).strip(),
+        )
+        for raw in entities
+    }
+    declared_placeholders: set[str] = set()
+    for raw in entities:
+        label = str(raw.get("label", "")).strip().upper()
+        raw_value = str(raw.get("value", "")).strip()
+        binding = (
+            by_placeholder.get(raw_value)
+            or by_bare_placeholder.get(raw_value)
+        )
+        if binding is not None and binding.label == label:
+            declared_placeholders.add(binding.placeholder)
+
+    expected_by_label: defaultdict[
+        str,
+        list[PlaceholderBinding],
+    ] = defaultdict(list)
+    for binding in bindings:
+        expected_by_label[binding.label].append(binding)
+    represented_placeholders = {
+        binding.placeholder
+        for match in _ENTITY_TAG.finditer(tagged_text)
+        for label, content in [(match.group(1), match.group(2))]
+        for binding in [
+            by_placeholder.get(content)
+            or by_bare_placeholder.get(content)
+        ]
+        if binding is not None and binding.label == label
+    }
+    missing_by_label = {
+        label: [
+            binding
+            for binding in label_bindings
+            if binding.placeholder not in represented_placeholders
+        ]
+        for label, label_bindings in expected_by_label.items()
+    }
+    invented_bindings: dict[
+        tuple[str, str],
+        PlaceholderBinding,
+    ] = {}
+    for match in _ENTITY_TAG.finditer(tagged_text):
+        label, content = match.group(1), match.group(2)
+        if (
+            by_placeholder.get(content) is not None
+            or by_bare_placeholder.get(content) is not None
+            or _PLACEHOLDER.fullmatch(content) is not None
+            or _BARE_PLACEHOLDER.fullmatch(content) is not None
+            or (label, content.strip()) not in declared_pairs
+            or (label, content) in invented_bindings
+        ):
+            continue
+        missing = missing_by_label.get(label, [])
+        if missing:
+            invented_bindings[(label, content)] = missing.pop(0)
 
     repaired_bare = 0
+    rebound_invented_values = 0
+    repaired_missing_tags = 0
     generic_references = 0
+    tagged_placeholders: set[str] = set()
 
     def bind_tag(match: re.Match[str]) -> str:
-        nonlocal repaired_bare, generic_references
+        nonlocal repaired_bare
+        nonlocal rebound_invented_values
+        nonlocal generic_references
         label, content = match.group(1), match.group(2)
         binding = by_placeholder.get(content)
         if binding is None and content in by_bare_placeholder:
@@ -97,7 +162,18 @@ def replace_entity_placeholders(
                     f"placeholder {content!r} is wrapped with {label!r}, "
                     f"expected {binding.label!r}"
                 )
+            tagged_placeholders.add(binding.placeholder)
             return f"<{label}>{binding.value}</{label}>"
+
+        invented_binding = invented_bindings.get(
+            (label, content)
+        )
+        if invented_binding is not None:
+            rebound_invented_values += 1
+            tagged_placeholders.add(invented_binding.placeholder)
+            return (
+                f"<{label}>{invented_binding.value}</{label}>"
+            )
 
         unknown = _PLACEHOLDER.search(content)
         if unknown is not None:
@@ -108,7 +184,18 @@ def replace_entity_placeholders(
     bound_text = _ENTITY_TAG.sub(bind_tag, tagged_text)
 
     def replace_remaining_placeholder(match: re.Match[str]) -> str:
-        nonlocal generic_references
+        nonlocal generic_references, repaired_missing_tags
+        binding = by_placeholder.get(match.group(0))
+        if (
+            binding is not None
+            and binding.placeholder in declared_placeholders
+            and binding.placeholder not in tagged_placeholders
+        ):
+            repaired_missing_tags += 1
+            return (
+                f"<{binding.label}>{binding.value}"
+                f"</{binding.label}>"
+            )
         generic_references += 1
         return _generic_reference(match.group(1), language)
 
@@ -118,11 +205,20 @@ def replace_entity_placeholders(
     )
 
     def replace_remaining_bare(match: re.Match[str]) -> str:
-        nonlocal generic_references
+        nonlocal generic_references, repaired_missing_tags
         token = match.group(0)
         binding = by_bare_placeholder.get(token)
         if binding is None:
             return token
+        if (
+            binding.placeholder in declared_placeholders
+            and binding.placeholder not in tagged_placeholders
+        ):
+            repaired_missing_tags += 1
+            return (
+                f"<{binding.label}>{binding.value}"
+                f"</{binding.label}>"
+            )
         generic_references += 1
         return _generic_reference(binding.label, language)
 
@@ -138,6 +234,17 @@ def replace_entity_placeholders(
         logger.warning(
             "normalized %s known bare placeholder(s) inside entity tags",
             repaired_bare,
+        )
+    if rebound_invented_values:
+        logger.warning(
+            "rebound %s declared invented entity occurrence(s) "
+            "to Value Bank seeds",
+            rebound_invented_values,
+        )
+    if repaired_missing_tags:
+        logger.warning(
+            "restored %s declared placeholder occurrence(s) missing tags",
+            repaired_missing_tags,
         )
     if generic_references:
         logger.warning(

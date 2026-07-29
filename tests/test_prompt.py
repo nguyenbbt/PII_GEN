@@ -50,7 +50,7 @@ class DataGeneratorPromptTests(unittest.TestCase):
 
         messages = build_messages(request)
 
-        self.assertEqual(PROMPT_VERSION, "data-generator.v11.6.0")
+        self.assertEqual(PROMPT_VERSION, "data-generator.v12.0.0")
         self.assertEqual(messages[0], {"role": "system", "content": SYSTEM_PROMPT})
         self.assertNotIn("task-1", messages[0]["content"])
         self.assertIn("# Generation Request", messages[1]["content"])
@@ -118,10 +118,42 @@ class DataGeneratorPromptTests(unittest.TestCase):
                     "value": "PAYMENT-VISA-ENABLED", "semantic_type": "payment_feature_flag",
                     "required_context_cues": ["tùy chọn cấu hình"],
                     "forbidden_context_cues": ["thẻ được phát hành"],
+                    "realization_plan": {
+                        "blueprint_id": "card_issuer_semantic_ambiguity",
+                        "family": "semantic_ambiguity",
+                        "contrast_principle": "The surface names a travel document, not a card network.",
+                        "anchor_label": "CARD_ISSUER",
+                        "relation": "comparison",
+                        "discourse_stage": "processing",
+                        "evidence_cues": ["hồ sơ thị thực"],
+                        "source_example_ids": [
+                            "card_issuer_hard_negative_1",
+                        ],
+                    },
                 }],
                 "context_frame": {"frame_id": "payment_dispute"},
             },
-            taxonomy_context={"CARD_ISSUER": {"definition": "Tổ chức hoặc mạng phát hành thẻ"}},
+            taxonomy_context={
+                "focus_label": {
+                    "label": "CARD_ISSUER",
+                    "definition": "Tổ chức hoặc mạng phát hành thẻ",
+                    "rule": "Use only in payment-card context.",
+                    "examples": [],
+                },
+                "decoy_labels": [{
+                    "label": "CARD_ISSUER",
+                    "definition": "Tổ chức hoặc mạng phát hành thẻ",
+                    "rule": "Use only in payment-card context.",
+                    "examples": [
+                        {
+                            "id": f"card_issuer_hard_negative_{index}",
+                            "expected_tagged_text": f"Ví dụ đối chiếu {index}",
+                            "rationale": "Bề mặt giống nhãn nhưng vai trò nghiệp vụ khác.",
+                        }
+                        for index in range(1, 4)
+                    ],
+                }],
+            },
         )
 
         envelope = json.loads(messages[1]["content"].split("```json\n", 1)[1].split("\n```", 1)[0])
@@ -134,15 +166,46 @@ class DataGeneratorPromptTests(unittest.TestCase):
         )
         self.assertNotIn('"value": "Visa"', messages[1]["content"])
         self.assertIn("assigned taxonomy label", rules)
-        self.assertIn("travel visa", rules)
-        self.assertIn("bank-card network", rules)
+        self.assertIn("infer why their surfaces", rules)
+        self.assertIn("realization_plan", rules)
         self.assertIn("single realistic", rules)
         self.assertIn("removing the decoy clause", rules)
-        self.assertIn("End the decoy clause with an operational consequence", rules)
-        self.assertIn("operational cause, input, or object", instance_rules)
-        self.assertIn("actual record or payload processed through this decoy", instance_rules)
-        self.assertIn("Do not append a disclaimer", instance_rules)
+        self.assertIn("Do not force the event to end", rules)
+        self.assertIn(
+            "affirmative business role",
+            rules,
+        )
+        self.assertIn(
+            "never write 'không phải/not",
+            rules,
+        )
+        self.assertIn("contrast_principle", instance_rules)
+        self.assertIn("anchor_label=CARD_ISSUER", instance_rules)
+        self.assertIn(
+            "anchor_placeholder=[CARD_ISSUER_1]",
+            instance_rules,
+        )
+        self.assertIn("relation=comparison", instance_rules)
+        self.assertIn(
+            "same sentence or chat turn",
+            instance_rules,
+        )
+        self.assertIn(
+            "adjacent unit only when",
+            instance_rules,
+        )
+        self.assertIn("do not mechanically copy a cue", instance_rules)
+        self.assertNotIn(
+            "copy one required_context_cue unchanged",
+            instance_rules,
+        )
         self.assertNotIn("không phải dữ liệu cá nhân", rules + instance_rules)
+        self.assertEqual(
+            len(envelope["taxonomy_guidance"]["decoy_labels"][0]["examples"]),
+            3,
+        )
+        self.assertIn("Mixed-Decoy Prohibitions", messages[0]["content"])
+        self.assertIn("detached final sentence", messages[0]["content"])
 
     def test_prompt_enforces_numeric_length_entity_density_and_address_boundaries(self) -> None:
         messages = build_prompt_messages(

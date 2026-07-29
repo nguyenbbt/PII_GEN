@@ -86,6 +86,9 @@
     "min_decoys": 1,
     "max_decoys": 1,
     "max_focus_labels": 8,
+    "technical_decoy_max_ratio": 0.15,
+    "require_context_compatible_decoy": true,
+    "reject_detachable_decoy": true,
     "unsupported_label_policy": "rebuild_task"
   },
   "complexity_limits": {

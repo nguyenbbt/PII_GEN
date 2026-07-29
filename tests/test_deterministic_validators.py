@@ -6,6 +6,8 @@ from pii_factory.application.validators import DeterministicOutputValidator, See
 from data_generator_worker.validation import validate_seeded_contract
 from pii_factory.domain.models import (
     ContentSeeds,
+    ContextFrame,
+    DecoyRealizationPlan,
     DecoySeed,
     GeneratedEntity,
     HardNegativeConfig,
@@ -474,6 +476,42 @@ class DeterministicValidatorTests(unittest.TestCase):
         self.assertIn("decoy_context_unclear", by_type)
         self.assertIn("'dữ liệu lỗi'", by_type["decoy_context_unclear"].reason)
 
+    def test_hard_negative_rejects_target_meaning_disclaimer(self) -> None:
+        pack = self._taxonomy_mixed_pack()
+        candidates = (
+            (
+                "<PERSON>Nguyễn Minh Khôi</PERSON> xác nhận tuyến giao "
+                "nhận Nguyễn Văn Trỗi. Tôi xin nhấn mạnh rằng đây là "
+                "một tên tuyến nội bộ, không phải tên người."
+            ),
+            (
+                "<PERSON>Nguyễn Minh Khôi</PERSON> chọn tuyến Nguyễn "
+                "Văn Trỗi, nhưng đó không phải tên người."
+            ),
+            (
+                "<PERSON>Nguyễn Minh Khôi</PERSON> xử lý đơn tại "
+                "Căn C0905, 92 Nguyễn Hữu Cảnh. “Đường Thành Công” "
+                "là tên báo cáo quy hoạch, không phải địa chỉ giao hàng đâu."
+            ),
+        )
+        for tagged_text in candidates:
+            with self.subTest(tagged_text=tagged_text):
+                result = self.output.validate(
+                    tagged_text=tagged_text,
+                    entities=[{
+                        "label": "PERSON",
+                        "value": "Nguyễn Minh Khôi",
+                    }],
+                    seed_pack=pack,
+                    focus_labels=["PERSON"],
+                    max_entities=2,
+                )
+
+                self.assertIn(
+                    "hard_negative_meta_explanation",
+                    {issue.type for issue in result.issues},
+                )
+
     def test_decoy_only_accepts_one_natural_repetition_with_context_for_each_mention(self) -> None:
         pack = SeedPack(
             task_id="hard-repeat", sample_type="hard_negative", hard_negative_mode="decoy_only",
@@ -549,6 +587,163 @@ class DeterministicValidatorTests(unittest.TestCase):
             max_decoy_occurrences=3,
         )
 
+    def test_taxonomy_decoy_accepts_abstractive_evidence_near_anchor(
+        self,
+    ) -> None:
+        pack = self._taxonomy_mixed_pack()
+        text = (
+            "Nhân viên xác nhận <PERSON>Nguyễn Minh Khôi</PERSON> là "
+            "người nhận, rồi đối chiếu yêu cầu giao hàng đi qua phố "
+            "Nguyễn Văn Trỗi trước khi điều phối xe."
+        )
+
+        result = self.output.validate(
+            tagged_text=text,
+            entities=[{
+                "label": "PERSON",
+                "value": "Nguyễn Minh Khôi",
+            }],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            max_entities=2,
+        )
+
+        self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
+
+    def test_taxonomy_decoy_treats_a_paragraph_as_one_discourse_unit(
+        self,
+    ) -> None:
+        pack = self._taxonomy_mixed_pack()
+        result = self.output.validate(
+            tagged_text=(
+                "Yêu cầu của <PERSON>Nguyễn Minh Khôi</PERSON> đã được "
+                "tiếp nhận. Bộ phận kho kiểm tra số lượng trước khi xếp "
+                "chuyến. Tuyến giao nhận Nguyễn Văn Trỗi quyết định cửa "
+                "xuất hàng cho yêu cầu này.\n\n"
+                "Nhân viên điều phối tiếp tục theo dõi tiến độ giao."
+            ),
+            entities=[{
+                "label": "PERSON",
+                "value": "Nguyễn Minh Khôi",
+            }],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            max_entities=2,
+        )
+
+        self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
+
+    def test_taxonomy_decoy_rejects_stock_tail_and_detached_anchor(
+        self,
+    ) -> None:
+        pack = self._taxonomy_mixed_pack()
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Nguyễn Minh Khôi</PERSON> đã xác nhận đơn giao. "
+                "Kho đã hoàn tất bước phân loại. "
+                "Ngoài ra, ghi chú: Nguyễn Văn Trỗi."
+            ),
+            entities=[{
+                "label": "PERSON",
+                "value": "Nguyễn Minh Khôi",
+            }],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            max_entities=2,
+        )
+
+        issue_types = {issue.type for issue in result.issues}
+        self.assertIn("decoy_stock_scaffold", issue_types)
+        self.assertIn("decoy_integration_weak", issue_types)
+        integration_issues = [
+            issue
+            for issue in result.issues
+            if issue.type in {
+                "decoy_stock_scaffold",
+                "decoy_integration_weak",
+            }
+        ]
+        self.assertTrue(integration_issues)
+        self.assertEqual(
+            {issue.scope for issue in integration_issues},
+            {"TEXT"},
+        )
+
+    def test_stock_tail_is_detected_inside_a_multi_sentence_paragraph(
+        self,
+    ) -> None:
+        pack = self._taxonomy_mixed_pack()
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Nguyễn Minh Khôi</PERSON> đã xác nhận đơn giao."
+                "\n\nKho đã hoàn tất bước phân loại. "
+                "Ngoài ra, ghi chú: Nguyễn Văn Trỗi."
+            ),
+            entities=[{
+                "label": "PERSON",
+                "value": "Nguyễn Minh Khôi",
+            }],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            max_entities=2,
+        )
+
+        self.assertIn(
+            "decoy_stock_scaffold",
+            {issue.type for issue in result.issues},
+        )
+
+    def test_short_final_decoy_is_rejected_even_when_anchor_shares_paragraph(
+        self,
+    ) -> None:
+        pack = self._taxonomy_mixed_pack()
+        result = self.output.validate(
+            tagged_text=(
+                "Kho đã tiếp nhận yêu cầu.\n\n"
+                "<PERSON>Nguyễn Minh Khôi</PERSON> xác nhận xử lý. "
+                "Tuyến Nguyễn Văn Trỗi."
+            ),
+            entities=[{
+                "label": "PERSON",
+                "value": "Nguyễn Minh Khôi",
+            }],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            max_entities=2,
+        )
+
+        self.assertIn(
+            "decoy_integration_weak",
+            {issue.type for issue in result.issues},
+        )
+
+    def test_taxonomy_decoy_rejects_context_incompatible_with_blueprint(
+        self,
+    ) -> None:
+        pack = self._taxonomy_mixed_pack(
+            compatible_domains=["cybersecurity"],
+        )
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Nguyễn Minh Khôi</PERSON> xác nhận đơn được "
+                "chuyển qua phố Nguyễn Văn Trỗi để giao hàng."
+            ),
+            entities=[{
+                "label": "PERSON",
+                "value": "Nguyễn Minh Khôi",
+            }],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            max_entities=2,
+        )
+
+        mismatch = next(
+            issue
+            for issue in result.issues
+            if issue.type == "decoy_context_mismatch"
+        )
+        self.assertEqual(mismatch.scope, "CONTEXT")
+
     def test_schema_decoy_allows_field_coreference_in_later_paragraphs(self) -> None:
         pack = SeedPack(
             task_id="mixed-schema-repeat",
@@ -588,6 +783,56 @@ class DeterministicValidatorTests(unittest.TestCase):
         )
 
         self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
+
+    @staticmethod
+    def _taxonomy_mixed_pack(
+        compatible_domains: list[str] | None = None,
+    ) -> SeedPack:
+        return SeedPack(
+            task_id="taxonomy-mixed",
+            sample_type="hard_negative",
+            hard_negative_mode="mixed_contrastive",
+            context_frame=ContextFrame(
+                frame_id="delivery",
+                domain="delivery",
+                document_type="delivery_note",
+                tone="neutral",
+                max_sentences=4,
+                supported_labels=["PERSON"],
+            ),
+            positive_entities=[PositiveEntitySeed(
+                label="PERSON",
+                value="Nguyễn Minh Khôi",
+                semantic_role="recipient",
+            )],
+            decoys=[DecoySeed(
+                strategy_id="person_semantic_ambiguity",
+                target_label="PERSON",
+                value="Nguyễn Văn Trỗi",
+                family="semantic_ambiguity",
+                semantic_type="taxonomy_few_shot_contrast",
+                negative_labels=["PERSON"],
+                required_context_cues=["tuyến giao nhận"],
+                forbidden_context_cues=["người tên"],
+                realization_plan=DecoyRealizationPlan(
+                    blueprint_id="person_semantic_ambiguity",
+                    family="semantic_ambiguity",
+                    contrast_principle=(
+                        "The surface is a street name, not a person."
+                    ),
+                    anchor_label="PERSON",
+                    relation="delivery_route",
+                    discourse_stage="processing",
+                    evidence_cues=["tuyến giao nhận"],
+                    source_example_ids=[
+                        "person_hard_negative_1",
+                    ],
+                    compatible_domains=(
+                        compatible_domains or ["delivery"]
+                    ),
+                ),
+            )],
+        )
 
     def test_decoy_only_rejects_excessive_or_cross_paragraph_cueless_repetition(self) -> None:
         pack = SeedPack(

@@ -28,6 +28,7 @@ from ..domain.models import (
     VerifierDecision,
 )
 from ..ports import VerifierClient
+from .validators import DecoyIntegrationValidator
 
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ _ENTITY_TAG_PATTERN = re.compile(
     re.DOTALL,
 )
 
-JUDGE_PROMPT_VERSION = "verifier-judge.v3.5.0"
+JUDGE_PROMPT_VERSION = "verifier-judge.v4.0.0"
 REPAIR_PROMPT_VERSION = "verifier-repair.v1.4.0"
 
 _JUDGE_SYSTEM_PROMPT = f"""You judge semantic quality of synthetic PII NER data.
@@ -77,10 +78,17 @@ Judge only:
 2. The text uses task.language and is coherent and natural. Reject filler, repetitive
    scaffolding, unrelated clauses, unnatural seed insertion, or a comma-separated
    entity inventory.
-3. Keep decoys untagged in their stated non-PII role. Require an exact cue first;
-   an established schema/data field may later be called `field`.
-4. Focus-label few-shot examples teach semantics only. Reject recognizable copying
-   of their scenario, opening, clause order, or sentence skeleton.
+3. Keep decoys untagged in their non-PII role. Legacy decoys without a
+   realization_plan need an exact cue. For planned mixed decoys, judge
+   contrast_principle, anchor proximity (same/adjacent unit), relation, stage, and
+   context. Reject deletion-test failures, detached tails, or `Ngoài ra`/`Ghi chú`.
+   Schema/field wording requires a technical_schema blueprint and technical context.
+   An explicit disclaimer such as `đây không phải <target meaning>` or `tôi xin
+   nhấn mạnh ... không phải <target meaning>` explains the annotation trick instead
+   of demonstrating it and requires REGENERATE.
+4. Few-shot examples teach meaning and contrast, not prose. The same contrast principle
+   in a new event is valid; copied actors, opening, clause order, or skeleton are
+   FEWSHOT_IMITATION.
 5. Human-facing bracket fields such as [Tên Công ty], [Ngày], [Chức danh],
    [Tên Tài Xế], or similar fill-in slots are unfinished template artifacts, not
    entity placeholders. Never PASS while one remains. Report TEMPLATE_ARTIFACT with
@@ -92,8 +100,10 @@ status is PASS, FIXABLE, REGENERATE, or REJECTED; score is 0..100.
 Each issue has type, severity, field, reason, suggested_fix. Return at most 10 issues.
 Use canonical local issue types MISSING_ANNOTATION, BOUNDARY, TAG_MISMATCH,
 ENTITY_METADATA, TEMPLATE_ARTIFACT, or LOCAL_WORDING. Use content issue types
-WRONG_SEMANTICS, UNNATURAL_TEXT, INSUFFICIENT_CONTEXT, DECOY_AMBIGUOUS, or
-FEWSHOT_IMITATION. Use CREDENTIAL_RISK or REAL_PII_RISK only for critical rejection.
+WRONG_SEMANTICS, UNNATURAL_TEXT, INSUFFICIENT_CONTEXT, DECOY_AMBIGUOUS,
+DECOY_DETACHED, DECOY_STOCK_SCAFFOLD, DECOY_CONTEXT_MISMATCH, or
+FEWSHOT_IMITATION. These decoy content issues require REGENERATE, never FIXABLE.
+Use CREDENTIAL_RISK or REAL_PII_RISK only for critical rejection.
 suggested_fix must always be a non-empty string, never null. For REGENERATE, describe
 how the next generation should avoid the failure.
 Severity must be exactly low, medium, high, or critical; never emit minor, major,
@@ -112,24 +122,15 @@ matching value, 2 for the second, and never use 0. Never put a full rewritten
 candidate inside edits. Use only the documented field names; never output
 target_value, target_label, new_value, or other aliases.
 
-Error examples (examples teach decisions, never copy their prose):
-- `[Tên Công ty]` or `[Ngày]` in finished text -> TEMPLATE_ARTIFACT/FIXABLE and a
-  replace_template_artifact edit whose reason says it is an unresolved fill-in field;
-  replacement must be generic non-PII prose, not an invented value.
-- `biển số 51C-123.45` with no tag when PLATE is available ->
-  MISSING_ANNOTATION/FIXABLE plus add_tag(PLATE, `51C-123.45`, occurrence=1);
-  reason cites the explicit `biển số` cue. Apply the same rule to contextual
-  TICKET_ID or JOB_TITLE.
-- `mã đơn hàng #MED789012`, `mã đặt chỗ 123456789`, an invoice reference,
-  or a flight number -> do not add TICKET_ID. Those identifiers lack support-request,
-  service-incident, or customer-care semantics.
-- `<ADDRESS>34 Nguyễn Chí Thanh, Ba Đình, Hà Nội</ADDRESS>` ->
-  BOUNDARY/FIXABLE plus split_tag into ADDRESS `34 Nguyễn Chí Thanh` and LOCATION
-  `Ba Đình, Hà Nội`; reason explains street detail versus administrative geography.
-- `<PERSON> Mai Huyền </PERSON>` -> BOUNDARY/FIXABLE with adjust_tag_boundary;
-  retain the exact clean value and move surrounding whitespace outside the tag.
-- An absent positive seed, incoherent filler, or a hard negative that literally says
-  `đây không phải PII` -> REGENERATE with no edits; these are not safe local repairs.
+Error examples (teach decisions, never prose):
+- `[Tên Công ty]`/`[Ngày]` -> TEMPLATE_ARTIFACT/FIXABLE; replace with generic
+  non-PII prose, never an invented value.
+- untagged `biển số 51C-123.45` when PLATE is available ->
+  MISSING_ANNOTATION/FIXABLE and add_tag(PLATE, value, occurrence=1).
+- order/booking/invoice/flight references are not TICKET_ID.
+- combined ADDRESS/LOCATION -> BOUNDARY/FIXABLE plus split_tag.
+- whitespace inside a tag -> BOUNDARY/FIXABLE and adjust_tag_boundary.
+- absent seed, filler, or literal `đây không phải PII` -> REGENERATE.
 
 PASS requires no issues. FIXABLE is required for low-severity local annotation,
 span-boundary, punctuation-boundary, tag, or entity-metadata corrections that preserve
@@ -773,6 +774,11 @@ class VerifierService:
                     "required_context_cues": decoy.required_context_cues,
                     "forbidden_context_cues": decoy.forbidden_context_cues,
                     "must_remain_untagged": decoy.must_remain_untagged,
+                    "realization_plan": (
+                        decoy.realization_plan.dict()
+                        if decoy.realization_plan is not None
+                        else None
+                    ),
                 }
                 for decoy in seed_pack.decoys
             ],
@@ -815,6 +821,24 @@ class VerifierService:
                 }
                 for label in taxonomy_context.available_labels
             ],
+            "decoy_labels": [
+                {
+                    "label": label.label,
+                    "definition": label.definition,
+                    "rule": label.rule,
+                    "examples": [
+                        {
+                            "id": example.id,
+                            "expected_tagged_text": (
+                                example.expected_tagged_text
+                            ),
+                            "rationale": example.rationale[:500],
+                        }
+                        for example in label.examples
+                    ],
+                }
+                for label in taxonomy_context.decoy_labels
+            ],
         }
 
     @staticmethod
@@ -839,6 +863,14 @@ class VerifierService:
             if is_chat
             else None
         )
+        integration_issues = DecoyIntegrationValidator().validate(
+            tagged_text=candidate.tagged_text,
+            seed_pack=seed_pack,
+        )
+        integration_issue_types = [
+            issue.type
+            for issue in integration_issues
+        ]
         return {
             "clean_word_count": word_count,
             "word_range_satisfied": (
@@ -854,6 +886,25 @@ class VerifierService:
             "actual_entity_count": len(candidate.entities),
             "entity_count_satisfied": (
                 len(candidate.entities) >= len(seed_pack.positive_entities)
+            ),
+            "planned_decoy_count": sum(
+                decoy.realization_plan is not None
+                for decoy in seed_pack.decoys
+            ),
+            "decoy_integration_weak_count": (
+                integration_issue_types.count(
+                    "decoy_integration_weak"
+                )
+            ),
+            "decoy_stock_scaffold_count": (
+                integration_issue_types.count(
+                    "decoy_stock_scaffold"
+                )
+            ),
+            "decoy_context_mismatch_count": (
+                integration_issue_types.count(
+                    "decoy_context_mismatch"
+                )
             ),
         }
 

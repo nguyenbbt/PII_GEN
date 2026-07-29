@@ -35,12 +35,30 @@ class RegenerationRouter:
                 taxonomy,
                 rng,
                 excluded_values_by_label=excluded_values_by_label,
+                excluded_decoy_strategy_ids={
+                    decoy.strategy_id
+                    for decoy in current.decoys
+                },
             )
         if scope == "CONTEXT":
+            domain_sets = [
+                set(decoy.realization_plan.compatible_domains)
+                for decoy in current.decoys
+                if (
+                    decoy.realization_plan is not None
+                    and decoy.realization_plan.compatible_domains
+                )
+            ]
+            compatible_domains = (
+                sorted(set.intersection(*domain_sets))
+                if domain_sets
+                else []
+            )
             new_frame = self.context_selector.select(
                 task.focus_labels,
                 rng,
                 decoy_semantic_types=[decoy.semantic_type for decoy in current.decoys],
+                compatible_domains=compatible_domains,
                 excluded_frame_ids=[current.context_frame.frame_id],
             )
             updates: dict[str, object] = {"context_frame": new_frame}

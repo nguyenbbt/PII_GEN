@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 from .contracts import DataGenerationRequest
 from .placeholders import placeholder_entities
 
-PROMPT_VERSION = "data-generator.v11.6.0"
+PROMPT_VERSION = "data-generator.v12.0.0"
 
 SYSTEM_PROMPT = """# Role
 You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
@@ -39,12 +39,32 @@ You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
 # Few-Shot Use Policy
 - Examples under `taxonomy_guidance.focus_label.examples` teach label meaning,
   boundary decisions, and expected annotation only.
+- In `mixed_contrastive`, examples under `taxonomy_guidance.decoy_labels` teach
+  contrast mechanisms: why a surface may resemble a label while its role is not
+  that label. Their rationales are semantic evidence, not prose templates.
+- For each mixed decoy, reason silently: infer the contrast principle from its
+  three selected examples, then apply that principle to a different context,
+  actor, action, document structure, and sentence order. Use `realization_plan`
+  to connect the decoy to its positive anchor. Never print this reasoning.
 - Do not copy or closely paraphrase an example's scenario, actors, organization,
   action, object, opening phrase, clause order, wording, or sentence structure.
 - Build the sample from the validated seed pack and requested sample structure.
   Preserve supplied positive placeholders exactly; application code owns value insertion.
 - Before returning, compare the draft with every supplied example and rewrite it
   when a reader could recognize the example as its template.
+
+# Mixed-Decoy Prohibitions
+- Never use stock scaffolds equivalent to "Tên trường ... của hệ thống là ...",
+  "Mã danh mục ... là ...", or a schema/category/catalog explanation unless the
+  selected blueprint is technical and the context frame is technical/data/system
+  operation.
+- Never append a decoy through "Ngoài ra", "Ghi chú", a detached final sentence,
+  a disclaimer, or a clause whose only purpose is to mention the decoy.
+- Never explain the contrast with a negation such as "không phải <target meaning>";
+  establish only the decoy's affirmative business role through actor, action, and object.
+- In a contract, the decoy must participate in the main business processing.
+- In a chat, one speaker must introduce the decoy as part of the problem and the
+  other speaker must respond to it or act on it.
 
 # Output Contract
 Return one valid JSON object only, with exactly these keys and no Markdown fence:
@@ -56,8 +76,8 @@ Return one valid JSON object only, with exactly these keys and no Markdown fence
 
 # Mandatory Self-Check
 Internally reject and rewrite the draft if any required placeholder is missing or modified, a decoy is tagged,
-the first decoy occurrence lacks a `required_context_cue` copied unchanged in the
-same sentence, a later cue-free occurrence moves to another paragraph,
+a decoy-only first occurrence lacks its required exact cue, a mixed decoy lacks
+evidence for its contrast principle or is detached from its positive anchor,
 a decoy is attached as a disclaimer instead of participating in the event, an unrelated sentence exists only to
 mention a seed, the clean text is shorter than `length_target.min_words`, required entities are presented as a list rather than
 participating in the event, a human-readable bracket field remains, or the text does
@@ -96,14 +116,17 @@ HARD_NEGATIVE_MIXED_RULES = [
     "Use and correctly tag every placeholder in positive_entities without changing any character; if repeated, tag every occurrence and repeat its metadata entry.",
     "Square brackets are mandatory in every placeholder: write [PERSON_1], never PERSON_1.",
     "Use every decoy once by default and leave it untagged. A natural confirmation, correction, quotation, or cross-reference may repeat the same decoy up to three times.",
-    "Place each decoy in its semantic_type role and copy at least one required_context_cue unchanged into the sentence containing its first occurrence. A later occurrence may omit the cue in the same paragraph. In another paragraph, repeat the exact cue; for an already-established schema field only, the unambiguous head noun 'field' is also accepted.",
-    "The local context must clearly show that the decoy is not an entity of target_label.",
+    "Read the selected decoy label's three HARD_NEGATIVE examples and rationales, infer why their surfaces do not have the target-label meaning, and apply only that abstract contrast principle to a new event.",
+    "Realize each decoy according to its realization_plan: place it in the same sentence or chat turn as a positive placeholder with anchor_label, connect them through relation at discourse_stage, and express evidence_cues naturally rather than copying a stock cue phrase. Use an immediately adjacent unit only when one grammatical unit cannot express the relation clearly.",
+    "The local context must establish the decoy's affirmative non-target business role through concrete actor, action, and object evidence.",
+    "Demonstrate that contrast only through the decoy's affirmative business role; never write 'không phải/not a <target meaning>' or another explicit semantic disclaimer.",
     "When a positive seed's surface form could match another taxonomy label or a non-PII sense, use nearby domain, action, and object cues to prove its assigned taxonomy label; annotation follows meaning, not spelling or capitalization alone.",
-    "Apply this disambiguation principle to cases such as travel visa versus the VISA bank-card network: travel-document context must not be inferred as CARD_ISSUER, while a bank-card network requires explicit card or payment context. Do not invent a visa label, value, or entity.",
     "Create a single realistic scenario in which the contrast arises naturally; never explain annotation policy or compare label names inside the generated sample.",
     "Make every decoy operationally necessary to the same event, not a trailing note, warning, or disclaimer added only to include it.",
     "Apply a counterfactual coherence check: if removing the decoy clause would leave the positive-entity event unchanged, rewrite so the decoy directly participates in its data flow, decision, or failure.",
-    "End the decoy clause with an operational consequence such as mapping, routing, validation, storage, or failure; no explanatory disclaimer is allowed.",
+    "Do not force the event to end in mapping, routing, storage, or failure. Choose the natural consequence implied by the selected relation and business context.",
+    "Never use schema, field, category, or catalog wording unless realization_plan.family is technical_schema and the selected context is a technical, data, or system operation.",
+    "Never use a detached final decoy sentence or introduce it with 'Ngoài ra' or 'Ghi chú'.",
     "Do not use forbidden_context_cues to introduce the decoy as real PII.",
     "Do not include decoys in entities.",
     "Do not invent additional PII or decoys.",
@@ -297,29 +320,66 @@ def _rules(sample_type: str, hard_negative_mode: str | None = None) -> list[str]
 
 def _hard_negative_instance_rules(seed_pack: Mapping[str, Any]) -> list[str]:
     mode = str(seed_pack.get("hard_negative_mode") or "")
+    positive_placeholders = placeholder_entities(
+        list(seed_pack.get("positive_entities", []))
+    )
+    placeholders_by_label: dict[str, list[str]] = {}
+    for entity in positive_placeholders:
+        placeholders_by_label.setdefault(
+            str(entity.get("label", "")),
+            [],
+        ).append(str(entity.get("value", "")))
     rules: list[str] = []
     for index, decoy in enumerate(seed_pack.get("decoys", []), start=1):
         value = json.dumps(str(decoy.get("value", "")), ensure_ascii=False)
         semantic_type = str(decoy.get("semantic_type", "the stated non-PII role"))
         cues = json.dumps(decoy.get("required_context_cues", []), ensure_ascii=False)
-        shared = (
-            f"Decoy {index} {value}: realize it as {semantic_type}; "
-            f"copy one required_context_cue unchanged from {cues} into its sentence."
-        )
         if mode == "decoy_only":
+            shared = (
+                f"Decoy {index} {value}: realize it as {semantic_type}; "
+                f"copy one required_context_cue unchanged from {cues} into its sentence."
+            )
             rules.append(
                 f"{shared} Use it once by default. If a genuine confirmation, correction, quotation, "
                 "or cross-reference requires a second mention, keep both occurrences in one sentence "
                 "anchored by that unchanged cue; otherwise do not repeat it."
             )
         elif mode == "mixed_contrastive":
+            plan = decoy.get("realization_plan") or {}
+            principle = json.dumps(
+                str(plan.get("contrast_principle", "")),
+                ensure_ascii=False,
+            )
+            evidence = json.dumps(
+                plan.get("evidence_cues", []),
+                ensure_ascii=False,
+            )
+            source_ids = json.dumps(
+                plan.get("source_example_ids", []),
+                ensure_ascii=False,
+            )
+            anchor_candidates = placeholders_by_label.get(
+                str(plan.get("anchor_label", "")),
+                [],
+            )
+            anchor_placeholder = (
+                anchor_candidates[0]
+                if anchor_candidates
+                else ""
+            )
             rules.append(
-                f"{shared} Integrate it as an operational cause, input, or object of the action that "
-                "also involves the positive entities. Make those values the actual record or payload processed through "
-                "this decoy, and state their operational relationship directly. Use it once unless a later reference is "
-                "necessary; if repeated in another paragraph, repeat the exact cue (or use the head noun 'field' only "
-                "after a schema/data field has already been established). Do not append a disclaimer; end with what the "
-                "workflow does or what failed."
+                f"Decoy {index} {value}: target_label={decoy.get('target_label')}; "
+                f"contrast_principle={principle}; anchor_label={plan.get('anchor_label')}; "
+                f"anchor_placeholder={anchor_placeholder}; "
+                f"relation={plan.get('relation')}; discourse_stage={plan.get('discourse_stage')}; "
+                f"evidence_cues={evidence}; source_example_ids={source_ids}. "
+                "Use the source examples to understand the contrast only. Create a different actor, "
+                "action, opening, clause order, and sentence skeleton. Make the anchor and decoy "
+                "participate in the stated relation in the same sentence or chat turn. Copy "
+                "anchor_placeholder exactly, with its required tag, into that unit. Use an "
+                "immediately adjacent unit only when the relation cannot be expressed clearly in one unit. "
+                "Express evidence naturally; do not mechanically copy a cue, append a disclaimer, "
+                "or place the decoy in a detached final sentence."
             )
     return rules
 

@@ -59,6 +59,25 @@ class FewShotImitationGuardTests(unittest.TestCase):
 
         self.assertIsNone(issue)
 
+    def test_decoy_examples_are_checked_and_duplicate_ids_are_safe(
+        self,
+    ) -> None:
+        decoy_example = FewShotExample(
+            id="card_issuer_hard_negative_1",
+            expected_tagged_text=(
+                "Bộ phận hồ sơ yêu cầu bổ sung visa đi công tác."
+            ),
+            rationale="Visa is a travel document in this event.",
+        )
+
+        issue = self.guard.find_imitation(
+            decoy_example.expected_tagged_text,
+            [decoy_example, decoy_example],
+        )
+
+        self.assertIsNotNone(issue)
+        self.assertIn("card_issuer_hard_negative_1", issue.reason)
+
 
 class FewShotImitationPipelineTests(unittest.TestCase):
     def test_guard_regenerates_even_when_quality_checks_are_disabled(self) -> None:

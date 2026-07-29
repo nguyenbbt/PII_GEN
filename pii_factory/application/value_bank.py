@@ -67,8 +67,9 @@ class ValueBankEntityProvider:
     Relative paths are resolved from the process working directory with a
     project-root fallback. Files are loaded lazily and cached after validation.
     Every source entry is retained, including case variants and intentional
-    duplicates, so the configured bank remains the source of truth for sampling
-    probabilities.
+    duplicates. ADDRESS entries whose comma-delimited suffix is also present in
+    LOCATION are excluded at selection time so taxonomy boundaries cannot be
+    collapsed; the source file itself remains unchanged.
     """
 
     def __init__(
@@ -142,9 +143,19 @@ class ValueBankEntityProvider:
                 f"Value Bank language {normalised_language!r} "
                 f"does not define class {normalised_label!r}"
             )
+        source_values = bank[normalised_label]
+        if normalised_label == "ADDRESS":
+            source_values = tuple(
+                value
+                for value in source_values
+                if not self._contains_location_suffix(
+                    value,
+                    bank.get("LOCATION", ()),
+                )
+            )
         values = tuple(
             value
-            for value in bank[normalised_label]
+            for value in source_values
             if self._belongs_to_partition(value)
         )
         if not values:
@@ -153,6 +164,24 @@ class ValueBankEntityProvider:
                 f"{normalised_language!r} has no values"
             )
         return values
+
+    @staticmethod
+    def _contains_location_suffix(
+        address: str,
+        locations: Sequence[str],
+    ) -> bool:
+        normalized_address = " ".join(
+            address.casefold().split()
+        )
+        normalized_locations = {
+            " ".join(location.casefold().split())
+            for location in locations
+        }
+        return any(
+            normalized_address.endswith(f", {location}")
+            for location in normalized_locations
+            if location
+        )
 
     def _belongs_to_partition(self, value: str) -> bool:
         if self.partition_count == 1:

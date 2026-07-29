@@ -58,12 +58,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "prefix_semantic_ambiguity",
+        "id": "prefix_operational_code_1",
         "source_example_ids": [
           "prefix_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by prefix_1: the supplied surface serves the stated non-PREFIX role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'TS-01' only as mã mẫu hàng; it must not carry PREFIX meaning merely because its surface resembles that label.",
         "surface_templates": [
           "TS-01"
         ],
@@ -78,18 +78,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "prefix_business_reference",
+        "id": "prefix_business_reference_1",
         "source_example_ids": [
           "prefix_2"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by prefix_2: the supplied surface serves the stated non-PREFIX role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Ông Bầu' only as tên quán; it must not carry PREFIX meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Ông Bầu"
         ],
@@ -104,18 +104,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "prefix_technical_schema",
+        "id": "prefix_business_reference_2",
         "source_example_ids": [
           "prefix_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by prefix_3: the supplied surface serves the stated non-PREFIX role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Kỹ sư trưởng' only as tên gói dịch vụ; it must not carry PREFIX meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Kỹ sư trưởng"
         ],
@@ -123,22 +123,17 @@
           "tên gói dịch vụ"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "business_reference",
+          "verification"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -201,12 +196,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "person_semantic_ambiguity",
+        "id": "person_business_reference_1",
         "source_example_ids": [
           "person_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by person_1: the supplied surface serves the stated non-PERSON role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Nguyễn Văn Trỗi' only as tên tàu; it must not carry PERSON meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Nguyễn Văn Trỗi"
         ],
@@ -221,18 +216,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "person_business_reference",
+        "id": "person_business_reference_2",
         "source_example_ids": [
           "person_2"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by person_2: the supplied surface serves the stated non-PERSON role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Hùng Vương' only as tên cơ sở; it must not carry PERSON meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Hùng Vương"
         ],
@@ -247,18 +242,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "person_technical_schema",
+        "id": "person_business_reference_3",
         "source_example_ids": [
           "person_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by person_3: the supplied surface serves the stated non-PERSON role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Minh Anh' only as tên dự án; it must not carry PERSON meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Minh Anh"
         ],
@@ -266,22 +261,17 @@
           "tên dự án"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "business_reference",
+          "verification"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -344,12 +334,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "gender_semantic_ambiguity",
+        "id": "gender_semantic_ambiguity_1",
         "source_example_ids": [
           "gender_1"
         ],
         "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by gender_1: the supplied surface serves the stated non-GENDER role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'cái' only as đầu nối; it must not carry GENDER meaning merely because its surface resembles that label.",
         "surface_templates": [
           "cái"
         ],
@@ -364,18 +354,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "gender_business_reference",
+        "id": "gender_semantic_ambiguity_2",
         "source_example_ids": [
           "gender_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by gender_2: the supplied surface serves the stated non-GENDER role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'đực' only as giống vật nuôi; it must not carry GENDER meaning merely because its surface resembles that label.",
         "surface_templates": [
           "đực"
         ],
@@ -390,18 +380,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "gender_technical_schema",
+        "id": "gender_semantic_ambiguity_3",
         "source_example_ids": [
           "gender_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by gender_3: the supplied surface serves the stated non-GENDER role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'nam' only as loại phụ kiện; it must not carry GENDER meaning merely because its surface resembles that label.",
         "surface_templates": [
           "nam"
         ],
@@ -409,22 +399,17 @@
           "loại phụ kiện"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "comparison",
+          "disambiguation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -487,12 +472,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "age_semantic_ambiguity",
+        "id": "age_semantic_ambiguity_1",
         "source_example_ids": [
           "age_1"
         ],
         "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by age_1: the supplied surface serves the stated non-AGE role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use '12 năm' only as thời gian sử dụng; it must not carry AGE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "12 năm"
         ],
@@ -507,18 +492,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "age_business_reference",
+        "id": "age_semantic_ambiguity_2",
         "source_example_ids": [
           "age_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by age_2: the supplied surface serves the stated non-AGE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use '18 năm' only as thời hạn hiệu lực; it must not carry AGE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "18 năm"
         ],
@@ -533,18 +518,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "age_technical_schema",
+        "id": "age_semantic_ambiguity_3",
         "source_example_ids": [
           "age_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by age_3: the supplied surface serves the stated non-AGE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use '25 năm' only as tuổi thiết bị; it must not carry AGE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "25 năm"
         ],
@@ -552,22 +537,17 @@
           "tuổi thiết bị"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "comparison",
+          "disambiguation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -630,12 +610,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "birthdate_semantic_ambiguity",
+        "id": "birthdate_semantic_ambiguity_1",
         "source_example_ids": [
           "birthdate_1"
         ],
         "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by birthdate_1: the supplied surface serves the stated non-BIRTHDATE role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use '12/05/2026' only as ngày lập hồ sơ; it must not carry BIRTHDATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "12/05/2026"
         ],
@@ -650,18 +630,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "birthdate_business_reference",
+        "id": "birthdate_operational_code_1",
         "source_example_ids": [
           "birthdate_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by birthdate_2: the supplied surface serves the stated non-BIRTHDATE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '2001-09-09' only as phiên bản sản phẩm; it must not carry BIRTHDATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "2001-09-09"
         ],
@@ -676,18 +656,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "birthdate_technical_schema",
+        "id": "birthdate_operational_code_2",
         "source_example_ids": [
           "birthdate_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by birthdate_3: the supplied surface serves the stated non-BIRTHDATE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '03031996' only as mã lô; it must not carry BIRTHDATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "03031996"
         ],
@@ -695,22 +675,17 @@
           "mã lô"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -773,12 +748,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "phone_semantic_ambiguity",
+        "id": "phone_operational_code_1",
         "source_example_ids": [
           "phone_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by phone_1: the supplied surface serves the stated non-PHONE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '0909-123-456' only as mã kiện hàng; it must not carry PHONE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "0909-123-456"
         ],
@@ -793,18 +768,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "phone_business_reference",
+        "id": "phone_semantic_ambiguity_1",
         "source_example_ids": [
           "phone_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by phone_2: the supplied surface serves the stated non-PHONE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use '+84-912-345-678' only as số sê-ri; it must not carry PHONE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "+84-912-345-678"
         ],
@@ -819,18 +794,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "phone_technical_schema",
+        "id": "phone_operational_code_2",
         "source_example_ids": [
           "phone_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by phone_3: the supplied surface serves the stated non-PHONE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '093-455-6677' only as mã thùng; it must not carry PHONE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "093-455-6677"
         ],
@@ -838,22 +813,17 @@
           "mã thùng"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -916,12 +886,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "email_semantic_ambiguity",
+        "id": "email_technical_schema_1",
         "source_example_ids": [
           "email_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by email_1: the supplied surface serves the stated non-EMAIL role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "technical_schema",
+        "contrast_principle": "In a new event, use 'support@abc.vn.log' only as tên tệp nhật ký; it must not carry EMAIL meaning merely because its surface resembles that label.",
         "surface_templates": [
           "support@abc.vn.log"
         ],
@@ -929,25 +899,29 @@
           "tên tệp nhật ký"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration"
+        ],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "field_validation",
+          "system_processing"
         ],
-        "technical": false
+        "technical": true
       },
       {
-        "id": "email_business_reference",
+        "id": "email_semantic_ambiguity_1",
         "source_example_ids": [
           "email_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by email_2: the supplied surface serves the stated non-EMAIL role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'user@example.com' only as dữ liệu minh họa; it must not carry EMAIL meaning merely because its surface resembles that label.",
         "surface_templates": [
           "user@example.com"
         ],
@@ -962,18 +936,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "email_technical_schema",
+        "id": "email_operational_code_1",
         "source_example_ids": [
           "email_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by email_3: the supplied surface serves the stated non-EMAIL role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'tennguoidung@congty.vn.csv' only as mẫu tên tệp; it must not carry EMAIL meaning merely because its surface resembles that label.",
         "surface_templates": [
           "tennguoidung@congty.vn.csv"
         ],
@@ -981,22 +955,17 @@
           "mẫu tên tệp"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -1059,12 +1028,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "location_semantic_ambiguity",
+        "id": "location_business_reference_1",
         "source_example_ids": [
-          "location_1"
+          "location_3"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by location_1: the supplied surface serves the stated non-LOCATION role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Singapore Xanh' only as tên chiến dịch; it must not carry LOCATION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Singapore Xanh"
         ],
@@ -1079,18 +1048,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "location_business_reference",
+        "id": "location_business_reference_2",
         "source_example_ids": [
-          "location_2"
+          "location_3"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by location_2: the supplied surface serves the stated non-LOCATION role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Tây Hồ 69' only as tên dự án; it must not carry LOCATION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Tây Hồ 69"
         ],
@@ -1105,18 +1074,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "location_technical_schema",
+        "id": "location_business_reference_3",
         "source_example_ids": [
-          "location_3"
+          "location_2"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by location_3: the supplied surface serves the stated non-LOCATION role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Hà Nội Logistics' only as tên thương hiệu; it must not carry LOCATION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Hà Nội Logistics"
         ],
@@ -1124,22 +1093,17 @@
           "tên thương hiệu"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "business_reference",
+          "verification"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -1202,12 +1166,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "address_semantic_ambiguity",
+        "id": "address_business_reference_1",
         "source_example_ids": [
-          "address_1"
+          "address_3"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by address_1: the supplied surface serves the stated non-ADDRESS role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Tây Hồ 69' only as tên dự án; it must not carry ADDRESS meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Tây Hồ 69"
         ],
@@ -1222,18 +1186,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "address_business_reference",
+        "id": "address_business_reference_2",
         "source_example_ids": [
-          "address_2"
+          "address_3"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by address_2: the supplied surface serves the stated non-ADDRESS role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Đường Thành Công' only as tên ấn phẩm; it must not carry ADDRESS meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Đường Thành Công"
         ],
@@ -1248,18 +1212,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "address_technical_schema",
+        "id": "address_operational_code_1",
         "source_example_ids": [
           "address_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by address_3: the supplied surface serves the stated non-ADDRESS role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'Sun Plaza 69' only as mã công trình; it must not carry ADDRESS meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Sun Plaza 69"
         ],
@@ -1267,22 +1231,17 @@
           "mã công trình"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -1345,12 +1304,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "zip_code_semantic_ambiguity",
+        "id": "zip_code_operational_code_1",
         "source_example_ids": [
           "zip_code_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by zip_code_1: the supplied surface serves the stated non-ZIP_CODE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '700000' only as mã phòng thử nghiệm; it must not carry ZIP_CODE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "700000"
         ],
@@ -1365,18 +1324,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "zip_code_business_reference",
+        "id": "zip_code_operational_code_2",
         "source_example_ids": [
           "zip_code_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by zip_code_2: the supplied surface serves the stated non-ZIP_CODE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '90210' only as model cảm biến; it must not carry ZIP_CODE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "90210"
         ],
@@ -1391,18 +1350,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "zip_code_technical_schema",
+        "id": "zip_code_operational_code_3",
         "source_example_ids": [
           "zip_code_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by zip_code_3: the supplied surface serves the stated non-ZIP_CODE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '10001' only as mã vị trí kệ; it must not carry ZIP_CODE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "10001"
         ],
@@ -1410,22 +1369,17 @@
           "mã vị trí kệ"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -1488,12 +1442,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "coordinate_semantic_ambiguity",
+        "id": "coordinate_operational_code_1",
         "source_example_ids": [
           "coordinate_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by coordinate_1: the supplied surface serves the stated non-COORDINATE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '21.02, 105.85' only as chỉ số áp suất; it must not carry COORDINATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "21.02, 105.85"
         ],
@@ -1508,18 +1462,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "coordinate_business_reference",
+        "id": "coordinate_operational_code_2",
         "source_example_ids": [
           "coordinate_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by coordinate_2: the supplied surface serves the stated non-COORDINATE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '16.067, 108.220' only as phiên bản firmware; it must not carry COORDINATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "16.067, 108.220"
         ],
@@ -1534,18 +1488,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "coordinate_technical_schema",
+        "id": "coordinate_operational_code_3",
         "source_example_ids": [
           "coordinate_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by coordinate_3: the supplied surface serves the stated non-COORDINATE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '10.762, 106.681' only as hệ số hiệu chỉnh; it must not carry COORDINATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "10.762, 106.681"
         ],
@@ -1553,22 +1507,17 @@
           "hệ số hiệu chỉnh"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -1631,12 +1580,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "username_semantic_ambiguity",
+        "id": "username_business_reference_1",
         "source_example_ids": [
-          "username_1"
+          "username_2"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by username_1: the supplied surface serves the stated non-USERNAME role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'lan.nguyen' only as tên mẫu báo cáo; it must not carry USERNAME meaning merely because its surface resembles that label.",
         "surface_templates": [
           "lan.nguyen"
         ],
@@ -1651,18 +1600,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "username_business_reference",
+        "id": "username_business_reference_2",
         "source_example_ids": [
-          "username_2"
+          "username_3"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by username_2: the supplied surface serves the stated non-USERNAME role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'captain_minh88' only as tên chiến dịch; it must not carry USERNAME meaning merely because its surface resembles that label.",
         "surface_templates": [
           "captain_minh88"
         ],
@@ -1677,18 +1626,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "username_technical_schema",
+        "id": "username_technical_schema_1",
         "source_example_ids": [
-          "username_3"
+          "username_1"
         ],
         "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by username_3: the supplied surface serves the stated non-USERNAME role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'minh.khoa' only as khóa tra cứu; it must not carry USERNAME meaning merely because its surface resembles that label.",
         "surface_templates": [
           "minh.khoa"
         ],
@@ -1699,8 +1648,7 @@
         "compatible_domains": [
           "technical_support",
           "cybersecurity",
-          "administration",
-          "customer_support"
+          "administration"
         ],
         "compatible_structures": [
           "contract",
@@ -1708,8 +1656,8 @@
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "field_validation",
+          "system_processing"
         ],
         "technical": true
       }
@@ -1774,12 +1722,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "account_id_semantic_ambiguity",
+        "id": "account_id_operational_code_1",
         "source_example_ids": [
           "account_id_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by account_id_1: the supplied surface serves the stated non-ACCOUNT_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'GW-009' only as mã gateway; it must not carry ACCOUNT_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "GW-009"
         ],
@@ -1794,18 +1742,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "account_id_business_reference",
+        "id": "account_id_operational_code_2",
         "source_example_ids": [
           "account_id_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by account_id_2: the supplied surface serves the stated non-ACCOUNT_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'CRM-ACC-882' only as mã bản ghi CRM; it must not carry ACCOUNT_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "CRM-ACC-882"
         ],
@@ -1820,18 +1768,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "account_id_technical_schema",
+        "id": "account_id_operational_code_3",
         "source_example_ids": [
           "account_id_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by account_id_3: the supplied surface serves the stated non-ACCOUNT_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'PORTAL-771' only as mã luồng xử lý; it must not carry ACCOUNT_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "PORTAL-771"
         ],
@@ -1839,22 +1787,17 @@
           "mã luồng xử lý"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -1917,12 +1860,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "ticket_id_semantic_ambiguity",
+        "id": "ticket_id_operational_code_1",
         "source_example_ids": [
           "ticket_id_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by ticket_id_1: the supplied surface serves the stated non-TICKET_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'TKT-8842' only as mã vé xem phim; it must not carry TICKET_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "TKT-8842"
         ],
@@ -1937,18 +1880,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "ticket_id_business_reference",
+        "id": "ticket_id_semantic_ambiguity_1",
         "source_example_ids": [
           "ticket_id_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by ticket_id_2: the supplied surface serves the stated non-TICKET_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'INV-2026-998' only as số hóa đơn; it must not carry TICKET_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "INV-2026-998"
         ],
@@ -1963,18 +1906,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "ticket_id_technical_schema",
+        "id": "ticket_id_operational_code_2",
         "source_example_ids": [
           "ticket_id_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by ticket_id_3: the supplied surface serves the stated non-TICKET_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'CASE-7788' only as mã hồ sơ pháp lý; it must not carry TICKET_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "CASE-7788"
         ],
@@ -1982,22 +1925,17 @@
           "mã hồ sơ pháp lý"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -2060,12 +1998,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "password_semantic_ambiguity",
+        "id": "password_semantic_ambiguity_1",
         "source_example_ids": [
-          "password_1"
+          "password_3"
         ],
         "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by password_1: the supplied surface serves the stated non-PASSWORD role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Mật khẩu Mùa Thu' only as dữ liệu minh họa; it must not carry PASSWORD meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Mật khẩu Mùa Thu"
         ],
@@ -2080,18 +2018,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "password_business_reference",
+        "id": "password_business_reference_1",
         "source_example_ids": [
-          "password_2"
+          "password_3"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by password_2: the supplied surface serves the stated non-PASSWORD role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Chuỗi minh họa đăng nhập' only as tên trò chơi; it must not carry PASSWORD meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Chuỗi minh họa đăng nhập"
         ],
@@ -2106,18 +2044,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "password_technical_schema",
+        "id": "password_operational_code_1",
         "source_example_ids": [
-          "password_3"
+          "password_1"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by password_3: the supplied surface serves the stated non-PASSWORD role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'OTP-554433' only as mã dùng một lần; it must not carry PASSWORD meaning merely because its surface resembles that label.",
         "surface_templates": [
           "OTP-554433"
         ],
@@ -2125,22 +2063,17 @@
           "mã dùng một lần"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -2203,12 +2136,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "pin_semantic_ambiguity",
+        "id": "pin_operational_code_1",
         "source_example_ids": [
           "pin_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by pin_1: the supplied surface serves the stated non-PIN role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '778899' only as mã dùng một lần; it must not carry PIN meaning merely because its surface resembles that label.",
         "surface_templates": [
           "778899"
         ],
@@ -2223,18 +2156,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "pin_business_reference",
+        "id": "pin_operational_code_2",
         "source_example_ids": [
           "pin_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by pin_2: the supplied surface serves the stated non-PIN role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '6405' only as mã phòng họp; it must not carry PIN meaning merely because its surface resembles that label.",
         "surface_templates": [
           "6405"
         ],
@@ -2249,18 +2182,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "pin_technical_schema",
+        "id": "pin_semantic_ambiguity_1",
         "source_example_ids": [
           "pin_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by pin_3: the supplied surface serves the stated non-PIN role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use '7878' only as số thứ tự hồ sơ; it must not carry PIN meaning merely because its surface resembles that label.",
         "surface_templates": [
           "7878"
         ],
@@ -2268,22 +2201,17 @@
           "số thứ tự hồ sơ"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "comparison",
+          "disambiguation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -2346,12 +2274,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "api_key_semantic_ambiguity",
+        "id": "api_key_operational_code_1",
         "source_example_ids": [
           "api_key_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by api_key_1: the supplied surface serves the stated non-API_KEY role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'SKU-A8F93' only as mã sản phẩm; it must not carry API_KEY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "SKU-A8F93"
         ],
@@ -2366,18 +2294,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "api_key_business_reference",
+        "id": "api_key_operational_code_2",
         "source_example_ids": [
           "api_key_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by api_key_2: the supplied surface serves the stated non-API_KEY role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'API-ACC-771' only as mã tài khoản dịch vụ; it must not carry API_KEY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "API-ACC-771"
         ],
@@ -2392,18 +2320,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "api_key_technical_schema",
+        "id": "api_key_technical_schema_1",
         "source_example_ids": [
           "api_key_3"
         ],
         "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by api_key_3: the supplied surface serves the stated non-API_KEY role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'VECTOR-000000' only as test vector; it must not carry API_KEY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "VECTOR-000000"
         ],
@@ -2414,8 +2342,7 @@
         "compatible_domains": [
           "technical_support",
           "cybersecurity",
-          "administration",
-          "customer_support"
+          "administration"
         ],
         "compatible_structures": [
           "contract",
@@ -2423,8 +2350,8 @@
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "field_validation",
+          "system_processing"
         ],
         "technical": true
       }
@@ -2489,12 +2416,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "url_semantic_ambiguity",
+        "id": "url_technical_schema_1",
         "source_example_ids": [
           "url_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by url_1: the supplied surface serves the stated non-URL role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "technical_schema",
+        "contrast_principle": "In a new event, use 'C:\\\\bao_cao\\\\2026\\\\tonghop.pdf' only as đường dẫn tệp; it must not carry URL meaning merely because its surface resembles that label.",
         "surface_templates": [
           "C:\\bao_cao\\2026\\tonghop.pdf"
         ],
@@ -2502,25 +2429,29 @@
           "đường dẫn tệp"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration"
+        ],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "field_validation",
+          "system_processing"
         ],
-        "technical": false
+        "technical": true
       },
       {
-        "id": "url_business_reference",
+        "id": "url_operational_code_1",
         "source_example_ids": [
-          "url_2"
+          "url_3"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by url_2: the supplied surface serves the stated non-URL role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'portal.abc.vn.log' only as tên tệp nhật ký; it must not carry URL meaning merely because its surface resembles that label.",
         "surface_templates": [
           "portal.abc.vn.log"
         ],
@@ -2535,18 +2466,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "url_technical_schema",
+        "id": "url_operational_code_2",
         "source_example_ids": [
           "url_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by url_3: the supplied surface serves the stated non-URL role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'docs.example.module' only as tên module; it must not carry URL meaning merely because its surface resembles that label.",
         "surface_templates": [
           "docs.example.module"
         ],
@@ -2554,22 +2485,17 @@
           "tên module"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -2632,12 +2558,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "ip_semantic_ambiguity",
+        "id": "ip_operational_code_1",
         "source_example_ids": [
           "ip_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by ip_1: the supplied surface serves the stated non-IP role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '10.10.0.8' only as phiên bản firmware; it must not carry IP meaning merely because its surface resembles that label.",
         "surface_templates": [
           "10.10.0.8"
         ],
@@ -2652,18 +2578,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "ip_business_reference",
+        "id": "ip_semantic_ambiguity_1",
         "source_example_ids": [
           "ip_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by ip_2: the supplied surface serves the stated non-IP role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use '192.168.1.44' only as part number; it must not carry IP meaning merely because its surface resembles that label.",
         "surface_templates": [
           "192.168.1.44"
         ],
@@ -2678,18 +2604,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "ip_technical_schema",
+        "id": "ip_operational_code_2",
         "source_example_ids": [
           "ip_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by ip_3: the supplied surface serves the stated non-IP role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '10.0.0.5' only as tên phiên bản; it must not carry IP meaning merely because its surface resembles that label.",
         "surface_templates": [
           "10.0.0.5"
         ],
@@ -2697,22 +2623,17 @@
           "tên phiên bản"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -2775,12 +2696,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "bank_account_semantic_ambiguity",
+        "id": "bank_account_semantic_ambiguity_1",
         "source_example_ids": [
           "bank_account_1"
         ],
         "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by bank_account_1: the supplied surface serves the stated non-BANK_ACCOUNT role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'ACC-CHAIN-9001' only as tài khoản portal; it must not carry BANK_ACCOUNT meaning merely because its surface resembles that label.",
         "surface_templates": [
           "ACC-CHAIN-9001"
         ],
@@ -2795,18 +2716,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "bank_account_business_reference",
+        "id": "bank_account_operational_code_1",
         "source_example_ids": [
           "bank_account_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by bank_account_2: the supplied surface serves the stated non-BANK_ACCOUNT role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '4111111111111111' only as mã thanh toán thử; it must not carry BANK_ACCOUNT meaning merely because its surface resembles that label.",
         "surface_templates": [
           "4111111111111111"
         ],
@@ -2821,18 +2742,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "bank_account_technical_schema",
+        "id": "bank_account_operational_code_2",
         "source_example_ids": [
           "bank_account_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by bank_account_3: the supplied surface serves the stated non-BANK_ACCOUNT role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '880077665544' only as mã scan hóa đơn; it must not carry BANK_ACCOUNT meaning merely because its surface resembles that label.",
         "surface_templates": [
           "880077665544"
         ],
@@ -2840,22 +2761,17 @@
           "mã scan hóa đơn"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -2918,12 +2834,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "money_semantic_ambiguity",
+        "id": "money_operational_code_1",
         "source_example_ids": [
           "money_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by money_1: the supplied surface serves the stated non-MONEY role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'USD-1200' only as model cảm biến; it must not carry MONEY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "USD-1200"
         ],
@@ -2938,18 +2854,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "money_business_reference",
+        "id": "money_operational_code_2",
         "source_example_ids": [
           "money_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by money_2: the supplied surface serves the stated non-MONEY role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '500000' only as mã lô; it must not carry MONEY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "500000"
         ],
@@ -2964,18 +2880,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "money_technical_schema",
+        "id": "money_technical_schema_1",
         "source_example_ids": [
           "money_3"
         ],
         "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by money_3: the supplied surface serves the stated non-MONEY role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use '$1200' only as literal kiểm thử; it must not carry MONEY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "$1200"
         ],
@@ -2986,8 +2902,7 @@
         "compatible_domains": [
           "technical_support",
           "cybersecurity",
-          "administration",
-          "customer_support"
+          "administration"
         ],
         "compatible_structures": [
           "contract",
@@ -2995,8 +2910,8 @@
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "field_validation",
+          "system_processing"
         ],
         "technical": true
       }
@@ -3061,12 +2976,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "card_issuer_semantic_ambiguity",
+        "id": "card_issuer_operational_code_1",
         "source_example_ids": [
           "card_issuer_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by card_issuer_1: the supplied surface serves the stated non-CARD_ISSUER role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'JCB' only as model máy xúc; it must not carry CARD_ISSUER meaning merely because its surface resembles that label.",
         "surface_templates": [
           "JCB"
         ],
@@ -3081,18 +2996,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "card_issuer_business_reference",
+        "id": "card_issuer_semantic_ambiguity_1",
         "source_example_ids": [
           "card_issuer_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by card_issuer_2: the supplied surface serves the stated non-CARD_ISSUER role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'Visa' only as hồ sơ du lịch; it must not carry CARD_ISSUER meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Visa"
         ],
@@ -3107,18 +3022,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "card_issuer_technical_schema",
+        "id": "card_issuer_business_reference_1",
         "source_example_ids": [
           "card_issuer_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by card_issuer_3: the supplied surface serves the stated non-CARD_ISSUER role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Vietcombank Xanh' only as tên chiến dịch; it must not carry CARD_ISSUER meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Vietcombank Xanh"
         ],
@@ -3126,22 +3041,17 @@
           "tên chiến dịch"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "business_reference",
+          "verification"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -3204,12 +3114,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "card_number_semantic_ambiguity",
+        "id": "card_number_operational_code_1",
         "source_example_ids": [
           "card_number_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by card_number_1: the supplied surface serves the stated non-CARD_NUMBER role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '4111111111111111' only as mã vận đơn; it must not carry CARD_NUMBER meaning merely because its surface resembles that label.",
         "surface_templates": [
           "4111111111111111"
         ],
@@ -3224,18 +3134,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "card_number_business_reference",
+        "id": "card_number_operational_code_2",
         "source_example_ids": [
           "card_number_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by card_number_2: the supplied surface serves the stated non-CARD_NUMBER role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '1234567890123456' only as mã quyết toán; it must not carry CARD_NUMBER meaning merely because its surface resembles that label.",
         "surface_templates": [
           "1234567890123456"
         ],
@@ -3250,18 +3160,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "card_number_technical_schema",
+        "id": "card_number_operational_code_3",
         "source_example_ids": [
           "card_number_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by card_number_3: the supplied surface serves the stated non-CARD_NUMBER role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '5200828282828210' only as mã theo dõi; it must not carry CARD_NUMBER meaning merely because its surface resembles that label.",
         "surface_templates": [
           "5200828282828210"
         ],
@@ -3269,22 +3179,17 @@
           "mã theo dõi"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -3347,12 +3252,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "cvv_semantic_ambiguity",
+        "id": "cvv_operational_code_1",
         "source_example_ids": [
           "cvv_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by cvv_1: the supplied surface serves the stated non-CVV role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '123' only as mã phòng họp; it must not carry CVV meaning merely because its surface resembles that label.",
         "surface_templates": [
           "123"
         ],
@@ -3367,18 +3272,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "cvv_business_reference",
+        "id": "cvv_operational_code_2",
         "source_example_ids": [
           "cvv_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by cvv_2: the supplied surface serves the stated non-CVV role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '6405' only as mã cửa kho; it must not carry CVV meaning merely because its surface resembles that label.",
         "surface_templates": [
           "6405"
         ],
@@ -3393,18 +3298,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "cvv_technical_schema",
+        "id": "cvv_operational_code_3",
         "source_example_ids": [
           "cvv_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by cvv_3: the supplied surface serves the stated non-CVV role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'CVC-882' only as mã sản phẩm; it must not carry CVV meaning merely because its surface resembles that label.",
         "surface_templates": [
           "CVC-882"
         ],
@@ -3412,22 +3317,17 @@
           "mã sản phẩm"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -3490,12 +3390,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "iban_semantic_ambiguity",
+        "id": "iban_operational_code_1",
         "source_example_ids": [
           "iban_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by iban_1: the supplied surface serves the stated non-IBAN role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'DE89370400440532013000' only as mã bản vẽ; it must not carry IBAN meaning merely because its surface resembles that label.",
         "surface_templates": [
           "DE89370400440532013000"
         ],
@@ -3510,23 +3410,53 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "iban_business_reference",
+        "id": "iban_technical_schema_1",
         "source_example_ids": [
           "iban_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by iban_2: the supplied surface serves the stated non-IBAN role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "technical_schema",
+        "contrast_principle": "In a new event, use 'DE00123456789012345678' only as dữ liệu kiểm thử; it must not carry IBAN meaning merely because its surface resembles that label.",
         "surface_templates": [
           "DE00123456789012345678"
         ],
         "evidence_cues": [
           "dữ liệu kiểm thử"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "field_validation",
+          "system_processing"
+        ],
+        "technical": true
+      },
+      {
+        "id": "iban_operational_code_2",
+        "source_example_ids": [
+          "iban_3"
+        ],
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'GB82WEST12345698765432' only as test vector; it must not carry IBAN meaning merely because its surface resembles that label.",
+        "surface_templates": [
+          "GB82WEST12345698765432"
+        ],
+        "evidence_cues": [
+          "test vector"
         ],
         "forbidden_cues": [],
         "compatible_domains": [],
@@ -3536,41 +3466,10 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
-      },
-      {
-        "id": "iban_technical_schema",
-        "source_example_ids": [
-          "iban_3"
-        ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by iban_3: the supplied surface serves the stated non-IBAN role in this event, so spelling or shape alone must not trigger the label.",
-        "surface_templates": [
-          "GB82WEST12345698765432"
-        ],
-        "evidence_cues": [
-          "test vector"
-        ],
-        "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
-        "compatible_structures": [
-          "contract",
-          "chat",
-          "custom"
-        ],
-        "integration_relations": [
-          "validation",
-          "correction"
-        ],
-        "technical": true
       }
     ]
   },
@@ -3633,12 +3532,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "swift_semantic_ambiguity",
+        "id": "swift_operational_code_1",
         "source_example_ids": [
           "swift_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by swift_1: the supplied surface serves the stated non-SWIFT role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'BARCGB54' only as mã dự án; it must not carry SWIFT meaning merely because its surface resembles that label.",
         "surface_templates": [
           "BARCGB54"
         ],
@@ -3653,18 +3552,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "swift_business_reference",
+        "id": "swift_semantic_ambiguity_1",
         "source_example_ids": [
           "swift_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by swift_2: the supplied surface serves the stated non-SWIFT role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'CITIBGB2' only as tài khoản nội bộ; it must not carry SWIFT meaning merely because its surface resembles that label.",
         "surface_templates": [
           "CITIBGB2"
         ],
@@ -3679,18 +3578,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "swift_technical_schema",
+        "id": "swift_operational_code_2",
         "source_example_ids": [
           "swift_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by swift_3: the supplied surface serves the stated non-SWIFT role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'DEUTDEFF' only as tên kịch bản kiểm thử; it must not carry SWIFT meaning merely because its surface resembles that label.",
         "surface_templates": [
           "DEUTDEFF"
         ],
@@ -3698,22 +3597,17 @@
           "tên kịch bản kiểm thử"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -3776,12 +3670,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "wallet_semantic_ambiguity",
+        "id": "wallet_operational_code_1",
         "source_example_ids": [
           "wallet_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by wallet_1: the supplied surface serves the stated non-WALLET role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'TX-0xABC-7788' only as mã giao dịch; it must not carry WALLET meaning merely because its surface resembles that label.",
         "surface_templates": [
           "TX-0xABC-7788"
         ],
@@ -3796,23 +3690,53 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "wallet_business_reference",
+        "id": "wallet_technical_schema_1",
         "source_example_ids": [
           "wallet_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by wallet_2: the supplied surface serves the stated non-WALLET role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "technical_schema",
+        "contrast_principle": "In a new event, use '0x742d35Cc6634C0532925a3b844Bc454e4438f44e' only as build hash; it must not carry WALLET meaning merely because its surface resembles that label.",
         "surface_templates": [
           "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
         ],
         "evidence_cues": [
           "build hash"
+        ],
+        "forbidden_cues": [],
+        "compatible_domains": [
+          "technical_support",
+          "cybersecurity",
+          "administration"
+        ],
+        "compatible_structures": [
+          "contract",
+          "chat",
+          "custom"
+        ],
+        "integration_relations": [
+          "field_validation",
+          "system_processing"
+        ],
+        "technical": true
+      },
+      {
+        "id": "wallet_operational_code_2",
+        "source_example_ids": [
+          "wallet_3"
+        ],
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh' only as test vector; it must not carry WALLET meaning merely because its surface resembles that label.",
+        "surface_templates": [
+          "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+        ],
+        "evidence_cues": [
+          "test vector"
         ],
         "forbidden_cues": [],
         "compatible_domains": [],
@@ -3822,41 +3746,10 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
-      },
-      {
-        "id": "wallet_technical_schema",
-        "source_example_ids": [
-          "wallet_3"
-        ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by wallet_3: the supplied surface serves the stated non-WALLET role in this event, so spelling or shape alone must not trigger the label.",
-        "surface_templates": [
-          "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
-        ],
-        "evidence_cues": [
-          "test vector"
-        ],
-        "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
-        "compatible_structures": [
-          "contract",
-          "chat",
-          "custom"
-        ],
-        "integration_relations": [
-          "validation",
-          "correction"
-        ],
-        "technical": true
       }
     ]
   },
@@ -3919,12 +3812,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "job_title_semantic_ambiguity",
+        "id": "job_title_business_reference_1",
         "source_example_ids": [
           "job_title_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by job_title_1: the supplied surface serves the stated non-JOB_TITLE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Field Engineering' only as tên bộ phận; it must not carry JOB_TITLE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Field Engineering"
         ],
@@ -3939,18 +3832,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "job_title_business_reference",
+        "id": "job_title_business_reference_2",
         "source_example_ids": [
           "job_title_2"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by job_title_2: the supplied surface serves the stated non-JOB_TITLE role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'offshore inspection' only as tên hoạt động; it must not carry JOB_TITLE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "offshore inspection"
         ],
@@ -3965,18 +3858,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "job_title_technical_schema",
+        "id": "job_title_business_reference_3",
         "source_example_ids": [
           "job_title_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by job_title_3: the supplied surface serves the stated non-JOB_TITLE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'kiểm tra đường ống' only as tên nhiệm vụ; it must not carry JOB_TITLE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "kiểm tra đường ống"
         ],
@@ -3984,22 +3877,17 @@
           "tên nhiệm vụ"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "business_reference",
+          "verification"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -4062,12 +3950,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "organization_semantic_ambiguity",
+        "id": "organization_business_reference_1",
         "source_example_ids": [
-          "organization_1"
+          "organization_3"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by organization_1: the supplied surface serves the stated non-ORGANIZATION role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Vietcombank Xanh' only as tên chiến dịch; it must not carry ORGANIZATION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Vietcombank Xanh"
         ],
@@ -4082,18 +3970,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "organization_business_reference",
+        "id": "organization_business_reference_2",
         "source_example_ids": [
-          "organization_2"
+          "organization_3"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by organization_2: the supplied surface serves the stated non-ORGANIZATION role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Phật giáo Việt Nam' only as tên chuyên đề; it must not carry ORGANIZATION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Phật giáo Việt Nam"
         ],
@@ -4108,18 +3996,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "organization_technical_schema",
+        "id": "organization_business_reference_3",
         "source_example_ids": [
-          "organization_3"
+          "organization_2"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by organization_3: the supplied surface serves the stated non-ORGANIZATION role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Liên hiệp Công nhân Biển' only as tên chương trình; it must not carry ORGANIZATION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Liên hiệp Công nhân Biển"
         ],
@@ -4127,22 +4015,17 @@
           "tên chương trình"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "business_reference",
+          "verification"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -4205,12 +4088,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "employee_id_semantic_ambiguity",
+        "id": "employee_id_operational_code_1",
         "source_example_ids": [
           "employee_id_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by employee_id_1: the supplied surface serves the stated non-EMPLOYEE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'EMP-20491' only as mã tài sản; it must not carry EMPLOYEE_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "EMP-20491"
         ],
@@ -4225,18 +4108,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "employee_id_business_reference",
+        "id": "employee_id_semantic_ambiguity_1",
         "source_example_ids": [
           "employee_id_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by employee_id_2: the supplied surface serves the stated non-EMPLOYEE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'HR-ACC-771' only as tài khoản HR; it must not carry EMPLOYEE_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "HR-ACC-771"
         ],
@@ -4251,18 +4134,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "employee_id_technical_schema",
+        "id": "employee_id_semantic_ambiguity_2",
         "source_example_ids": [
           "employee_id_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by employee_id_3: the supplied surface serves the stated non-EMPLOYEE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'NV-1028' only as nhãn xe đẩy; it must not carry EMPLOYEE_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "NV-1028"
         ],
@@ -4270,22 +4153,17 @@
           "nhãn xe đẩy"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "comparison",
+          "disambiguation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -4348,12 +4226,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "national_id_semantic_ambiguity",
+        "id": "national_id_operational_code_1",
         "source_example_ids": [
           "national_id_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by national_id_1: the supplied surface serves the stated non-NATIONAL_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'RES-001' only as mã cư dân nội bộ; it must not carry NATIONAL_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "RES-001"
         ],
@@ -4368,18 +4246,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "national_id_business_reference",
+        "id": "national_id_semantic_ambiguity_1",
         "source_example_ids": [
           "national_id_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by national_id_2: the supplied surface serves the stated non-NATIONAL_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use '02748866' only as số đăng ký doanh nghiệp; it must not carry NATIONAL_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "02748866"
         ],
@@ -4394,18 +4272,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "national_id_technical_schema",
+        "id": "national_id_operational_code_2",
         "source_example_ids": [
           "national_id_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by national_id_3: the supplied surface serves the stated non-NATIONAL_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '079203001234' only as mã bệnh nhân; it must not carry NATIONAL_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "079203001234"
         ],
@@ -4413,22 +4291,17 @@
           "mã bệnh nhân"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -4491,12 +4364,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "passport_semantic_ambiguity",
+        "id": "passport_operational_code_1",
         "source_example_ids": [
           "passport_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by passport_1: the supplied surface serves the stated non-PASSPORT role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'DS-160' only as mã biểu mẫu; it must not carry PASSPORT meaning merely because its surface resembles that label.",
         "surface_templates": [
           "DS-160"
         ],
@@ -4511,18 +4384,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "passport_business_reference",
+        "id": "passport_operational_code_2",
         "source_example_ids": [
           "passport_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by passport_2: the supplied surface serves the stated non-PASSPORT role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'BKG-A1234567' only as mã đặt chỗ; it must not carry PASSPORT meaning merely because its surface resembles that label.",
         "surface_templates": [
           "BKG-A1234567"
         ],
@@ -4537,18 +4410,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "passport_technical_schema",
+        "id": "passport_operational_code_3",
         "source_example_ids": [
           "passport_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by passport_3: the supplied surface serves the stated non-PASSPORT role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'PAS-2026-8842' only as mã hồ sơ dịch vụ; it must not carry PASSPORT meaning merely because its surface resembles that label.",
         "surface_templates": [
           "PAS-2026-8842"
         ],
@@ -4556,22 +4429,17 @@
           "mã hồ sơ dịch vụ"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -4634,12 +4502,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "license_semantic_ambiguity",
+        "id": "license_semantic_ambiguity_1",
         "source_example_ids": [
           "license_1"
         ],
         "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by license_1: the supplied surface serves the stated non-LICENSE role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'PTW-8872-A' only as giấy phép làm việc; it must not carry LICENSE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "PTW-8872-A"
         ],
@@ -4654,18 +4522,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "license_business_reference",
+        "id": "license_semantic_ambiguity_2",
         "source_example_ids": [
           "license_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by license_2: the supplied surface serves the stated non-LICENSE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'CA-MED-77102' only as chứng chỉ hành nghề; it must not carry LICENSE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "CA-MED-77102"
         ],
@@ -4680,18 +4548,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "license_technical_schema",
+        "id": "license_semantic_ambiguity_3",
         "source_example_ids": [
           "license_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by license_3: the supplied surface serves the stated non-LICENSE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'WA-2026-118' only as chứng nhận an toàn; it must not carry LICENSE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "WA-2026-118"
         ],
@@ -4699,22 +4567,17 @@
           "chứng nhận an toàn"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "comparison",
+          "disambiguation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -4777,12 +4640,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "plate_semantic_ambiguity",
+        "id": "plate_semantic_ambiguity_1",
         "source_example_ids": [
           "plate_1"
         ],
         "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by plate_1: the supplied surface serves the stated non-PLATE role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'VN-A771' only as số đuôi máy bay; it must not carry PLATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "VN-A771"
         ],
@@ -4797,18 +4660,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "plate_business_reference",
+        "id": "plate_semantic_ambiguity_2",
         "source_example_ids": [
           "plate_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by plate_2: the supplied surface serves the stated non-PLATE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'B-126' only as số thứ tự khám; it must not carry PLATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "B-126"
         ],
@@ -4823,18 +4686,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "plate_technical_schema",
+        "id": "plate_operational_code_1",
         "source_example_ids": [
           "plate_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by plate_3: the supplied surface serves the stated non-PLATE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'PLATE-CHECK-01' only as mã biểu mẫu; it must not carry PLATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "PLATE-CHECK-01"
         ],
@@ -4842,22 +4705,17 @@
           "mã biểu mẫu"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -4920,12 +4778,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "tin_semantic_ambiguity",
+        "id": "tin_semantic_ambiguity_1",
         "source_example_ids": [
           "tin_1"
         ],
         "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by tin_1: the supplied surface serves the stated non-TIN role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use '0123456789' only as số hóa đơn; it must not carry TIN meaning merely because its surface resembles that label.",
         "surface_templates": [
           "0123456789"
         ],
@@ -4940,18 +4798,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "tin_business_reference",
+        "id": "tin_semantic_ambiguity_2",
         "source_example_ids": [
           "tin_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by tin_2: the supplied surface serves the stated non-TIN role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use '02748866' only as số đăng ký doanh nghiệp; it must not carry TIN meaning merely because its surface resembles that label.",
         "surface_templates": [
           "02748866"
         ],
@@ -4966,18 +4824,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "tin_technical_schema",
+        "id": "tin_operational_code_1",
         "source_example_ids": [
           "tin_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by tin_3: the supplied surface serves the stated non-TIN role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'TAX-001' only as mã nhà cung cấp; it must not carry TIN meaning merely because its surface resembles that label.",
         "surface_templates": [
           "TAX-001"
         ],
@@ -4985,22 +4843,17 @@
           "mã nhà cung cấp"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -5063,12 +4916,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "date_semantic_ambiguity",
+        "id": "date_operational_code_1",
         "source_example_ids": [
-          "date_1"
+          "date_2"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by date_1: the supplied surface serves the stated non-DATE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '2026-03-15' only as model thiết bị; it must not carry DATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "2026-03-15"
         ],
@@ -5083,18 +4936,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "date_business_reference",
+        "id": "date_operational_code_2",
         "source_example_ids": [
-          "date_2"
+          "date_3"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by date_2: the supplied surface serves the stated non-DATE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '2026.09.18' only as phiên bản firmware; it must not carry DATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "2026.09.18"
         ],
@@ -5109,18 +4962,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "date_technical_schema",
+        "id": "date_operational_code_3",
         "source_example_ids": [
           "date_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by date_3: the supplied surface serves the stated non-DATE role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use '18-09-2026' only as mã đợt sản xuất; it must not carry DATE meaning merely because its surface resembles that label.",
         "surface_templates": [
           "18-09-2026"
         ],
@@ -5128,22 +4981,17 @@
           "mã đợt sản xuất"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -5206,12 +5054,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "time_semantic_ambiguity",
+        "id": "time_semantic_ambiguity_1",
         "source_example_ids": [
           "time_1"
         ],
         "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by time_1: the supplied surface serves the stated non-TIME role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use '10:44' only as tỷ lệ pha; it must not carry TIME meaning merely because its surface resembles that label.",
         "surface_templates": [
           "10:44"
         ],
@@ -5226,18 +5074,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "time_business_reference",
+        "id": "time_semantic_ambiguity_2",
         "source_example_ids": [
           "time_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by time_2: the supplied surface serves the stated non-TIME role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use '08:30' only as thời lượng bản ghi; it must not carry TIME meaning merely because its surface resembles that label.",
         "surface_templates": [
           "08:30"
         ],
@@ -5252,18 +5100,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "time_technical_schema",
+        "id": "time_semantic_ambiguity_3",
         "source_example_ids": [
           "time_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by time_3: the supplied surface serves the stated non-TIME role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use '14:30' only as tỷ lệ bỏ phiếu; it must not carry TIME meaning merely because its surface resembles that label.",
         "surface_templates": [
           "14:30"
         ],
@@ -5271,22 +5119,17 @@
           "tỷ lệ bỏ phiếu"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "comparison",
+          "disambiguation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -5349,12 +5192,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "marital_semantic_ambiguity",
+        "id": "marital_business_reference_1",
         "source_example_ids": [
           "marital_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by marital_1: the supplied surface serves the stated non-MARITAL role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Combo Độc thân' only as tên món ăn; it must not carry MARITAL meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Combo Độc thân"
         ],
@@ -5369,18 +5212,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "marital_business_reference",
+        "id": "marital_business_reference_2",
         "source_example_ids": [
           "marital_2"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by marital_2: the supplied surface serves the stated non-MARITAL role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Ly thân' only as tên bộ phim; it must not carry MARITAL meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Ly thân"
         ],
@@ -5395,18 +5238,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "marital_technical_schema",
+        "id": "marital_business_reference_3",
         "source_example_ids": [
           "marital_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by marital_3: the supplied surface serves the stated non-MARITAL role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Độc thân vui vẻ' only as tên chương trình; it must not carry MARITAL meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Độc thân vui vẻ"
         ],
@@ -5414,22 +5257,17 @@
           "tên chương trình"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "business_reference",
+          "verification"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -5492,12 +5330,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "religion_semantic_ambiguity",
+        "id": "religion_business_reference_1",
         "source_example_ids": [
           "religion_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by religion_1: the supplied surface serves the stated non-RELIGION role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Giáo xứ Tân Định' only as tên đơn vị tổ chức; it must not carry RELIGION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Giáo xứ Tân Định"
         ],
@@ -5512,18 +5350,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "religion_business_reference",
+        "id": "religion_business_reference_2",
         "source_example_ids": [
           "religion_2"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by religion_2: the supplied surface serves the stated non-RELIGION role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Phật giáo An Lạc' only as tên hội từ thiện; it must not carry RELIGION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Phật giáo An Lạc"
         ],
@@ -5538,18 +5376,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "religion_technical_schema",
+        "id": "religion_business_reference_3",
         "source_example_ids": [
           "religion_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by religion_3: the supplied surface serves the stated non-RELIGION role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Phật giáo Việt Nam' only as tên khóa học; it must not carry RELIGION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Phật giáo Việt Nam"
         ],
@@ -5557,22 +5395,17 @@
           "tên khóa học"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "business_reference",
+          "verification"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -5635,12 +5468,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "ethnicity_semantic_ambiguity",
+        "id": "ethnicity_semantic_ambiguity_1",
         "source_example_ids": [
           "ethnicity_1"
         ],
         "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by ethnicity_1: the supplied surface serves the stated non-ETHNICITY role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Việt Nam' only as quốc tịch trên hộ chiếu; it must not carry ETHNICITY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Việt Nam"
         ],
@@ -5655,18 +5488,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "ethnicity_business_reference",
+        "id": "ethnicity_semantic_ambiguity_2",
         "source_example_ids": [
           "ethnicity_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by ethnicity_2: the supplied surface serves the stated non-ETHNICITY role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'tiếng Tày' only as ngôn ngữ gia đình; it must not carry ETHNICITY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "tiếng Tày"
         ],
@@ -5681,18 +5514,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "ethnicity_technical_schema",
+        "id": "ethnicity_business_reference_1",
         "source_example_ids": [
           "ethnicity_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by ethnicity_3: the supplied surface serves the stated non-ETHNICITY role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Văn hóa Chăm' only as tên ngày hội; it must not carry ETHNICITY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Văn hóa Chăm"
         ],
@@ -5700,22 +5533,17 @@
           "tên ngày hội"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "business_reference",
+          "verification"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -5778,12 +5606,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "trade_union_semantic_ambiguity",
+        "id": "trade_union_semantic_ambiguity_1",
         "source_example_ids": [
           "trade_union_1"
         ],
         "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by trade_union_1: the supplied surface serves the stated non-TRADE_UNION role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'UnionPay' only as mạng thẻ; it must not carry TRADE_UNION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "UnionPay"
         ],
@@ -5798,18 +5626,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "trade_union_business_reference",
+        "id": "trade_union_business_reference_1",
         "source_example_ids": [
           "trade_union_2"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by trade_union_2: the supplied surface serves the stated non-TRADE_UNION role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Liên hiệp Công nhân Biển' only as tên doanh nghiệp; it must not carry TRADE_UNION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Liên hiệp Công nhân Biển"
         ],
@@ -5824,18 +5652,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "trade_union_technical_schema",
+        "id": "trade_union_semantic_ambiguity_2",
         "source_example_ids": [
           "trade_union_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by trade_union_3: the supplied surface serves the stated non-TRADE_UNION role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'Công đoàn Du lịch Thành phố' only as đơn vị tổ chức sự kiện; it must not carry TRADE_UNION meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Công đoàn Du lịch Thành phố"
         ],
@@ -5843,22 +5671,17 @@
           "đơn vị tổ chức sự kiện"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "comparison",
+          "disambiguation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -5921,12 +5744,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "nationality_semantic_ambiguity",
+        "id": "nationality_business_reference_1",
         "source_example_ids": [
           "nationality_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by nationality_1: the supplied surface serves the stated non-NATIONALITY role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Singapore Xanh' only as tên chiến dịch; it must not carry NATIONALITY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Singapore Xanh"
         ],
@@ -5941,18 +5764,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "nationality_business_reference",
+        "id": "nationality_semantic_ambiguity_1",
         "source_example_ids": [
           "nationality_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by nationality_2: the supplied surface serves the stated non-NATIONALITY role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'tiếng Đức' only as ngôn ngữ báo cáo; it must not carry NATIONALITY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "tiếng Đức"
         ],
@@ -5967,18 +5790,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "nationality_technical_schema",
+        "id": "nationality_business_reference_2",
         "source_example_ids": [
           "nationality_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by nationality_3: the supplied surface serves the stated non-NATIONALITY role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Nhật Bản Mới' only as tên dự án; it must not carry NATIONALITY meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Nhật Bản Mới"
         ],
@@ -5986,22 +5809,17 @@
           "tên dự án"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "business_reference",
+          "verification"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -6064,12 +5882,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "insurance_id_semantic_ambiguity",
+        "id": "insurance_id_operational_code_1",
         "source_example_ids": [
           "insurance_id_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by insurance_id_1: the supplied surface serves the stated non-INSURANCE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'CL-2209' only as mã yêu cầu bồi thường; it must not carry INSURANCE_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "CL-2209"
         ],
@@ -6084,18 +5902,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "processing_input",
+          "validation"
         ],
         "technical": false
       },
       {
-        "id": "insurance_id_business_reference",
+        "id": "insurance_id_semantic_ambiguity_1",
         "source_example_ids": [
           "insurance_id_2"
         ],
-        "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by insurance_id_2: the supplied surface serves the stated non-INSURANCE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "semantic_ambiguity",
+        "contrast_principle": "In a new event, use 'CLAIM-HELP-3322' only as phiếu hỗ trợ; it must not carry INSURANCE_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "CLAIM-HELP-3322"
         ],
@@ -6110,18 +5928,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "comparison",
+          "disambiguation"
         ],
         "technical": false
       },
       {
-        "id": "insurance_id_technical_schema",
+        "id": "insurance_id_operational_code_2",
         "source_example_ids": [
           "insurance_id_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by insurance_id_3: the supplied surface serves the stated non-INSURANCE_ID role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "operational_code",
+        "contrast_principle": "In a new event, use 'CLM-2026-0098' only as mã hồ sơ bồi thường; it must not carry INSURANCE_ID meaning merely because its surface resembles that label.",
         "surface_templates": [
           "CLM-2026-0098"
         ],
@@ -6129,22 +5947,17 @@
           "mã hồ sơ bồi thường"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "processing_input",
+          "validation"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   },
@@ -6207,12 +6020,12 @@
     },
     "DECOY_BLUEPRINTS": [
       {
-        "id": "medical_info_semantic_ambiguity",
+        "id": "medical_info_business_reference_1",
         "source_example_ids": [
           "medical_info_1"
         ],
-        "family": "semantic_ambiguity",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by medical_info_1: the supplied surface serves the stated non-MEDICAL_INFO role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Bảo vệ Hô hấp' only as tên hội thảo; it must not carry MEDICAL_INFO meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Bảo vệ Hô hấp"
         ],
@@ -6227,18 +6040,18 @@
           "custom"
         ],
         "integration_relations": [
-          "classification",
-          "comparison"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "medical_info_business_reference",
+        "id": "medical_info_business_reference_2",
         "source_example_ids": [
           "medical_info_2"
         ],
         "family": "business_reference",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by medical_info_2: the supplied surface serves the stated non-MEDICAL_INFO role in this event, so spelling or shape alone must not trigger the label.",
+        "contrast_principle": "In a new event, use 'Trung tâm Ung thư' only as tên chương trình tuyển dụng; it must not carry MEDICAL_INFO meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Trung tâm Ung thư"
         ],
@@ -6253,18 +6066,18 @@
           "custom"
         ],
         "integration_relations": [
-          "lookup",
-          "reference"
+          "business_reference",
+          "verification"
         ],
         "technical": false
       },
       {
-        "id": "medical_info_technical_schema",
+        "id": "medical_info_business_reference_3",
         "source_example_ids": [
           "medical_info_3"
         ],
-        "family": "technical_schema",
-        "contrast_principle": "Apply only the semantic distinction demonstrated by medical_info_3: the supplied surface serves the stated non-MEDICAL_INFO role in this event, so spelling or shape alone must not trigger the label.",
+        "family": "business_reference",
+        "contrast_principle": "In a new event, use 'Tiểu đường Care Plus' only as tên dòng sản phẩm; it must not carry MEDICAL_INFO meaning merely because its surface resembles that label.",
         "surface_templates": [
           "Tiểu đường Care Plus"
         ],
@@ -6272,22 +6085,17 @@
           "tên dòng sản phẩm"
         ],
         "forbidden_cues": [],
-        "compatible_domains": [
-          "technical_support",
-          "cybersecurity",
-          "administration",
-          "customer_support"
-        ],
+        "compatible_domains": [],
         "compatible_structures": [
           "contract",
           "chat",
           "custom"
         ],
         "integration_relations": [
-          "validation",
-          "correction"
+          "business_reference",
+          "verification"
         ],
-        "technical": true
+        "technical": false
       }
     ]
   }

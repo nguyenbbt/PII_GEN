@@ -578,6 +578,18 @@ class DistributionRunConfigTests(unittest.TestCase):
                 hard_negative={"mode": "decoy_only"},
             )
 
+    def test_rejects_technical_decoy_ratio_above_hard_cap(self) -> None:
+        with self.assertRaisesRegex(
+            ValidationError,
+            "technical_decoy_max_ratio",
+        ):
+            RunConfig(
+                num_samples=1,
+                hard_negative={
+                    "technical_decoy_max_ratio": 0.16,
+                },
+            )
+
     def test_rejects_distribution_that_does_not_sum_to_one(self) -> None:
         with self.assertRaises(ValidationError):
             RunConfig(

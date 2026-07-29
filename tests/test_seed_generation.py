@@ -143,6 +143,59 @@ class SeedGenerationTests(unittest.TestCase):
             pack, ["DATE"], taxonomy
         ).valid)
 
+    def test_mixed_contrastive_uses_taxonomy_blueprint_when_available(
+        self,
+    ) -> None:
+        pipeline, _, _ = build_pipeline(offline=True)
+        taxonomy = pipeline.taxonomy_service.import_json(
+            Path("pii_taxonomy_rules.json")
+        ).labels
+        selected = [
+            label
+            for label in taxonomy
+            if label.code in {"PERSON", "EMAIL"}
+        ]
+        config = HardNegativeConfig(mode="mixed_contrastive")
+        mixed_task = task(
+            "hard_negative",
+            ["PERSON", "EMAIL"],
+        ).copy(
+            update={
+                "hard_negative_ordinal": 1,
+                "focus_label": "PERSON",
+                "robin_labels": ["EMAIL"],
+            }
+        )
+
+        pack = HardNegativeSeedFactory(
+            self.provider,
+            self.selector,
+            config,
+        ).build(
+            mixed_task,
+            selected,
+            random.Random(42),
+        )
+
+        decoy = pack.decoys[0]
+        target = next(
+            label
+            for label in selected
+            if label.code == decoy.target_label
+        )
+        self.assertIn(
+            decoy.strategy_id,
+            {blueprint.id for blueprint in target.decoy_blueprints},
+        )
+        self.assertIsNotNone(decoy.realization_plan)
+        self.assertTrue(
+            SeedPackValidator(config, ValidationConfig()).validate(
+                pack,
+                ["PERSON", "EMAIL"],
+                selected,
+            ).valid
+        )
+
     def test_hard_negative_cues_follow_english_and_german_task_language(
         self,
     ) -> None:

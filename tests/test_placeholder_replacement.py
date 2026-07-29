@@ -130,6 +130,182 @@ class PlaceholderReplacementTests(unittest.TestCase):
             decoys=[],
         )
 
+    def test_declared_placeholder_without_any_tag_is_safely_tagged(self) -> None:
+        tagged_text, entities = replace_entity_placeholders(
+            tagged_text=(
+                "[PERSON_1] gửi yêu cầu đến [EMAIL_1]."
+            ),
+            entities=[
+                {"label": "PERSON", "value": "[PERSON_1]"},
+                {"label": "EMAIL", "value": "[EMAIL_1]"},
+            ],
+            positive_entities=[
+                self.positive_entities[0],
+                self.positive_entities[2],
+            ],
+        )
+
+        self.assertEqual(
+            tagged_text,
+            (
+                "<PERSON>Nguyễn An</PERSON> gửi yêu cầu đến "
+                "<EMAIL>contact@example.test</EMAIL>."
+            ),
+        )
+        self.assertEqual(
+            entities,
+            [
+                {"label": "PERSON", "value": "Nguyễn An"},
+                {
+                    "label": "EMAIL",
+                    "value": "contact@example.test",
+                },
+            ],
+        )
+
+    def test_declared_missing_tag_is_repaired_per_placeholder(self) -> None:
+        tagged_text, entities = replace_entity_placeholders(
+            tagged_text=(
+                "<PERSON>[PERSON_1]</PERSON> gửi thư đến [EMAIL_1]."
+            ),
+            entities=[
+                {"label": "PERSON", "value": "[PERSON_1]"},
+                {"label": "EMAIL", "value": "[EMAIL_1]"},
+            ],
+            positive_entities=[
+                self.positive_entities[0],
+                self.positive_entities[2],
+            ],
+        )
+
+        self.assertIn(
+            "<EMAIL>contact@example.test</EMAIL>",
+            tagged_text,
+        )
+        validate_seeded_contract(
+            tagged_text=tagged_text,
+            entities=entities,
+            positive_entities=[
+                self.positive_entities[0],
+                self.positive_entities[2],
+            ],
+            decoys=[],
+        )
+
+    def test_declared_invented_values_are_rebound_by_label(self) -> None:
+        tagged_text, entities = replace_entity_placeholders(
+            tagged_text=(
+                "<PERSON>Nguyễn Giá Trị Tự Sinh</PERSON> gửi thư đến "
+                "<EMAIL>invented@example.test</EMAIL>."
+            ),
+            entities=[
+                {
+                    "label": "PERSON",
+                    "value": "Nguyễn Giá Trị Tự Sinh",
+                },
+                {
+                    "label": "EMAIL",
+                    "value": "invented@example.test",
+                },
+            ],
+            positive_entities=[
+                self.positive_entities[0],
+                self.positive_entities[2],
+            ],
+        )
+
+        self.assertEqual(
+            tagged_text,
+            (
+                "<PERSON>Nguyễn An</PERSON> gửi thư đến "
+                "<EMAIL>contact@example.test</EMAIL>."
+            ),
+        )
+        validate_seeded_contract(
+            tagged_text=tagged_text,
+            entities=entities,
+            positive_entities=[
+                self.positive_entities[0],
+                self.positive_entities[2],
+            ],
+            decoys=[],
+        )
+
+    def test_rebound_value_prevents_duplicate_placeholder_insertion(self) -> None:
+        tagged_text, entities = replace_entity_placeholders(
+            tagged_text=(
+                "<PERSON>Tên do model tự sinh</PERSON> đã xác nhận; "
+                "tham chiếu hồ sơ: [PERSON_1]."
+            ),
+            entities=[
+                {
+                    "label": "PERSON",
+                    "value": "Tên do model tự sinh",
+                },
+                {
+                    "label": "PERSON",
+                    "value": "[PERSON_1]",
+                },
+            ],
+            positive_entities=self.positive_entities[:1],
+        )
+
+        self.assertEqual(tagged_text.count("Nguyễn An"), 1)
+        self.assertIn("tham chiếu hồ sơ: người liên quan", tagged_text)
+        validate_seeded_contract(
+            tagged_text=tagged_text,
+            entities=entities,
+            positive_entities=self.positive_entities[:1],
+            decoys=[],
+        )
+
+    def test_extra_value_is_preserved_when_seed_is_already_bound(self) -> None:
+        tagged_text, entities = replace_entity_placeholders(
+            tagged_text=(
+                "<PERSON>[PERSON_1]</PERSON> gặp "
+                "<PERSON>Người hỗ trợ</PERSON>."
+            ),
+            entities=[
+                {"label": "PERSON", "value": "[PERSON_1]"},
+                {"label": "PERSON", "value": "Người hỗ trợ"},
+            ],
+            positive_entities=self.positive_entities[:1],
+        )
+
+        self.assertIn(
+            "<PERSON>Nguyễn An</PERSON>",
+            tagged_text,
+        )
+        self.assertIn(
+            "<PERSON>Người hỗ trợ</PERSON>",
+            tagged_text,
+        )
+
+    def test_multiple_invented_values_map_to_seed_order(self) -> None:
+        tagged_text, entities = replace_entity_placeholders(
+            tagged_text=(
+                "<PERSON>Người A</PERSON> chuyển hồ sơ cho "
+                "<PERSON>Người B</PERSON>."
+            ),
+            entities=[
+                {"label": "PERSON", "value": "Người A"},
+                {"label": "PERSON", "value": "Người B"},
+            ],
+            positive_entities=self.positive_entities[:2],
+        )
+
+        self.assertEqual(
+            tagged_text,
+            (
+                "<PERSON>Nguyễn An</PERSON> chuyển hồ sơ cho "
+                "<PERSON>Lê 🧑‍💻 Bình</PERSON>."
+            ),
+        )
+        self.assertEqual(
+            [entity["value"] for entity in entities],
+            ["Nguyễn An", "Lê 🧑‍💻 Bình"],
+        )
+
     def test_entity_metadata_is_synchronized_from_repeated_tags(self) -> None:
         tagged_text, entities = replace_entity_placeholders(
             tagged_text=(

@@ -332,12 +332,18 @@ def validate_seeded_contract(
         ):
             raise ValueError(f"decoy must remain untagged and absent from entities: {value}")
         contexts = extract_occurrence_contexts(text_without_tags, value)
+        taxonomy_mixed_decoy = bool(
+            decoy.get("realization_plan")
+        )
         if (
             len(contexts) != occurrence_count
-            or not decoy_contexts_are_valid(
-                text_without_tags,
-                value,
-                decoy.get("required_context_cues", []),
+            or (
+                not taxonomy_mixed_decoy
+                and not decoy_contexts_are_valid(
+                    text_without_tags,
+                    value,
+                    decoy.get("required_context_cues", []),
+                )
             )
         ):
             raise ValueError(

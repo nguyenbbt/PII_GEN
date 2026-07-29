@@ -12,7 +12,7 @@ POST /api/v1/runs
   → Coverage Controller
   → DiversityPlanner (seeded quota + balanced context)
   → SampleTypeRouter + multilingual Value Bank
-  → SeedPackValidator + ContextFrameSelector
+  → SeedPackValidator + MixedContrastiveDecoyPlanner/ContextFrameSelector
   → JSON Taxonomy Context Selector
   → Data Generator (Azure OpenAI placeholder skeleton)
   → Python placeholder binding (Value Bank values)
@@ -23,6 +23,12 @@ POST /api/v1/runs
 ```
 
 Hard-negative mặc định chạy theo mode `decoy_only`: hệ thống chọn ngẫu nhiên đúng một mã trong `focus_labels`, tạo decoy theo registry phủ đủ 44 mã của taxonomy, không tạo positive entity và yêu cầu output `entities: []`. Chỉ mã nhãn chính xác từ taxonomy snapshot được chấp nhận; tài liệu PDF hard-negative chỉ cung cấp nguyên tắc thiết kế ví dụ, không cung cấp label cho code.
+
+Khi cấu hình `mixed_contrastive`, hệ thống dùng `DECOY_BLUEPRINTS` và ba
+`HARD_NEGATIVE` few-shot của đúng decoy target trong `pii_taxonomy_rules.json`.
+Planner chọn context, blueprint, positive anchor và quan hệ tích hợp cùng lúc;
+Generator chỉ học nguyên tắc tương phản, không sao chép câu mẫu. Validator/Judge
+loại stock tail, decoy tách rời, context không tương thích và few-shot imitation.
 
 Positive entity value được lấy từ file ánh xạ theo `RunConfig.language` và taxonomy
 class. Mặc định `en` dùng `PII_Value_Bank/en_pii_value_pools.json`. LLM chỉ viết nội

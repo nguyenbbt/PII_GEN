@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Mapping, Sequence
 
 from ..domain.models import (
     EventEnvelope,
@@ -61,5 +62,16 @@ class TaxonomyService:
         self,
         version_id: str,
         task: GenerationTask,
+        *,
+        decoy_target_codes: Sequence[str] = (),
+        decoy_source_example_ids: Mapping[
+            str,
+            Sequence[str],
+        ] | None = None,
     ) -> GenerationTaxonomyContext:
-        return self._context_selector.select(self.get(version_id), task)
+        return self._context_selector.select(
+            self.get(version_id),
+            task,
+            decoy_target_codes=decoy_target_codes,
+            decoy_source_example_ids=decoy_source_example_ids,
+        )

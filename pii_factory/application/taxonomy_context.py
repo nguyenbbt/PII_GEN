@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from ..domain.models import (
     FewShotExample,
@@ -24,6 +24,10 @@ class TaxonomyContextSelector:
         task: GenerationTask,
         *,
         decoy_target_codes: Sequence[str] = (),
+        decoy_source_example_ids: Mapping[
+            str,
+            Sequence[str],
+        ] | None = None,
     ) -> GenerationTaxonomyContext:
         labels_by_code = {label.code: label for label in taxonomy.labels}
         focus_code = task.focus_label or task.focus_labels[0]
@@ -37,6 +41,9 @@ class TaxonomyContextSelector:
             ]
         )
         decoy_codes = list(dict.fromkeys(decoy_target_codes))
+        preferred_decoy_examples = (
+            decoy_source_example_ids or {}
+        )
         requested_codes = [focus_code, *robin_codes, *decoy_codes]
         missing = set(requested_codes) - set(labels_by_code)
         if missing:
@@ -70,6 +77,10 @@ class TaxonomyContextSelector:
                         labels_by_code[code],
                         "hard_negative",
                         task.random_seed,
+                        preferred_ids=preferred_decoy_examples.get(
+                            code,
+                            (),
+                        ),
                     ),
                 )
                 for code in decoy_codes
@@ -82,6 +93,8 @@ class TaxonomyContextSelector:
         label: TaxonomyLabel,
         sample_type: str,
         random_seed: int,
+        *,
+        preferred_ids: Sequence[str] = (),
     ) -> list[FewShotExample]:
         groups = {
             "positive": label.examples.positive,
@@ -92,11 +105,35 @@ class TaxonomyContextSelector:
         if len(examples) <= cls._FEW_SHOT_COUNT:
             return list(examples)
 
+        preferred_id_set = set(preferred_ids)
+        preferred = [
+            example
+            for example in examples
+            if example.id in preferred_id_set
+        ][:cls._FEW_SHOT_COUNT]
+        if len(preferred) == cls._FEW_SHOT_COUNT:
+            return preferred
+
+        selected_id_set = {
+            example.id
+            for example in preferred
+        }
+        remaining = [
+            example
+            for example in examples
+            if example.id not in selected_id_set
+        ]
         rng = random.Random(f"{random_seed}:{label.code}:{sample_type}")
-        indexes = sorted(
-            rng.sample(range(len(examples)), cls._FEW_SHOT_COUNT)
+        selected = rng.sample(
+            remaining,
+            cls._FEW_SHOT_COUNT - len(preferred),
         )
-        return [examples[index] for index in indexes]
+        selected_id_set.update(example.id for example in selected)
+        return [
+            example
+            for example in examples
+            if example.id in selected_id_set
+        ]
 
     @staticmethod
     def _guidance(

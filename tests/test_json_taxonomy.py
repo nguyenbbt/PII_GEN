@@ -91,6 +91,23 @@ class JsonTaxonomyParserTests(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 JsonTaxonomyParser().parse_file(path)
 
+    def test_rejects_blueprint_that_bypasses_technical_quota(self) -> None:
+        source = json.loads(
+            Path("pii_taxonomy_rules.json").read_text(encoding="utf-8")
+        )
+        blueprint = source[0]["DECOY_BLUEPRINTS"][0]
+        blueprint["family"] = "technical_schema"
+        blueprint["technical"] = False
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid-technical-flag.json"
+            path.write_text(
+                json.dumps(source, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValidationError):
+                JsonTaxonomyParser().parse_file(path)
+
 
 class TaxonomyContextSelectorTests(unittest.TestCase):
     @classmethod
@@ -167,6 +184,49 @@ class TaxonomyContextSelectorTests(unittest.TestCase):
         self.assertTrue(all(
             not label.examples for label in context.robin_labels
         ))
+
+    def test_selected_blueprint_source_example_is_never_sampled_out(self) -> None:
+        label = next(
+            item
+            for item in self.taxonomy.labels
+            if item.code == "EMAIL"
+        )
+        extra = label.examples.hard_negative[0].copy(update={
+            "id": "email_hard_negative_extra",
+            "expected_tagged_text": "Một ví dụ bổ sung hoàn toàn khác.",
+        })
+        expanded_label = label.copy(update={
+            "examples": label.examples.copy(update={
+                "hard_negative": [
+                    *label.examples.hard_negative,
+                    extra,
+                ],
+            }),
+        })
+        snapshot = self.taxonomy.copy(update={
+            "labels": [
+                expanded_label
+                if item.code == "EMAIL"
+                else item
+                for item in self.taxonomy.labels
+            ],
+        })
+
+        context = TaxonomyContextSelector().select(
+            snapshot,
+            self._task(sample_type="hard_negative"),
+            decoy_target_codes=["EMAIL"],
+            decoy_source_example_ids={
+                "EMAIL": ["email_hard_negative_extra"],
+            },
+        )
+
+        selected_ids = {
+            example.id
+            for example in context.decoy_labels[0].examples
+        }
+        self.assertEqual(len(selected_ids), 3)
+        self.assertIn("email_hard_negative_extra", selected_ids)
 
     def test_selection_is_reproducible_for_the_same_task_seed(self) -> None:
         task = self._task(sample_type="positive")

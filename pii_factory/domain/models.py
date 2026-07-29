@@ -102,6 +102,27 @@ class DecoyBlueprint(Schema):
             raise ValueError("decoy blueprint list values must be unique")
         return values
 
+    @root_validator
+    def technical_blueprints_are_explicitly_scoped(
+        cls,
+        values: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        is_technical_family = (
+            values.get("family") == "technical_schema"
+        )
+        if bool(values.get("technical")) != is_technical_family:
+            raise ValueError(
+                "technical must be true exactly for technical_schema "
+                "blueprints"
+            )
+        if is_technical_family and not values.get(
+            "compatible_domains"
+        ):
+            raise ValueError(
+                "technical_schema blueprints require compatible_domains"
+            )
+        return values
+
 
 class TaxonomyLabel(Schema):
     code: str = Field(..., min_length=1, max_length=100)
@@ -194,7 +215,11 @@ class HardNegativeConfig(Schema):
     max_decoys: int = Field(default=1, ge=1, le=3)
     max_focus_labels: int = Field(default=1, ge=1, le=10)
     unsupported_label_policy: Literal["rebuild_task"] = "rebuild_task"
-    technical_decoy_max_ratio: float = Field(default=0.15, ge=0.0, le=1.0)
+    technical_decoy_max_ratio: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=0.15,
+    )
     require_context_compatible_decoy: bool = True
     reject_detachable_decoy: bool = True
 
@@ -639,6 +664,7 @@ class GenerationTask(Schema):
     )
     current_attempt: int = 0
     slot_no: Optional[int] = Field(default=None, gt=0)
+    hard_negative_ordinal: Optional[int] = Field(default=None, gt=0)
     replacement_no: int = Field(default=0, ge=0)
     parent_task_id: Optional[str] = None
     status: TaskStatus = TaskStatus.CREATED
@@ -660,6 +686,7 @@ class DecoyRealizationPlan(Schema):
     discourse_stage: Literal["intake", "processing", "decision"]
     evidence_cues: List[str] = Field(..., min_items=1)
     source_example_ids: List[str] = Field(..., min_items=1)
+    compatible_domains: List[str] = Field(default_factory=list)
 
 
 class DecoySeed(Schema):

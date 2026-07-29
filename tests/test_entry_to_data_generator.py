@@ -103,6 +103,71 @@ class EntryToDataGeneratorTests(unittest.TestCase):
         )
         self.assertEqual(context.robin_labels[0].examples, [])
 
+    def test_mixed_decoy_target_receives_only_selected_hard_negative_examples(
+        self,
+    ) -> None:
+        taxonomy = self.pipeline.taxonomy_service.import_json(
+            Path("pii_taxonomy_rules.json")
+        )
+        run = self.pipeline.create_run(CreateRunRequest(
+            taxonomy_version_id=taxonomy.version_id,
+            config=RunConfig(
+                num_samples=1,
+                focus_label="PERSON",
+                robin_labels=["EMAIL"],
+                robin_selection={
+                    "min_per_sample": 1,
+                    "max_per_sample": 1,
+                },
+                difficulty_distribution={
+                    "easy": 0.0,
+                    "medium": 0.0,
+                    "hard": 1.0,
+                },
+                sample_type_distribution={
+                    "positive": 0.0,
+                    "pure_negative": 0.0,
+                    "hard_negative": 1.0,
+                },
+                hard_negative={
+                    "mode": "mixed_contrastive",
+                    "min_decoys": 1,
+                    "max_decoys": 1,
+                    "max_focus_labels": 2,
+                },
+                max_entities={
+                    "easy": 2,
+                    "medium": 2,
+                    "hard": 2,
+                },
+                complexity_limits={
+                    "positive": 2,
+                    "pure_negative": 1,
+                    "hard_negative": 3,
+                },
+            ),
+        ))
+
+        result = self.pipeline.generate_pending(
+            run.run_id,
+            limit=1,
+        )[0]
+        context = result.taxonomy_context_used
+
+        self.assertEqual(len(context.decoy_labels), 1)
+        self.assertIn(
+            context.decoy_labels[0].label,
+            {"PERSON", "EMAIL"},
+        )
+        self.assertEqual(
+            len(context.decoy_labels[0].examples),
+            3,
+        )
+        self.assertEqual(
+            context.robin_labels[0].examples,
+            [],
+        )
+
     def test_parses_the_real_taxonomy_json(self) -> None:
         taxonomy = JsonTaxonomyParser().parse_file(
             Path("pii_taxonomy_rules.json")
