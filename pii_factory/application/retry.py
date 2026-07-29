@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from typing import Literal, Sequence
+from typing import Collection, Literal, Mapping, Sequence
 
 from ..domain.models import ContentSeeds, GenerationTask, SeedPack, TaxonomyLabel
 from .seed_generation import ContextFrameSelector, SampleTypeRouter
@@ -25,11 +25,17 @@ class RegenerationRouter:
         taxonomy: Sequence[TaxonomyLabel],
         rng: random.Random,
         current: SeedPack,
+        excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
     ) -> SeedPack:
         if scope == "TEXT":
             return current
         if scope == "SEEDS":
-            return self.seed_router.build_seed_pack(task, taxonomy, rng)
+            return self.seed_router.build_seed_pack(
+                task,
+                taxonomy,
+                rng,
+                excluded_values_by_label=excluded_values_by_label,
+            )
         if scope == "CONTEXT":
             new_frame = self.context_selector.select(
                 task.focus_labels,

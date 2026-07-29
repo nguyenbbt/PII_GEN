@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import re
@@ -11,6 +12,27 @@ from typing import Dict, Iterable, Mapping, Sequence
 _CLASS_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _LANGUAGE = re.compile(r"^[a-z]{2}$")
 _SUPPORTED_VERSION = 1
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def resolve_value_bank_path(
+    value_bank_path: str | Path,
+    *,
+    config_directory: str | Path | None = None,
+) -> Path:
+    """Resolve a bank path consistently for CLI, API, and installed entry points."""
+    path = Path(value_bank_path).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+
+    candidates: list[Path] = []
+    if config_directory is not None:
+        candidates.append(Path(config_directory).expanduser() / path)
+    candidates.extend((Path.cwd() / path, _PROJECT_ROOT / path))
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0].resolve()
 
 
 class ValueBankError(ValueError):
@@ -42,24 +64,41 @@ class GeneratedEntityValue:
 class ValueBankEntityProvider:
     """Load and deterministically sample entity values from language JSON banks.
 
-    Relative paths are resolved against the process working directory. Files are
-    loaded lazily and cached after validation. Every source entry is retained,
-    including case variants and intentional duplicates, so the configured bank
-    remains the source of truth for sampling probabilities.
+    Relative paths are resolved from the process working directory with a
+    project-root fallback. Files are loaded lazily and cached after validation.
+    Every source entry is retained, including case variants and intentional
+    duplicates, so the configured bank remains the source of truth for sampling
+    probabilities.
     """
 
     def __init__(
         self,
         value_bank_path: str | Path = "PII_Value_Bank",
         language_files: Mapping[str, str | Path] | None = None,
+        *,
+        partition_index: int = 0,
+        partition_count: int = 1,
     ) -> None:
-        path = Path(value_bank_path).expanduser()
-        self.path = path if path.is_absolute() else Path.cwd() / path
+        if partition_count < 1 or not 0 <= partition_index < partition_count:
+            raise ValueError("invalid Value Bank partition")
+        self.path = resolve_value_bank_path(value_bank_path)
+        self.partition_index = partition_index
+        self.partition_count = partition_count
         self.language_files = {
             self._normalise_language(language): Path(file_path).expanduser()
             for language, file_path in (language_files or {}).items()
         }
         self._banks: Dict[str, Dict[str, tuple[str, ...]]] = {}
+
+    def validate(
+        self,
+        *,
+        language: str,
+        required_labels: Iterable[str],
+    ) -> None:
+        """Eagerly validate the selected language and required taxonomy classes."""
+        for label in dict.fromkeys(str(item).strip().upper() for item in required_labels):
+            self.values_for(language, label)
 
     def generate(
         self,
@@ -103,13 +142,24 @@ class ValueBankEntityProvider:
                 f"Value Bank language {normalised_language!r} "
                 f"does not define class {normalised_label!r}"
             )
-        values = bank[normalised_label]
+        values = tuple(
+            value
+            for value in bank[normalised_label]
+            if self._belongs_to_partition(value)
+        )
         if not values:
             raise ValueBankEmptyClassError(
                 f"Value Bank class {normalised_label!r} for language "
                 f"{normalised_language!r} has no values"
             )
         return values
+
+    def _belongs_to_partition(self, value: str) -> bool:
+        if self.partition_count == 1:
+            return True
+        digest = hashlib.sha256(value.encode("utf-8")).digest()
+        bucket = int.from_bytes(digest[:8], "big") % self.partition_count
+        return bucket == self.partition_index
 
     def _load_language(self, language: str) -> Dict[str, tuple[str, ...]]:
         cached = self._banks.get(language)

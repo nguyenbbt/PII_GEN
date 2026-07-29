@@ -1,14 +1,15 @@
 {
-  "run_name": "vi_data_001",
-  "num_samples": 100,
-  "language": "vietnamese",
+  "run_name": "vi_quality_online_50",
+  "num_samples": 50,
+  "language": "vi",
   "minimum_per_label": 0,
-  "batch_size": 5,
+  "batch_size": 10,
   "focus_label": "PERSON",
   "robin_labels": [
     "PHONE",
     "EMAIL",
     "ADDRESS",
+    "LOCATION",
     "DATE",
     "TIME",
     "MONEY",
@@ -17,8 +18,7 @@
     "CARD_NUMBER",
     "PLATE",
     "PASSPORT",
-    "MEDICAL_INFO",
-    "LOCATION"
+    "MEDICAL_INFO"
   ],
   "robin_selection": {
     "min_per_sample": 4,
@@ -31,14 +31,14 @@
     "long": 0.3
   },
   "difficulty_distribution": {
-    "easy": 0,
-    "medium": 0,
-    "hard": 1
+    "easy": 0.2,
+    "medium": 0.5,
+    "hard": 0.3
   },
   "sample_type_distribution": {
-    "positive": 0.5,
+    "positive": 0.7,
     "pure_negative": 0.0,
-    "hard_negative": 0.5
+    "hard_negative": 0.3
   },
   "sample_structures": [
     {
@@ -65,26 +65,21 @@
     }
   ],
   "optional_constraint_distribution": {
-    "teen_code": 0.0,
+    "teen_code": 0.02,
     "light_typo": 0.05,
     "abbreviation": 0.1
   },
   "max_entities": {
-    "easy": 5,
-    "medium": 6,
+    "easy": 8,
+    "medium": 8,
     "hard": 8
   },
   "max_regenerate_attempts": 2,
   "max_task_replacements": 2,
   "value_bank": {
     "path": "PII_Value_Bank",
-    "language_files": {
-      "vi": "vi_pii_value_pools.json",
-      "en": "en_pii_value_pools.json",
-      "de": "de_pii_value_pools.json"
-    },
     "max_seed_pack_attempts": 5,
-    "allow_additional_unseeded_pii": true
+    "allow_additional_unseeded_pii": false
   },
   "hard_negative": {
     "mode": "mixed_contrastive",
@@ -100,16 +95,26 @@
   },
   "validation": {
     "quality_checks_enabled": false,
-    "accept_last_candidate_on_exhaustion": false
+    "local_context_window": 80,
+    "reject_mixed_locale": true,
+    "pure_negative_structured_scan": true,
+    "hard_negative_structured_scan": true
+  },
+  "novelty": {
+    "enabled": true,
+    "mode": "enforce",
+    "near_duplicate_threshold": 0.9,
+    "recent_window": 100,
+    "max_feedback": 3
   },
   "verifier": {
     "enabled": true,
     "max_repairs_per_candidate": 1
   },
   "parallel_generation": {
-    "workers": 10,
+    "workers": 5,
     "shard_size": 10,
-    "max_shard_retries": 2
+    "max_shard_retries": 1
   },
   "random_seed": 174
 }

@@ -12,11 +12,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Sequence
 from uuid import uuid4
 
 from pydantic import ValidationError
 
+from .application.diversity_metrics import sentence_skeleton
+from .application.novelty import DEFAULT_CATEGORICAL_LABELS
+from .application.taxonomy_service import resolve_taxonomy_path
 from .domain.models import FormattedSample, RunConfig
 
 
@@ -26,16 +29,83 @@ logger = logging.getLogger(__name__)
 class ParallelGenerationError(RuntimeError):
     """A shard set cannot be safely published as one complete dataset."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        token_usage: dict[str, Any] | None = None,
+    ) -> None:
+        self.token_usage = token_usage
+        super().__init__(message)
+
+
+def _combine_usage_payloads(
+    usages: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    totals: dict[str, int | Decimal] = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "money_cost": Decimal("0"),
+    }
+    role_totals: dict[str, dict[str, int | Decimal]] = {
+        role: {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "money_cost": Decimal("0"),
+        }
+        for role in ("generator", "verifier")
+    }
+    for usage in usages:
+        totals["input_tokens"] += int(usage.get("input_tokens", 0))
+        totals["output_tokens"] += int(usage.get("output_tokens", 0))
+        totals["total_tokens"] += int(usage.get("total_tokens", 0))
+        totals["money_cost"] += Decimal(str(usage.get("money_cost", "0")))
+        for role, role_total in role_totals.items():
+            role_usage = usage.get(role) or {}
+            role_total["input_tokens"] += int(
+                role_usage.get("input_tokens", 0)
+            )
+            role_total["output_tokens"] += int(
+                role_usage.get("output_tokens", 0)
+            )
+            role_total["total_tokens"] += int(
+                role_usage.get("total_tokens", 0)
+            )
+            role_total["money_cost"] += Decimal(
+                str(role_usage.get("money_cost", "0"))
+            )
+    return {
+        "input_tokens": totals["input_tokens"],
+        "output_tokens": totals["output_tokens"],
+        "total_tokens": totals["total_tokens"],
+        "money_cost": str(totals["money_cost"]),
+        **{
+            role: {
+                "input_tokens": values["input_tokens"],
+                "output_tokens": values["output_tokens"],
+                "total_tokens": values["total_tokens"],
+                "money_cost": str(values["money_cost"]),
+            }
+            for role, values in role_totals.items()
+        },
+    }
+
 
 def build_shard_configs(config: RunConfig) -> list[RunConfig]:
     """Split one logical run into deterministic, independently seeded shards."""
     shard_size = config.parallel_generation.shard_size
+    shard_sizes = [
+        min(shard_size, config.num_samples - start)
+        for start in range(0, config.num_samples, shard_size)
+    ]
+    robin_minima = _distribute_robin_minimums(config, shard_sizes)
     shards: list[RunConfig] = []
-    remaining = config.num_samples
-    shard_index = 0
-    while remaining:
-        shard_index += 1
-        sample_count = min(shard_size, remaining)
+    for shard_index, (sample_count, robin_minimum) in enumerate(
+        zip(shard_sizes, robin_minima),
+        start=1,
+    ):
         seed = random.Random(
             config.random_seed ^ (shard_index * 0x9E37_79B1)
         ).randint(1, 2_147_483_647)
@@ -47,14 +117,61 @@ def build_shard_configs(config: RunConfig) -> list[RunConfig]:
             "-",
             config.run_name,
         ).strip("._-")[:20].rstrip("-") or "pii"
-        shards.append(config.copy(update={
+        payload = config.dict()
+        payload.update({
             "run_name": f"{base_name}-s{shard_index:03d}",
             "num_samples": sample_count,
             "batch_size": min(config.batch_size, sample_count),
             "random_seed": seed,
-        }))
-        remaining -= sample_count
+            "robin_selection": {
+                **config.robin_selection.dict(),
+                "minimum_per_label": robin_minimum,
+            },
+            "value_bank": {
+                **config.value_bank.dict(),
+                "partition_index": shard_index - 1,
+                "partition_count": len(shard_sizes),
+            },
+        })
+        shards.append(RunConfig.parse_obj(payload))
     return shards
+
+
+def _distribute_robin_minimums(
+    config: RunConfig,
+    shard_sizes: list[int],
+) -> list[int]:
+    target = config.robin_selection.minimum_per_label
+    label_count = len(config.robin_labels)
+    if not config.focus_label or not label_count or not target:
+        return [0] * len(shard_sizes)
+
+    effective_maximum = min(
+        config.robin_selection.max_per_sample,
+        label_count,
+    )
+    capacities = [
+        min(
+            sample_count,
+            (sample_count * effective_maximum) // label_count,
+        )
+        for sample_count in shard_sizes
+    ]
+    quotas = [0] * len(shard_sizes)
+    for _ in range(target):
+        available = [
+            index
+            for index, capacity in enumerate(capacities)
+            if quotas[index] < capacity
+        ]
+        if not available:
+            raise ParallelGenerationError(
+                "parallel shard_size is too small to preserve "
+                "robin_selection.minimum_per_label across the full run"
+            )
+        selected = min(available, key=lambda index: (quotas[index], index))
+        quotas[selected] += 1
+    return quotas
 
 
 def merge_shard_payloads(
@@ -64,17 +181,9 @@ def merge_shard_payloads(
 ) -> dict[str, Any]:
     samples: list[dict[str, Any]] = []
     seen_texts: set[str] = set()
-    input_tokens = output_tokens = total_tokens = 0
-    money_cost = Decimal("0")
-    role_usage: dict[str, dict[str, int | Decimal]] = {
-        role: {
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "total_tokens": 0,
-            "money_cost": Decimal("0"),
-        }
-        for role in ("generator", "verifier")
-    }
+    seen_skeletons: set[str] = set()
+    seen_entity_values: set[tuple[str, str]] = set()
+    usage_payloads: list[dict[str, Any]] = []
     diagnostics: Counter[str] = Counter()
     nested_diagnostics: dict[str, Counter[str]] = {}
 
@@ -99,28 +208,32 @@ def merge_shard_payloads(
                 raise ParallelGenerationError(
                     "parallel shards contain duplicate sample text"
                 )
+            skeleton = _formatted_sample_skeleton(sample)
+            if skeleton in seen_skeletons:
+                raise ParallelGenerationError(
+                    "parallel shards contain duplicate sentence skeletons"
+                )
+            duplicate_entity_values = {
+                (entity.label, entity.text)
+                for entity in sample.entities
+                if entity.label not in DEFAULT_CATEGORICAL_LABELS
+                and (entity.label, entity.text) in seen_entity_values
+            }
+            if duplicate_entity_values:
+                raise ParallelGenerationError(
+                    "parallel shards contain duplicate non-categorical "
+                    "entity values"
+                )
             seen_texts.add(sample.text)
+            seen_skeletons.add(skeleton)
+            seen_entity_values.update(
+                (entity.label, entity.text)
+                for entity in sample.entities
+                if entity.label not in DEFAULT_CATEGORICAL_LABELS
+            )
             samples.append(sample.dict(exclude_none=True))
 
-        usage = payload.get("token_usage") or {}
-        input_tokens += int(usage.get("input_tokens", 0))
-        output_tokens += int(usage.get("output_tokens", 0))
-        total_tokens += int(usage.get("total_tokens", 0))
-        money_cost += Decimal(str(usage.get("money_cost", "0")))
-        for role in ("generator", "verifier"):
-            shard_role_usage = usage.get(role) or {}
-            role_usage[role]["input_tokens"] += int(
-                shard_role_usage.get("input_tokens", 0)
-            )
-            role_usage[role]["output_tokens"] += int(
-                shard_role_usage.get("output_tokens", 0)
-            )
-            role_usage[role]["total_tokens"] += int(
-                shard_role_usage.get("total_tokens", 0)
-            )
-            role_usage[role]["money_cost"] += Decimal(
-                str(shard_role_usage.get("money_cost", "0"))
-            )
+        usage_payloads.append(payload.get("token_usage") or {})
 
         for name, value in (payload.get("diagnostics") or {}).items():
             if name == "verifier_candidate_pass_rate":
@@ -164,23 +277,22 @@ def merge_shard_payloads(
 
     return {
         "samples": samples,
-        "token_usage": {
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "total_tokens": total_tokens,
-            "money_cost": str(money_cost),
-            **{
-                role: {
-                    "input_tokens": values["input_tokens"],
-                    "output_tokens": values["output_tokens"],
-                    "total_tokens": values["total_tokens"],
-                    "money_cost": str(values["money_cost"]),
-                }
-                for role, values in role_usage.items()
-            },
-        },
+        "token_usage": _combine_usage_payloads(usage_payloads),
         "diagnostics": merged_diagnostics,
     }
+
+
+def _formatted_sample_skeleton(sample: FormattedSample) -> str:
+    chunks: list[str] = []
+    cursor = 0
+    for entity in sorted(sample.entities, key=lambda item: item.start):
+        chunks.append(sample.text[cursor:entity.start])
+        chunks.append(
+            f"<{entity.label}>{entity.text}</{entity.label}>"
+        )
+        cursor = entity.end
+    chunks.append(sample.text[cursor:])
+    return sentence_skeleton("".join(chunks))
 
 
 def _retry_config(
@@ -210,6 +322,7 @@ def _run_shard(
     offline: bool,
 ) -> dict[str, Any]:
     last_message = "no provider response"
+    attempt_usages: list[dict[str, Any]] = []
     for attempt in range(
         shard.parallel_generation.max_shard_retries + 1
     ):
@@ -278,6 +391,9 @@ def _run_shard(
                 or f"child exited with code {completed.returncode}"
             )
             continue
+        usage = payload.get("token_usage")
+        if isinstance(usage, dict):
+            attempt_usages.append(usage)
         if (
             completed.returncode == 0
             and payload.get("status") == "COMPLETED"
@@ -308,6 +424,7 @@ def _run_shard(
             )
             return {
                 **payload,
+                "token_usage": _combine_usage_payloads(attempt_usages),
                 "_shard_index": shard_index,
                 "_console_log_path": str(console_log_path.resolve()),
                 "_diagnostic_log_path": payload.get("diagnostic_log_path"),
@@ -323,7 +440,8 @@ def _run_shard(
             last_message,
         )
     raise ParallelGenerationError(
-        f"shard {shard_index} exhausted retries: {last_message}"
+        f"shard {shard_index} exhausted retries: {last_message}",
+        token_usage=_combine_usage_payloads(attempt_usages),
     )
 
 
@@ -357,6 +475,7 @@ def run_parallel_generation(
     )
     payloads_by_index: dict[int, dict[str, Any]] = {}
     failures_by_index: dict[int, str] = {}
+    failure_usages_by_index: dict[int, dict[str, Any]] = {}
     logger.info(
         "[parallel] started name=%s samples=%s workers=%s shards=%s "
         "shard_size=%s artifacts=%s",
@@ -391,6 +510,9 @@ def run_parallel_generation(
                     payloads_by_index[index] = future.result()
                 except Exception as exc:
                     failures_by_index[index] = str(exc)
+                    token_usage = getattr(exc, "token_usage", None)
+                    if isinstance(token_usage, dict):
+                        failure_usages_by_index[index] = token_usage
                     logger.error(
                         "[parallel shard %s] permanently failed: %s",
                         index,
@@ -413,6 +535,13 @@ def run_parallel_generation(
         failed_summary_path = output_directory / (
             f"{safe_name}-parallel-{parallel_run_id}-failed-summary.json"
         )
+        failed_usage = _combine_usage_payloads([
+            *[
+                payload.get("token_usage") or {}
+                for payload in payloads_by_index.values()
+            ],
+            *failure_usages_by_index.values(),
+        ])
         failed_summary = {
             "status": "FAILED",
             "output_path": None,
@@ -430,6 +559,7 @@ def run_parallel_generation(
                 str(index): message
                 for index, message in sorted(failures_by_index.items())
             },
+            "token_usage": failed_usage,
         }
         temporary_failed_summary = failed_summary_path.with_suffix(
             f"{failed_summary_path.suffix}.tmp"
@@ -443,7 +573,8 @@ def run_parallel_generation(
             f"{len(failures_by_index)} shard(s) failed permanently; "
             f"completed={len(payloads_by_index)}/{len(shards)}; "
             f"summary={failed_summary_path.resolve()}; "
-            f"artifacts={shard_artifact_directory.resolve()}"
+            f"artifacts={shard_artifact_directory.resolve()}",
+            token_usage=failed_usage,
         )
 
     payloads = [
@@ -540,7 +671,7 @@ def main() -> None:
     parser.add_argument(
         "--taxonomy-json",
         type=Path,
-        default=Path("pii_taxonomy_rules.json"),
+        default=resolve_taxonomy_path("pii_taxonomy_rules.json"),
     )
     parser.add_argument(
         "--output-dir",

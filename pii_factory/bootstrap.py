@@ -14,8 +14,21 @@ from .infrastructure.clients import (
     AzureOpenAIVerifierClient,
     OfflineCompletionClient,
     OfflineVerifierClient,
+    load_local_environment,
 )
 from .infrastructure.memory import InMemoryEventBus, InMemoryRepository
+
+
+_DEFAULT_MODEL_RATES = {
+    "GENERATOR": CostRates(
+        input_per_million_usd=Decimal("0.30"),
+        output_per_million_usd=Decimal("2.50"),
+    ),
+    "VERIFIER": CostRates(
+        input_per_million_usd=Decimal("1.25"),
+        output_per_million_usd=Decimal("10.00"),
+    ),
+}
 
 
 def _role_cost_rates(role: str, fallback: CostRates) -> CostRates:
@@ -32,10 +45,27 @@ def _role_cost_rates(role: str, fallback: CostRates) -> CostRates:
     )
 
 
+def _cost_rates(role: str) -> CostRates:
+    role_name = role.upper()
+    defaults = _DEFAULT_MODEL_RATES.get(role_name, CostRates())
+    fallback = CostRates(
+        input_per_million_usd=Decimal(os.getenv(
+            "INPUT_TOKEN_PRICE_PER_MILLION_USD",
+            str(defaults.input_per_million_usd),
+        )),
+        output_per_million_usd=Decimal(os.getenv(
+            "OUTPUT_TOKEN_PRICE_PER_MILLION_USD",
+            str(defaults.output_per_million_usd),
+        )),
+    )
+    return _role_cost_rates(role_name, fallback)
+
+
 def build_pipeline(
     offline: bool = False,
     output_directory: Path | str | None = None,
 ) -> tuple[Pipeline, InMemoryRepository, InMemoryEventBus]:
+    load_local_environment()
     repository = InMemoryRepository()
     event_bus = InMemoryEventBus()
     orchestrator = RunOrchestrator(repository, event_bus)
@@ -45,12 +75,8 @@ def build_pipeline(
         event_bus,
         taxonomy_for_run=orchestrator.taxonomy_for_run,
     )
-    fallback_rates = CostRates(
-        input_per_million_usd=Decimal(os.getenv("INPUT_TOKEN_PRICE_PER_MILLION_USD", "2.50")),
-        output_per_million_usd=Decimal(os.getenv("OUTPUT_TOKEN_PRICE_PER_MILLION_USD", "10.00")),
-    )
-    generator_rates = _role_cost_rates("generator", fallback_rates)
-    verifier_rates = _role_cost_rates("verifier", fallback_rates)
+    generator_rates = _cost_rates("GENERATOR")
+    verifier_rates = _cost_rates("VERIFIER")
     if offline:
         client = OfflineCompletionClient()
         verifier_client = OfflineVerifierClient()

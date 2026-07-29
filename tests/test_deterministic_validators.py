@@ -324,6 +324,40 @@ class DeterministicValidatorTests(unittest.TestCase):
             findings,
         )
 
+    def test_tagged_url_followed_by_sentence_punctuation_is_not_missing(self) -> None:
+        value = "https://portal.example.vn/case?id=42"
+        pack = SeedPack(
+            task_id="url-punctuation",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[
+                PositiveEntitySeed(
+                    label="URL",
+                    value=value,
+                    semantic_role="case_url",
+                )
+            ],
+        )
+        result = self.output.validate(
+            tagged_text=(
+                "Xem hồ sơ tại "
+                f"<URL>{value}</URL>, "
+                "sau đó phản hồi."
+            ),
+            entities=[
+                {
+                    "label": "URL",
+                    "value": value,
+                }
+            ],
+            seed_pack=pack,
+            focus_labels=["URL"],
+            allowed_labels=["URL"],
+            max_entities=1,
+        )
+
+        self.assertTrue(result.valid, result.issues)
+
     def test_boundary_whitespace_produces_one_seed_specific_finding(self) -> None:
         pack = SeedPack(
             task_id="boundary-space",

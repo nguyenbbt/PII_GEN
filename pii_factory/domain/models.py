@@ -112,6 +112,22 @@ class ValueBankConfig(Schema):
     })
     max_seed_pack_attempts: int = Field(default=5, ge=1, le=20)
     allow_additional_unseeded_pii: bool = False
+    partition_index: int = Field(default=0, ge=0, le=99_999)
+    partition_count: int = Field(default=1, ge=1, le=100_000)
+
+    @root_validator
+    def partition_index_is_in_range(
+        cls,
+        values: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if values.get("partition_index", 0) >= values.get(
+            "partition_count",
+            1,
+        ):
+            raise ValueError(
+                "value_bank.partition_index must be smaller than partition_count"
+            )
+        return values
 
     @validator("language_files")
     def validate_language_files(
@@ -152,6 +168,7 @@ class HardNegativeConfig(Schema):
 class RobinSelectionConfig(Schema):
     min_per_sample: int = Field(default=0, ge=0, le=9)
     max_per_sample: int = Field(default=2, ge=0, le=9)
+    minimum_per_label: int = Field(default=0, ge=0)
 
     @root_validator
     def min_does_not_exceed_max(cls, values: Dict[str, Any]) -> Dict[str, Any]:
@@ -201,6 +218,14 @@ class ValidationConfig(Schema):
     max_novelty_feedback: int = Field(default=3, ge=0, le=10)
 
 
+class NoveltyConfig(Schema):
+    enabled: bool = False
+    mode: Literal["off", "audit", "enforce"] = "audit"
+    near_duplicate_threshold: float = Field(default=0.9, ge=0.5, le=1.0)
+    recent_window: int = Field(default=100, ge=1, le=10_000)
+    max_feedback: int = Field(default=3, ge=0, le=10)
+
+
 class VerifierConfig(Schema):
     enabled: bool = False
     max_repairs_per_candidate: int = Field(default=1, ge=0, le=2)
@@ -240,6 +265,7 @@ class RunConfig(Schema):
     hard_negative: HardNegativeConfig = Field(default_factory=HardNegativeConfig)
     complexity_limits: ComplexityLimits = Field(default_factory=ComplexityLimits)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
+    novelty: NoveltyConfig = Field(default_factory=NoveltyConfig)
     verifier: VerifierConfig = Field(default_factory=VerifierConfig)
     parallel_generation: ParallelGenerationConfig = Field(
         default_factory=ParallelGenerationConfig
@@ -297,6 +323,23 @@ class RunConfig(Schema):
             }
         validation = values.get("validation")
         if isinstance(validation, dict) and "quality_checks_enabled" in validation:
+            if "novelty" not in values:
+                values["novelty"] = {
+                    "enabled": bool(validation["quality_checks_enabled"]),
+                    "mode": validation.get("novelty_mode", "audit"),
+                    "near_duplicate_threshold": validation.get(
+                        "near_duplicate_threshold",
+                        0.9,
+                    ),
+                    "recent_window": validation.get(
+                        "novelty_recent_window",
+                        100,
+                    ),
+                    "max_feedback": validation.get(
+                        "max_novelty_feedback",
+                        3,
+                    ),
+                }
             verifier = dict(values.get("verifier") or {})
             verifier.setdefault(
                 "enabled",
@@ -383,6 +426,11 @@ class RunConfig(Schema):
             if robin_labels:
                 raise ValueError("robin_labels requires focus_label")
             return values
+        if values.get("minimum_per_label", 0) > 0:
+            raise ValueError(
+                "minimum_per_label is only supported with focus_labels; "
+                "use robin_selection.minimum_per_label in anchor mode"
+            )
         if values.get("focus_labels") is not None:
             raise ValueError("use either focus_label/robin_labels or legacy focus_labels, not both")
         if focus_label in robin_labels:
@@ -391,6 +439,20 @@ class RunConfig(Schema):
         selection: RobinSelectionConfig = values.get("robin_selection") or RobinSelectionConfig()
         if selection.min_per_sample > len(robin_labels):
             raise ValueError("robin_selection.min_per_sample exceeds the robin_labels pool")
+        num_samples = values.get("num_samples") or 0
+        if selection.minimum_per_label > num_samples:
+            raise ValueError(
+                "robin_selection.minimum_per_label cannot exceed num_samples"
+            )
+        required_robin_occurrences = (
+            selection.minimum_per_label * len(robin_labels)
+        )
+        available_robin_occurrences = num_samples * selection.max_per_sample
+        if required_robin_occurrences > available_robin_occurrences:
+            raise ValueError(
+                "robin_selection.minimum_per_label is not feasible for "
+                "num_samples and max_per_sample"
+            )
 
         sample_types = values.get("sample_type_distribution") or {}
         if sample_types.get("pure_negative", 0) > 0:

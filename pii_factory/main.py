@@ -13,10 +13,12 @@ import uvicorn
 
 from .api import create_app
 from .bootstrap import build_pipeline
-from .domain.models import CreateRunRequest, RunConfig, TokenUsage
+from .application.taxonomy_service import resolve_taxonomy_path
+from .application.value_bank import resolve_value_bank_path
+from .domain.models import CreateRunRequest, RunConfig
 
 
-DEFAULT_TAXONOMY_PATH = Path(
+DEFAULT_TAXONOMY_PATH = resolve_taxonomy_path(
     os.getenv("PII_TAXONOMY_PATH", "pii_taxonomy_rules.json")
 )
 
@@ -82,6 +84,15 @@ def main() -> None:
         if args.config:
             config_text = args.config.read_text(encoding="utf-8-sig").replace("\u2028", "\n").replace("\u2029", "\n")
             config = RunConfig.parse_obj(json.loads(config_text))
+            resolved_bank_path = resolve_value_bank_path(
+                config.value_bank.path,
+                config_directory=args.config.resolve().parent,
+            )
+            config = config.copy(update={
+                "value_bank": config.value_bank.copy(update={
+                    "path": str(resolved_bank_path),
+                }),
+            })
         else:
             focus_labels = [label.strip().upper() for label in args.focus_labels.split(",") if label.strip()]
             sample_type = "hard_negative" if args.hard_negative else "positive"
@@ -147,20 +158,10 @@ def main() -> None:
                 config.num_samples,
             )
         final_run = repository.get_run(run.run_id)
-        pipeline_usages = [
-            result.pipeline_token_usage
-            for result in results
-            if result.pipeline_token_usage is not None
-        ]
-        generator_usage = TokenUsage.combine([
-            usage.generator for usage in pipeline_usages
-        ])
-        verifier_usage = TokenUsage.combine([
-            usage.verifier_total() for usage in pipeline_usages
-        ])
-        combined_usage = TokenUsage.combine(
-            (generator_usage, verifier_usage)
-        )
+        run_usage = pipeline.run_usage(run.run_id)
+        generator_usage = run_usage.generator
+        verifier_usage = run_usage.verifier_total()
+        combined_usage = run_usage.total
         run_events = [
             event
             for event in event_bus.list_events()

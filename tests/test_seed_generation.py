@@ -57,6 +57,25 @@ class SeedGenerationTests(unittest.TestCase):
         address = next(seed.value for seed in pack.positive_entities if seed.label == "ADDRESS")
         self.assertNotRegex(address, r"Jane|John|Smith|County|Street|Avenue")
 
+    def test_positive_factory_excludes_values_already_accepted_in_run(self) -> None:
+        factory = PositiveSeedFactory(self.provider, self.selector)
+        labels = [TaxonomyLabel(code="PERSON", definition="person")]
+        first = factory.build(
+            task("positive", ["PERSON"]),
+            labels,
+            random.Random(42),
+        )
+        first_value = first.positive_entities[0].value
+
+        second = factory.build(
+            task("positive", ["PERSON"]),
+            labels,
+            random.Random(42),
+            excluded_values_by_label={"PERSON": {first_value}},
+        )
+
+        self.assertNotEqual(second.positive_entities[0].value, first_value)
+
     def test_pure_negative_factory_never_builds_pii_or_decoys(self) -> None:
         taxonomy = [TaxonomyLabel(code="EMAIL", definition="email")]
         pack = PureNegativeContentFactory(self.selector).build(

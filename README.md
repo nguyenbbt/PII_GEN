@@ -31,8 +31,23 @@ formatter. Cấu hình thư mục qua `value_bank.path` và tên file từng ng�
 `value_bank.language_files` trong run config. Xem chi tiết tại
 [README_V2.md](README_V2.md#34-value-bank-và-seed-generation).
 
+`PII_Value_Bank/` là dữ liệu local-only và không được push lên GitHub. Sau khi
+clone, cần tự cung cấp ba file JSON `vi/en/de` theo schema mô tả trong
+README_V2 trước khi chạy pipeline online hoặc các test phụ thuộc Value Bank.
+
+Config online toàn diện 50 mẫu nằm tại
+`configs/run_config.online-50.json`. Chạy offline trước để smoke test; bỏ
+`--offline` chỉ khi đã xác nhận model, quota và đơn giá token vì API gateway hiện
+chỉ trả token usage, không trả trực tiếp chi phí USD.
+
 - Tài liệu kiến trúc tổng thể: [README_V2.md](README_V2.md)
 - Hướng dẫn chi tiết pipeline đã triển khai: [README_V2.md](README_V2.md)
+
+Đơn giá hiện cấu hình theo USD trên 1.000.000 token: Generator
+`gemini-2.5-flash` là `$0.30` input / `$2.50` output; Judge và Repair
+`gemini-2.5-pro` là `$1.25` input / `$10.00` output. Runtime cộng cả usage của
+candidate bị loại, logical slot thất bại và shard attempt phải retry nếu provider
+đã trả structured usage.
 
 Chạy API offline, không gọi LLM và không phát sinh hóa đơn (cost trong output là
 giá trị mô phỏng để kiểm thử accounting):
@@ -47,6 +62,12 @@ Chạy với taxonomy JSON mặc định và distribution config:
 & '.\.venv\bin\pii-factory.exe' --config configs\run_config.example.json --offline
 ```
 
+Smoke test cấu hình online 50 mẫu mà không phát sinh phí:
+
+```powershell
+& '.\.venv\bin\pii-factory.exe' --offline --config configs\run_config.online-50.json
+```
+
 Output offline nằm trong `gen_data/offline-smoke` và chỉ dùng để smoke test, không
 dùng làm dataset. Chạy online bằng cách bỏ `--offline`.
 
@@ -54,12 +75,13 @@ Config test 10 sample có thể chạy thật 10 tiến trình bằng runner son
 
 ```powershell
 python -m pii_factory.parallel `
-  --config configs\run_config.online-test.local.json `
+  --config configs\run_config.online-10.json `
   --output-dir gen_data\online-vi-10
 ```
 
-Config này dùng `workers=10`, `shard_size=1`: mỗi sample là một shard/process độc
-lập. Runner lưu log từng shard, file dataset hợp nhất và file `*-summary.json` chứa
+Config này dùng `workers=2`, `shard_size=5`: 10 sample được chia thành hai
+shard/process độc lập. Runner lưu log từng shard, file dataset hợp nhất và file
+`*-summary.json` chứa
 tổng input/output token của toàn phiên, tách riêng Generator và Verifier. Nếu có
 shard hết retry, runner chờ các shard đang chạy kết thúc, ghi `*-failed-summary.json`
 rồi dừng mà không xuất dataset thiếu mẫu.

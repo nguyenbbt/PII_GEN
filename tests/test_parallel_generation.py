@@ -1,12 +1,15 @@
 import unittest
 import json
+from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from pii_factory.domain.models import RunConfig
 from pii_factory.parallel import (
     ParallelGenerationError,
+    _run_shard,
     build_shard_configs,
     merge_shard_payloads,
     run_parallel_generation,
@@ -14,6 +17,42 @@ from pii_factory.parallel import (
 
 
 class ParallelGenerationTests(unittest.TestCase):
+    def test_online_50_robin_minimum_is_distributed_across_valid_shards(
+        self,
+    ) -> None:
+        config = RunConfig.parse_obj(json.loads(
+            Path("configs/run_config.online-50.json").read_text(
+                encoding="utf-8"
+            )
+        ))
+
+        shards = build_shard_configs(config)
+
+        self.assertEqual(len(shards), 5)
+        self.assertEqual(
+            sum(
+                shard.robin_selection.minimum_per_label
+                for shard in shards
+            ),
+            config.robin_selection.minimum_per_label,
+        )
+        self.assertEqual(
+            [
+                shard.robin_selection.minimum_per_label
+                for shard in shards
+            ],
+            [2, 2, 2, 1, 1],
+        )
+        self.assertEqual(
+            [shard.value_bank.partition_index for shard in shards],
+            [0, 1, 2, 3, 4],
+        )
+        self.assertTrue(
+            all(shard.value_bank.partition_count == 5 for shard in shards)
+        )
+        for shard in shards:
+            RunConfig.parse_obj(shard.dict())
+
     def test_builds_unique_seeded_shards_covering_exact_target(self) -> None:
         config = RunConfig(
             run_name="parallel-100",
@@ -83,6 +122,93 @@ class ParallelGenerationTests(unittest.TestCase):
 
         self.assertEqual([shard.num_samples for shard in shards], [10, 10, 3])
         self.assertEqual([shard.batch_size for shard in shards], [5, 5, 3])
+
+    def test_shard_retry_accumulates_usage_from_failed_paid_attempt(self) -> None:
+        config = RunConfig(
+            num_samples=1,
+            batch_size=1,
+            focus_labels=["PERSON"],
+            parallel_generation={
+                "workers": 1,
+                "shard_size": 1,
+                "max_shard_retries": 1,
+            },
+        )
+        failed_payload = {
+            "status": "FAILED",
+            "accepted_samples": 0,
+            "token_usage": self._usage_payload(10, "0.01"),
+        }
+        successful_payload = {
+            "status": "COMPLETED",
+            "accepted_samples": 1,
+            "token_usage": self._usage_payload(20, "0.02"),
+        }
+        completed_calls = [
+            SimpleNamespace(
+                returncode=1,
+                stdout=json.dumps(failed_payload),
+                stderr="failed after a paid call",
+            ),
+            SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(successful_payload),
+                stderr="",
+            ),
+        ]
+
+        with TemporaryDirectory() as directory, patch(
+            "pii_factory.parallel.subprocess.run",
+            side_effect=completed_calls,
+        ):
+            root = Path(directory)
+            payload = _run_shard(
+                shard=config,
+                shard_index=1,
+                taxonomy_path=root / "taxonomy.json",
+                work_directory=root,
+                shard_artifact_directory=root / "artifacts",
+                offline=False,
+            )
+
+        self.assertEqual(payload["token_usage"]["total_tokens"], 30)
+        self.assertEqual(payload["token_usage"]["money_cost"], "0.03")
+        self.assertEqual(
+            payload["token_usage"]["generator"]["total_tokens"],
+            18,
+        )
+        self.assertEqual(
+            payload["token_usage"]["verifier"]["total_tokens"],
+            12,
+        )
+
+    @staticmethod
+    def _usage_payload(total_tokens: int, money_cost: str) -> dict:
+        generator_tokens = total_tokens * 3 // 5
+        verifier_tokens = total_tokens - generator_tokens
+        total_cost = Decimal(money_cost)
+        return {
+            "input_tokens": total_tokens * 2 // 3,
+            "output_tokens": total_tokens - (total_tokens * 2 // 3),
+            "total_tokens": total_tokens,
+            "money_cost": money_cost,
+            "generator": {
+                "input_tokens": generator_tokens,
+                "output_tokens": 0,
+                "total_tokens": generator_tokens,
+                "money_cost": str(
+                    total_cost * generator_tokens / total_tokens
+                ),
+            },
+            "verifier": {
+                "input_tokens": verifier_tokens,
+                "output_tokens": 0,
+                "total_tokens": verifier_tokens,
+                "money_cost": str(
+                    total_cost * verifier_tokens / total_tokens
+                ),
+            },
+        }
 
     def test_merge_requires_complete_unique_samples_with_valid_offsets(self) -> None:
         payloads = [
@@ -229,6 +355,62 @@ class ParallelGenerationTests(unittest.TestCase):
                     ],
                 }
             ],
+            [
+                {
+                    "status": "COMPLETED",
+                    "accepted_samples": 1,
+                    "samples": [{
+                        "entities": [{
+                            "label": "PERSON",
+                            "start": 4,
+                            "end": 14,
+                            "text": "Lê Minh An",
+                        }],
+                        "text": "Chị Lê Minh An xác nhận.",
+                    }],
+                },
+                {
+                    "status": "COMPLETED",
+                    "accepted_samples": 1,
+                    "samples": [{
+                        "entities": [{
+                            "label": "PERSON",
+                            "start": 4,
+                            "end": 14,
+                            "text": "Lê Minh An",
+                        }],
+                        "text": "Anh Lê Minh An phản hồi.",
+                    }],
+                },
+            ],
+            [
+                {
+                    "status": "COMPLETED",
+                    "accepted_samples": 1,
+                    "samples": [{
+                        "entities": [{
+                            "label": "PERSON",
+                            "start": 4,
+                            "end": 6,
+                            "text": "An",
+                        }],
+                        "text": "Chị An xác nhận.",
+                    }],
+                },
+                {
+                    "status": "COMPLETED",
+                    "accepted_samples": 1,
+                    "samples": [{
+                        "entities": [{
+                            "label": "PERSON",
+                            "start": 4,
+                            "end": 8,
+                            "text": "Bình",
+                        }],
+                        "text": "Chị Bình xác nhận.",
+                    }],
+                },
+            ],
         )
 
         for payloads in cases:
@@ -327,9 +509,13 @@ class ParallelGenerationTests(unittest.TestCase):
                 "max_shard_retries": 0,
             },
         )
+        failed_usage = self._usage_payload(30, "0.03")
         with TemporaryDirectory() as directory, patch(
             "pii_factory.parallel._run_shard",
-            side_effect=ParallelGenerationError("simulated shard failure"),
+            side_effect=ParallelGenerationError(
+                "simulated shard failure",
+                token_usage=failed_usage,
+            ),
         ):
             output_directory = Path(directory)
             with self.assertRaisesRegex(
@@ -353,6 +539,8 @@ class ParallelGenerationTests(unittest.TestCase):
             self.assertEqual(payload["status"], "FAILED")
             self.assertEqual(payload["completed_shards"], 0)
             self.assertIn("1", payload["failed_shards"])
+            self.assertEqual(payload["token_usage"]["total_tokens"], 30)
+            self.assertEqual(payload["token_usage"]["money_cost"], "0.03")
 
 
 if __name__ == "__main__":

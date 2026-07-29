@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import RedirectResponse, Response
 
 from .bootstrap import build_pipeline
+from .application.taxonomy_service import resolve_taxonomy_path
 from .application.verification import VerifierInfrastructureError
 from .domain.models import CreateRunRequest, DataGenerationResult, Run, RunConfig, TaxonomySnapshot
 
@@ -18,7 +19,7 @@ def create_app(
 ) -> FastAPI:
     pipeline, repository, event_bus = build_pipeline(offline=offline)
     default_taxonomy = pipeline.taxonomy_service.import_json(
-        Path(
+        resolve_taxonomy_path(
             taxonomy_path
             or os.getenv("PII_TAXONOMY_PATH", "pii_taxonomy_rules.json")
         )

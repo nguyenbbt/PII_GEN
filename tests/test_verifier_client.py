@@ -1,5 +1,8 @@
 from decimal import Decimal
 import unittest
+from io import BytesIO
+import json
+from unittest.mock import patch
 
 from pii_factory.infrastructure.clients import (
     AzureOpenAISettings,
@@ -45,6 +48,42 @@ def settings() -> AzureOpenAISettings:
 
 
 class AzureOpenAIVerifierClientTests(unittest.TestCase):
+    def test_exhausted_malformed_response_retains_paid_usage(self) -> None:
+        settings = AzureOpenAISettings(
+            api_key="secret",
+            base_url="https://gateway.example",
+            infrastructure_retries=0,
+        )
+        malformed = BytesIO(json.dumps({
+            "choices": [{
+                "message": {
+                    "content": '{"status":"PASS"',
+                },
+            }],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+            },
+        }).encode("utf-8"))
+        client = AzureOpenAIVerifierClient(
+            settings,
+            input_price_per_million=Decimal("2.50"),
+            output_price_per_million=Decimal("10.00"),
+        )
+
+        with patch(
+            "pii_factory.infrastructure.clients.urlopen",
+            return_value=malformed,
+        ):
+            with self.assertRaises(VerifierInfrastructureError) as raised:
+                client.judge([{"role": "user", "content": "Judge."}])
+
+        self.assertIsNotNone(raised.exception.token_usage)
+        self.assertEqual(raised.exception.token_usage.input_tokens, 10)
+        self.assertEqual(raised.exception.token_usage.output_tokens, 20)
+        self.assertEqual(raised.exception.token_usage.total_tokens, 30)
+
     def test_default_judge_budget_accommodates_reasoning_models(self) -> None:
         default_settings = AzureOpenAISettings(
             api_key="unused",

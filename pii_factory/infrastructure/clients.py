@@ -25,6 +25,7 @@ from ..domain.models import (
     TokenUsage,
     VerifierDecision,
 )
+from ..ports import CompletionClientError, CompletionResult
 
 
 logger = logging.getLogger(__name__)
@@ -162,6 +163,26 @@ def _safe_http_error_details(
     else:
         return ""
 
+    # OpenAI-compatible gateways can echo request prompts in nested error
+    # diagnostics. Keep the useful leading error and discard request-shaped
+    # tails before the message reaches logs or tracebacks.
+    folded_message = message.casefold()
+    sensitive_markers = (
+        "received_args",
+        '"messages"',
+        "'messages'",
+        "messages=",
+        "prompt=",
+        "input=",
+    )
+    cut_positions = [
+        folded_message.find(marker)
+        for marker in sensitive_markers
+        if folded_message.find(marker) >= 0
+    ]
+    if cut_positions:
+        message = message[:min(cut_positions)].rstrip(" :,-")
+
     details = ": ".join(part for part in (code, message) if part)
     details = " ".join(details.split())[:1000]
     for secret in secrets:
@@ -179,6 +200,19 @@ def _http_error_message(
     details = _safe_http_error_details(error, secrets=secrets)
     suffix = f": {details}" if details else ""
     return f"{prefix} HTTP {error.code}{suffix}"
+
+
+def load_local_environment(path: Path = Path(".env")) -> None:
+    """Load local settings without adding python-dotenv as a dependency."""
+
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 class AzureOpenAISettings(BaseModel):
@@ -200,7 +234,7 @@ class AzureOpenAISettings(BaseModel):
 
     @classmethod
     def from_environment(cls) -> "AzureOpenAISettings":
-        cls._load_dotenv()
+        load_local_environment()
         api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
         base_url = os.getenv("BASE_URL") or os.getenv("LLM_BASE_URL")
         if not api_key or not base_url:
@@ -236,19 +270,6 @@ class AzureOpenAISettings(BaseModel):
     @property
     def effective_verifier_model(self) -> str:
         return self.verifier_model or self.model
-
-    @staticmethod
-    def _load_dotenv(path: Path = Path(".env")) -> None:
-        """Load local secrets without making python-dotenv a runtime requirement."""
-        if not path.exists():
-            return
-        for raw_line in path.read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
-
 
 def _resolved_api_style(settings: AzureOpenAISettings) -> Literal["azure", "openai"]:
     if settings.api_style != "auto":
@@ -332,6 +353,19 @@ def _load_json_object_content(content: object) -> dict:
     raise json.JSONDecodeError("No JSON object found", stripped, 0)
 
 
+def _usage_counts(response: dict[str, Any]) -> tuple[int, int, int]:
+    """Return billable input/output totals, including reported reasoning tokens."""
+    usage = response.get("usage") or {}
+    input_tokens = int(usage.get("prompt_tokens") or 0)
+    completion_tokens = int(usage.get("completion_tokens") or 0)
+    total_tokens = int(
+        usage.get("total_tokens")
+        or input_tokens + completion_tokens
+    )
+    output_tokens = max(completion_tokens, total_tokens - input_tokens)
+    return input_tokens, output_tokens, total_tokens
+
+
 class AzureOpenAIJsonTransport:
     def __init__(self, settings: AzureOpenAISettings) -> None:
         self.settings = settings
@@ -355,9 +389,9 @@ class AzureOpenAIJsonTransport:
         )
         last_error: Exception | None = None
         content = ""
-        accumulated_input = 0
-        accumulated_output = 0
-        accumulated_total = 0
+        accumulated_input_tokens = 0
+        accumulated_output_tokens = 0
+        accumulated_total_tokens = 0
         for attempt in range(self.settings.infrastructure_retries + 1):
             started = time.perf_counter()
             logger.info(
@@ -370,18 +404,10 @@ class AzureOpenAIJsonTransport:
             try:
                 with urlopen(request, timeout=self.settings.timeout_seconds) as response:
                     raw = json.loads(response.read().decode("utf-8"))
-                usage = raw.get("usage", {})
-                response_input = int(usage.get("prompt_tokens", 0))
-                response_output = int(usage.get("completion_tokens", 0))
-                response_total = int(
-                    usage.get(
-                        "total_tokens",
-                        response_input + response_output,
-                    )
-                )
-                accumulated_input += response_input
-                accumulated_output += response_output
-                accumulated_total += response_total
+                input_tokens, output_tokens, total_tokens = _usage_counts(raw)
+                accumulated_input_tokens += input_tokens
+                accumulated_output_tokens += output_tokens
+                accumulated_total_tokens += total_tokens
                 content = raw["choices"][0]["message"]["content"]
                 payload = _load_json_object_content(content)
                 if not isinstance(payload, dict):
@@ -393,14 +419,14 @@ class AzureOpenAIJsonTransport:
                     "[llm verifier] response received latency_ms=%s "
                     "tokens=%s cumulative_tokens=%s",
                     elapsed_ms,
-                    response_total,
-                    accumulated_total,
+                    total_tokens,
+                    accumulated_total_tokens,
                 )
                 return JsonCompletion(
                     payload=payload,
-                    input_tokens=accumulated_input,
-                    output_tokens=accumulated_output,
-                    total_tokens=accumulated_total,
+                    input_tokens=accumulated_input_tokens,
+                    output_tokens=accumulated_output_tokens,
+                    total_tokens=accumulated_total_tokens,
                     latency_ms=elapsed_ms,
                 )
             except HTTPError as exc:
@@ -417,11 +443,11 @@ class AzureOpenAIJsonTransport:
                 last_error = exc
                 if isinstance(exc, json.JSONDecodeError):
                     logger.warning(
-                        "[llm verifier] invalid JSON msg=%s line=%s col=%s preview=%r",
+                        "[llm verifier] invalid JSON msg=%s line=%s col=%s content_length=%s",
                         exc.msg,
                         exc.lineno,
                         exc.colno,
-                        content[:400],
+                        len(content),
                     )
             if attempt < self.settings.infrastructure_retries:
                 delay = min(2**attempt, 8)
@@ -437,11 +463,10 @@ class AzureOpenAIJsonTransport:
         )
         raise VerifierInfrastructureError(
             "Azure OpenAI verifier request failed after infrastructure retries",
-            token_usage=TokenUsage(
-                input_tokens=accumulated_input,
-                output_tokens=accumulated_output,
-                total_tokens=accumulated_total,
-                money_cost=Decimal("0"),
+            raw_usage=(
+                accumulated_input_tokens,
+                accumulated_output_tokens,
+                accumulated_total_tokens,
             ),
         ) from last_error
 
@@ -468,10 +493,13 @@ class AzureOpenAIVerifierClient:
                 max_tokens=self.settings.verifier_judge_max_tokens,
             )
         except VerifierInfrastructureError as exc:
+            usage = exc.token_usage or self._usage_from_counts(exc.raw_usage)
             raise VerifierInfrastructureError(
                 str(exc),
                 stage="judge",
-                token_usage=exc.token_usage,
+                token_usage=usage,
+                raw_usage=exc.raw_usage,
+                completed_usage=exc.completed_usage,
             ) from exc
         (
             payload,
@@ -538,10 +566,13 @@ class AzureOpenAIVerifierClient:
                 max_tokens=self.settings.verifier_repair_max_tokens,
             )
         except VerifierInfrastructureError as exc:
+            usage = exc.token_usage or self._usage_from_counts(exc.raw_usage)
             raise VerifierInfrastructureError(
                 str(exc),
                 stage="repair",
-                token_usage=exc.token_usage,
+                token_usage=usage,
+                raw_usage=exc.raw_usage,
+                completed_usage=exc.completed_usage,
             ) from exc
         try:
             return RepairResult(
@@ -564,18 +595,31 @@ class AzureOpenAIVerifierClient:
             ) from exc
 
     def _usage(self, completion: JsonCompletion) -> TokenUsage:
+        return self._usage_from_counts((
+            completion.input_tokens,
+            completion.output_tokens,
+            completion.total_tokens,
+        ))
+
+    def _usage_from_counts(
+        self,
+        counts: tuple[int, int, int] | None,
+    ) -> TokenUsage | None:
+        if counts is None:
+            return None
+        input_tokens, output_tokens, total_tokens = counts
         money = (
-            Decimal(completion.input_tokens)
+            Decimal(input_tokens)
             * self.input_price_per_million
             / Decimal(1_000_000)
-            + Decimal(completion.output_tokens)
+            + Decimal(output_tokens)
             * self.output_price_per_million
             / Decimal(1_000_000)
         ).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
         return TokenUsage(
-            input_tokens=completion.input_tokens,
-            output_tokens=completion.output_tokens,
-            total_tokens=completion.total_tokens,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
             money_cost=money,
         )
 
@@ -616,7 +660,7 @@ class AzureOpenAICompletionClient:
     def generate(
         self,
         messages: List[dict[str, str]],
-    ) -> tuple[str, List[dict[str, str]], int, int, int]:
+    ) -> CompletionResult:
         request = _chat_completions_request(
             self.settings,
             {
@@ -629,9 +673,9 @@ class AzureOpenAICompletionClient:
         )
         last_error: Exception | None = None
         content = ""
-        accumulated_input = 0
-        accumulated_output = 0
-        accumulated_total = 0
+        accumulated_input_tokens = 0
+        accumulated_output_tokens = 0
+        accumulated_total_tokens = 0
         for attempt in range(self.settings.infrastructure_retries + 1):
             started = time.perf_counter()
             logger.info(
@@ -644,18 +688,10 @@ class AzureOpenAICompletionClient:
             try:
                 with urlopen(request, timeout=self.settings.timeout_seconds) as response:
                     raw = json.loads(response.read().decode("utf-8"))
-                usage = raw.get("usage", {})
-                response_input = int(usage.get("prompt_tokens", 0))
-                response_output = int(usage.get("completion_tokens", 0))
-                response_total = int(
-                    usage.get(
-                        "total_tokens",
-                        response_input + response_output,
-                    )
-                )
-                accumulated_input += response_input
-                accumulated_output += response_output
-                accumulated_total += response_total
+                input_tokens, output_tokens, total_tokens = _usage_counts(raw)
+                accumulated_input_tokens += input_tokens
+                accumulated_output_tokens += output_tokens
+                accumulated_total_tokens += total_tokens
                 content = raw["choices"][0]["message"]["content"]
                 parsed = _load_json_object_content(content)
                 tagged_text = parsed["tagged_text"]
@@ -677,15 +713,17 @@ class AzureOpenAICompletionClient:
                     "[llm generator] response received latency_ms=%s "
                     "tokens=%s cumulative_tokens=%s",
                     round((time.perf_counter() - started) * 1000),
-                    response_total,
-                    accumulated_total,
+                    total_tokens,
+                    accumulated_total_tokens,
                 )
-                return (
-                    tagged_text,
-                    parsed_entities,
-                    accumulated_input,
-                    accumulated_output,
-                    accumulated_total,
+                return CompletionResult(
+                    tagged_text=tagged_text,
+                    entities=parsed_entities,
+                    input_tokens=accumulated_input_tokens,
+                    output_tokens=accumulated_output_tokens,
+                    total_tokens=accumulated_total_tokens,
+                    model=self.settings.effective_generator_model,
+                    latency_ms=round((time.perf_counter() - started) * 1000),
                 )
             except HTTPError as exc:
                 if exc.code not in {408, 429, 500, 502, 503, 504}:
@@ -701,11 +739,11 @@ class AzureOpenAICompletionClient:
                 last_error = exc
                 if isinstance(exc, json.JSONDecodeError):
                     logger.warning(
-                        "[llm generator] invalid JSON msg=%s line=%s col=%s preview=%r",
+                        "[llm generator] invalid JSON msg=%s line=%s col=%s content_length=%s",
                         exc.msg,
                         exc.lineno,
                         exc.colno,
-                        content[:400],
+                        len(content),
                     )
             if attempt < self.settings.infrastructure_retries:
                 delay = min(2**attempt, 8)
@@ -719,7 +757,20 @@ class AzureOpenAICompletionClient:
             "[llm generator] request failed after %s attempts",
             self.settings.infrastructure_retries + 1,
         )
-        raise RuntimeError("Azure OpenAI request failed after infrastructure retries") from last_error
+        raw_usage = (
+            accumulated_input_tokens,
+            accumulated_output_tokens,
+            accumulated_total_tokens,
+        )
+        if accumulated_total_tokens:
+            raise CompletionClientError(
+                "Azure OpenAI returned unusable Generator content after "
+                "infrastructure retries",
+                raw_usage=raw_usage,
+            ) from last_error
+        raise RuntimeError(
+            "Azure OpenAI request failed after infrastructure retries"
+        ) from last_error
 
 
 class OfflineCompletionClient:
@@ -745,7 +796,7 @@ class OfflineCompletionClient:
         "handover_minutes": "BIÊN BẢN BÀN GIAO",
     }
 
-    def generate(self, messages: List[dict[str, str]]) -> tuple[str, List[dict[str, str]], int, int, int]:
+    def generate(self, messages: List[dict[str, str]]) -> CompletionResult:
         user_prompt = messages[-1]["content"]
         if "```json\n" in user_prompt:
             user_prompt = user_prompt.split("```json\n", 1)[1].split("\n```", 1)[0]
@@ -767,7 +818,7 @@ class OfflineCompletionClient:
                 f"{action} {object_name}",
                 sample_structure,
             )
-            return text, [], 80, 40, 120
+            return self._completion(text, [])
         if task["sample_type"] == "hard_negative" and payload.get("hard_negative_mode") == "decoy_only":
             clauses = [
                 f"{decoy['required_context_cues'][0]} {decoy['value']} được cập nhật trong hệ thống"
@@ -780,7 +831,7 @@ class OfflineCompletionClient:
                 " và ".join(clauses),
                 sample_structure,
             )
-            return text, [], 80, 40, 120
+            return self._completion(text, [])
         entities = [
             {"label": item["label"], "value": item["value"]}
             for item in payload["positive_entities"]
@@ -795,7 +846,22 @@ class OfflineCompletionClient:
         )
         for decoy in payload["decoys"]:
             text += f" {decoy['required_context_cues'][0].capitalize()} của hệ thống là {decoy['value']}."
-        return text, entities, 80, 40, 120
+        return self._completion(text, entities)
+
+    @staticmethod
+    def _completion(
+        tagged_text: str,
+        entities: List[dict[str, str]],
+    ) -> CompletionResult:
+        return CompletionResult(
+            tagged_text=tagged_text,
+            entities=entities,
+            input_tokens=80,
+            output_tokens=40,
+            total_tokens=120,
+            model="offline-demo",
+            latency_ms=0,
+        )
 
     def _render(
         self,

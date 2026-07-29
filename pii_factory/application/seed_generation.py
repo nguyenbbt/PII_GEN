@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from typing import Dict, List, Protocol, Sequence
+from typing import Collection, Dict, List, Mapping, Protocol, Sequence
 
 from .context_catalog import ALL_LABELS, compatible_context_frames
 from .content_vocabulary import build_content_seeds
@@ -28,6 +28,8 @@ class SeedPackFactory(Protocol):
         task: GenerationTask,
         taxonomy: Sequence[TaxonomyLabel],
         rng: random.Random,
+        *,
+        excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
     ) -> SeedPack: ...
 
 
@@ -351,15 +353,25 @@ class PositiveSeedFactory:
         self.provider = provider
         self.selector = selector
 
-    def _entities(self, task: GenerationTask, rng: random.Random) -> List[PositiveEntitySeed]:
+    def _entities(
+        self,
+        task: GenerationTask,
+        rng: random.Random,
+        *,
+        excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
+    ) -> List[PositiveEntitySeed]:
         entities: List[PositiveEntitySeed] = []
         seen: set[str] = set()
+        excluded_by_label = excluded_values_by_label or {}
         for label in task.focus_labels:
             generated = self.provider.generate_with_variant(
                 label,
                 task.language,
                 rng,
-                excluded_values=seen,
+                excluded_values={
+                    *seen,
+                    *excluded_by_label.get(label, ()),
+                },
             )
             value = generated.value
             seen.add(value)
@@ -372,11 +384,22 @@ class PositiveSeedFactory:
             ))
         return entities
 
-    def build(self, task: GenerationTask, taxonomy: Sequence[TaxonomyLabel], rng: random.Random) -> SeedPack:
+    def build(
+        self,
+        task: GenerationTask,
+        taxonomy: Sequence[TaxonomyLabel],
+        rng: random.Random,
+        *,
+        excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
+    ) -> SeedPack:
         return SeedPack(
             task_id=task.task_id,
             sample_type=SampleType.POSITIVE,
-            positive_entities=self._entities(task, rng),
+            positive_entities=self._entities(
+                task,
+                rng,
+                excluded_values_by_label=excluded_values_by_label,
+            ),
             context_frame=self.selector.select(
                 task.focus_labels, rng, preferred_frame_id=task.diversity_profile.context_frame_id
             ),
@@ -389,7 +412,15 @@ class PureNegativeContentFactory:
     def __init__(self, selector: ContextFrameSelector) -> None:
         self.selector = selector
 
-    def build(self, task: GenerationTask, taxonomy: Sequence[TaxonomyLabel], rng: random.Random) -> SeedPack:
+    def build(
+        self,
+        task: GenerationTask,
+        taxonomy: Sequence[TaxonomyLabel],
+        rng: random.Random,
+        *,
+        excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
+    ) -> SeedPack:
+        del excluded_values_by_label
         frame = self.selector.select(
             task.focus_labels, rng, preferred_frame_id=task.diversity_profile.context_frame_id
         )
@@ -412,7 +443,14 @@ class HardNegativeSeedFactory:
         self.selector = selector
         self.config = config
 
-    def build(self, task: GenerationTask, taxonomy: Sequence[TaxonomyLabel], rng: random.Random) -> SeedPack:
+    def build(
+        self,
+        task: GenerationTask,
+        taxonomy: Sequence[TaxonomyLabel],
+        rng: random.Random,
+        *,
+        excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
+    ) -> SeedPack:
         taxonomy_codes = {label.code for label in taxonomy}
         unknown = set(task.focus_labels) - taxonomy_codes
         if unknown:
@@ -420,7 +458,11 @@ class HardNegativeSeedFactory:
         if self.config.mode == "decoy_only" and len(task.focus_labels) != 1:
             raise UnsupportedDecoyError("decoy_only hard-negative tasks require exactly one taxonomy focus label")
         positives = (
-            self.positive_factory._entities(task, rng)
+            self.positive_factory._entities(
+                task,
+                rng,
+                excluded_values_by_label=excluded_values_by_label,
+            )
             if self.config.mode == "mixed_contrastive" else []
         )
         supported = [label for label in task.focus_labels if HARD_NEGATIVE_SUPPORT.get(label, False)]
@@ -474,9 +516,19 @@ class SampleTypeRouter:
         }
 
     def build_seed_pack(
-        self, task: GenerationTask, taxonomy: Sequence[TaxonomyLabel], rng: random.Random
+        self,
+        task: GenerationTask,
+        taxonomy: Sequence[TaxonomyLabel],
+        rng: random.Random,
+        *,
+        excluded_values_by_label: Mapping[str, Collection[str]] | None = None,
     ) -> SeedPack:
-        return self.factories[SampleType(task.sample_type)].build(task, taxonomy, rng)
+        return self.factories[SampleType(task.sample_type)].build(
+            task,
+            taxonomy,
+            rng,
+            excluded_values_by_label=excluded_values_by_label,
+        )
 
 
 def build_sample_type_router(
@@ -487,6 +539,8 @@ def build_sample_type_router(
     provider = ValueBankEntityProvider(
         value_bank_config.path,
         value_bank_config.language_files,
+        partition_index=value_bank_config.partition_index,
+        partition_count=value_bank_config.partition_count,
     )
     return SampleTypeRouter(
         PositiveSeedFactory(provider, selector),

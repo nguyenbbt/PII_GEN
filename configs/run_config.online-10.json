@@ -1,44 +1,41 @@
 {
-  "run_name": "vi_data_001",
-  "num_samples": 100,
-  "language": "vietnamese",
+  "run_name": "vi_quality_online_10",
+  "num_samples": 10,
+  "language": "vi",
   "minimum_per_label": 0,
-  "batch_size": 5,
+  "batch_size": 1,
   "focus_label": "PERSON",
   "robin_labels": [
     "PHONE",
     "EMAIL",
     "ADDRESS",
+    "LOCATION",
     "DATE",
     "TIME",
     "MONEY",
     "URL",
-    "IP",
     "CARD_NUMBER",
-    "PLATE",
-    "PASSPORT",
-    "MEDICAL_INFO",
-    "LOCATION"
+    "PLATE"
   ],
   "robin_selection": {
-    "min_per_sample": 4,
-    "max_per_sample": 7,
-    "minimum_per_label": 8
+    "min_per_sample": 3,
+    "max_per_sample": 4,
+    "minimum_per_label": 2
   },
   "sample_length_distribution": {
-    "short": 0.2,
+    "short": 0.4,
     "medium": 0.5,
-    "long": 0.3
+    "long": 0.1
   },
   "difficulty_distribution": {
-    "easy": 0,
-    "medium": 0,
-    "hard": 1
+    "easy": 0.2,
+    "medium": 0.5,
+    "hard": 0.3
   },
   "sample_type_distribution": {
-    "positive": 0.5,
+    "positive": 0.7,
     "pure_negative": 0.0,
-    "hard_negative": 0.5
+    "hard_negative": 0.3
   },
   "sample_structures": [
     {
@@ -57,34 +54,25 @@
     },
     {
       "type": "custom",
-      "custom_instruction": "Viết dưới dạng báo cáo sự việc hoặc nhật ký vận hành."
-    },
-    {
-      "type": "custom",
-      "custom_instruction": "Viết dưới dạng ghi chú hoặc tin nhắn nội bộ tự nhiên."
+      "custom_instruction": "Viết dưới dạng ghi chú nội bộ tự nhiên."
     }
   ],
   "optional_constraint_distribution": {
     "teen_code": 0.0,
-    "light_typo": 0.05,
-    "abbreviation": 0.1
+    "light_typo": 0.03,
+    "abbreviation": 0.08
   },
   "max_entities": {
-    "easy": 5,
-    "medium": 6,
+    "easy": 6,
+    "medium": 7,
     "hard": 8
   },
-  "max_regenerate_attempts": 2,
-  "max_task_replacements": 2,
+  "max_regenerate_attempts": 1,
+  "max_task_replacements": 1,
   "value_bank": {
     "path": "PII_Value_Bank",
-    "language_files": {
-      "vi": "vi_pii_value_pools.json",
-      "en": "en_pii_value_pools.json",
-      "de": "de_pii_value_pools.json"
-    },
     "max_seed_pack_attempts": 5,
-    "allow_additional_unseeded_pii": true
+    "allow_additional_unseeded_pii": false
   },
   "hard_negative": {
     "mode": "mixed_contrastive",
@@ -100,16 +88,26 @@
   },
   "validation": {
     "quality_checks_enabled": false,
-    "accept_last_candidate_on_exhaustion": false
+    "local_context_window": 80,
+    "reject_mixed_locale": true,
+    "pure_negative_structured_scan": true,
+    "hard_negative_structured_scan": true
+  },
+  "novelty": {
+    "enabled": true,
+    "mode": "audit",
+    "near_duplicate_threshold": 0.9,
+    "recent_window": 100,
+    "max_feedback": 3
   },
   "verifier": {
     "enabled": true,
     "max_repairs_per_candidate": 1
   },
   "parallel_generation": {
-    "workers": 10,
-    "shard_size": 10,
-    "max_shard_retries": 2
+    "workers": 2,
+    "shard_size": 5,
+    "max_shard_retries": 1
   },
   "random_seed": 174
 }

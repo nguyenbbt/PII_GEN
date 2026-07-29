@@ -65,9 +65,9 @@ Generator
 ```
 
 `verifier.enabled` điều khiển Judge/Repair. Cờ legacy
-`validation.quality_checks_enabled` chỉ còn điều khiển NoveltyGuard và được migrate
-sang `verifier.enabled` khi config cũ không khai báo `verifier`. Dù Judge tắt,
-Formatter không bao giờ được bỏ qua technical validation.
+`validation.quality_checks_enabled` được migrate sang `novelty.enabled` và
+`verifier.enabled` riêng rẽ khi config cũ chưa khai báo section mới tương ứng.
+Dù Novelty/Judge tắt, Formatter không bao giờ được bỏ qua technical validation.
 
 ## 3. Các module
 
@@ -174,6 +174,11 @@ Run chỉ `COMPLETED` khi mỗi slot có một sample `ACCEPTED`.
 `de_pii_value_pools.json`. Mỗi file phải có `version: 1`, object
 `entity_values`, class hợp lệ, danh sách không rỗng, item `value` không rỗng và
 `locale` khớp ngôn ngữ được yêu cầu.
+
+Thư mục `PII_Value_Bank/` là runtime data local-only, được liệt kê trong
+`.gitignore` và không được phân phối qua repository này. Sau khi clone, người vận
+hành phải tự tạo/copy các file Value Bank tương ứng vào path đã cấu hình. Runtime
+sẽ fail-fast với lỗi rõ ràng nếu directory, language file hoặc label pool bị thiếu.
 
 Ví dụ cấu hình English:
 
@@ -320,9 +325,11 @@ Technical gate luôn chạy trước Formatter:
   ba focus examples; candidate quá giống phải regenerate ngay cả khi Judge
   đang tắt.
 
-Khi `quality_checks_enabled=true`, NoveltyGuard kiểm tra entity value giữa các sample
-đã accept và sentence/entity novelty trong cùng run. Các occurrence lặp lại hợp lệ
-trong cùng một sample không bị xem là duplicate annotation.
+Khi `novelty.enabled=true`, NoveltyGuard kiểm tra entity value giữa các sample đã
+accept và sentence/entity novelty trong cùng run. `mode=audit` chỉ ghi assessment;
+`mode=enforce` đưa duplicate về regeneration. Seed factory loại trước các
+`(label, value)` đã accept để giảm retry/cost; các occurrence lặp lại hợp lệ trong
+cùng một sample không bị xem là duplicate annotation.
 
 `DeterministicIssueRouter` ánh xạ kết quả theo route rõ ràng:
 
@@ -586,10 +593,20 @@ pipeline_token_usage
 - final Judge call nếu phát sinh;
 - call đã trả response có schema lỗi nhưng vẫn phát sinh token.
 
+Gateway hiện tại không trả trường USD/money trực tiếp. Runtime lấy
+`prompt_tokens`, `completion_tokens`, `total_tokens` rồi tính `money_cost` bằng
+đơn giá cấu hình. Với reasoning model, output billable được tính bằng
+`max(completion_tokens, total_tokens - prompt_tokens)` để không bỏ sót reasoning
+token đã nằm trong `total_tokens`. HTTP error không có structured usage vẫn không
+thể suy ra chính xác chi phí; đối soát hóa đơn cuối cùng phải dùng billing portal
+hoặc hợp đồng của nhà cung cấp.
+
 File dataset cuối chỉ bổ sung số lượng input/output token theo sample và theo hai
 vai trò `generator`/`verifier`; không chứa diagnostic, prompt, money cost hoặc
 taxonomy context. Summary trên terminal và file `*-summary.json` có tổng token và
-chi phí của toàn run, đồng thời tách riêng hai vai trò.
+chi phí của toàn run, đồng thời tách riêng hai vai trò. Tổng run bao gồm cả
+logical slot không tạo được sample cuối và mọi response có usage trước khi task
+bị reject hoặc run chuyển `FAILED`.
 
 ## 5. Run config
 
@@ -602,11 +619,11 @@ Các field chính:
 | `run_name` | Tên run và thành phần của output filename |
 | `num_samples` | Số sample `ACCEPTED` bắt buộc |
 | `language` | Value Bank language: `vi`, `en`, `de`; alias phổ biến được normalize |
-| `minimum_per_label` | Coverage tối thiểu |
+| `minimum_per_label` | Coverage tối thiểu của chế độ legacy `focus_labels`; phải bằng `0` trong anchor mode |
 | `batch_size` | Số sample accept tối đa mỗi `generate_pending` |
 | `focus_label` | Anchor label bắt buộc ở mọi sample |
 | `robin_labels` | Pool label phụ trợ |
-| `robin_selection` | Số robin label được random cho mỗi task |
+| `robin_selection` | `min_per_sample`, `max_per_sample` và `minimum_per_label` cho balanced robin coverage |
 | `focus_labels` | Chế độ legacy: pool focus labels |
 | `difficulty_distribution` | Xác suất easy/medium/hard |
 | `sample_type_distribution` | Xác suất positive/pure-negative/hard-negative |
@@ -620,7 +637,9 @@ Các field chính:
 | `value_bank` | `path`, `language_files`, seed-pack retry và unseeded-PII policy; bật `allow_additional_unseeded_pii` để verifier gắn nhãn PII phát sinh trong context |
 | `hard_negative` | Mode, decoy count và focus limits |
 | `complexity_limits` | Complexity budget theo sample type |
-| `validation.quality_checks_enabled` | Cờ legacy cho NoveltyGuard; migrate sang Verifier nếu config không có `verifier` |
+| `validation` | Technical validator settings; technical validation luôn chạy |
+| `validation.quality_checks_enabled` | Cờ legacy; chỉ migrate sang `novelty.enabled`/`verifier.enabled` khi section mới tương ứng chưa khai báo |
+| `novelty` | Bật/tắt, `off/audit/enforce`, similarity threshold, recent window và feedback limit |
 | `validation.accept_last_candidate_on_exhaustion` | Hết Generator attempt và task replacement thì xuất candidate cuối nếu Formatter vẫn bảo đảm schema/tag/offset; summary báo `fallback_accepts` |
 | `verifier.enabled` | Bật/tắt LLM Judge/Repair; config mẫu bật |
 | `verifier.max_repairs_per_candidate` | Cho phép `0`, `1` hoặc `2`; vòng hai chỉ chạy khi re-Judge còn trả lỗi cục bộ `FIXABLE` |
@@ -640,9 +659,18 @@ Ví dụ:
 }
 ```
 
-Path tuyệt đối được dùng nguyên trạng; path tương đối được resolve từ working
-directory của process. Config `faker`/`seed_generation` cũ được parse như alias
-migration sang `value_bank`; `locale` cũ bị bỏ qua và không còn runtime Faker.
+Path tuyệt đối được dùng nguyên trạng. Với CLI, path tương đối được thử từ thư
+mục chứa config, working directory, rồi project root; taxonomy JSON mặc định và
+Value Bank mặc định vì vậy vẫn chạy khi entry point được gọi ngoài repo root.
+Config `faker`/`seed_generation` cũ được parse như alias migration sang
+`value_bank`; `locale` cũ bị bỏ qua và không còn runtime Faker. Ba Value Bank
+`vi/en/de` là runtime artifact local-only, không được version-control và được
+validate fail-fast trước khi tạo task.
+
+`value_bank.partition_index`/`partition_count` là setting nội bộ của parallel
+runner. Runner tự gán partition hash ổn định, không giao nhau cho từng shard để
+NoveltyGuard vẫn giữ uniqueness toàn dataset; config người dùng nên để mặc định
+`0/1`.
 
 Trong anchor mode:
 
@@ -650,6 +678,8 @@ Trong anchor mode:
 - `pure_negative` phải bằng `0`;
 - hard-negative phải dùng `mixed_contrastive`;
 - robin label được chọn ngẫu nhiên, không lặp trong cùng task.
+- `robin_selection.minimum_per_label` bảo đảm mỗi robin label đạt coverage tối
+  thiểu bằng lịch seeded, cân bằng và tái lập được;
 - `1 + robin_selection.max_per_sample` không được vượt capacity; config sai bị từ
   chối thay vì âm thầm cắt số label.
 
@@ -703,23 +733,29 @@ VERIFIER_REPAIR_MAX_TOKENS=2500
 
 LLM_TIMEOUT_SECONDS=120
 LLM_INFRA_MAX_RETRIES=3
-INPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
-OUTPUT_TOKEN_PRICE_PER_MILLION_USD=10.00
-GENERATOR_INPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
-GENERATOR_OUTPUT_TOKEN_PRICE_PER_MILLION_USD=10.00
-VERIFIER_INPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
+INPUT_TOKEN_PRICE_PER_MILLION_USD=0.30
+OUTPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
+GENERATOR_INPUT_TOKEN_PRICE_PER_MILLION_USD=0.30
+GENERATOR_OUTPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
+VERIFIER_INPUT_TOKEN_PRICE_PER_MILLION_USD=1.25
 VERIFIER_OUTPUT_TOKEN_PRICE_PER_MILLION_USD=10.00
 GEN_DATA_DIR=gen_data
 ```
+
+Các mức giá trên là USD trên 1.000.000 token theo cấu hình hiện tại:
+`gemini-2.5-flash` dùng `$0.30` input / `$2.50` output cho Generator;
+`gemini-2.5-pro` dùng `$1.25` input / `$10.00` output cho Judge, Repair và
+re-Judge. Biến generic giữ vai trò fallback tương thích; các biến theo vai trò
+luôn được ưu tiên.
 
 `GENERATOR_MODEL` được dùng cho Data Generator. `VERIFIER_MODEL` được dùng cho
 Judge và Repair. `MODEL` là fallback tương thích khi một trong hai biến theo vai
 trò bị thiếu.
 
-Bốn biến giá theo vai trò cho phép tính chi phí chính xác khi Generator và
-Verifier dùng model khác giá. Nếu bỏ chúng, hệ thống fallback về hai biến
-`INPUT_TOKEN_PRICE_PER_MILLION_USD` và
-`OUTPUT_TOKEN_PRICE_PER_MILLION_USD` cũ để giữ tương thích.
+Đơn giá theo vai trò được ưu tiên vì hai model có thể có giá khác nhau. Hai biến
+generic chỉ là fallback cho config cũ. Các giá trị ví dụ không phải báo giá của
+gateway; phải thay bằng giá thực trong tài khoản/hợp đồng trước khi dùng
+`money_cost` làm số liệu tài chính.
 
 `OPENAI_API_STYLE=auto` dùng Azure deployment route và header `api-key` cho
 hostname Azure OpenAI native; với gateway tùy chỉnh, client dùng
@@ -809,13 +845,38 @@ Bỏ `--offline`:
 CLI ghi progress log theo thời gian thực ra `stderr`, gồm số sample hiện tại/tổng
 số, sample type, length bucket, label, generator attempt, LLM retry/latency,
 deterministic validation route, verifier judge/repair và tiến độ accepted. Log không
-ghi API key, header hoặc prompt. Diagnostic log có ghi tagged text, Value Bank value
-đã bind, toàn bộ feedback và nội dung trước/sau verifier repair để phục vụ điều tra
-local. Mặc định file UTF-8 có timestamp được tạo trong `--output-dir`; dùng
+ghi API key, header, prompt, tagged text, entity value hoặc nội dung trước/sau
+Repair; candidate chỉ được nhận diện bằng hash ngắn và metadata. Mặc định file
+UTF-8 có timestamp được tạo trong `--output-dir`; dùng
 `--log-file <path>` nếu muốn chỉ định tên khác. Báo cáo JSON hoàn chỉnh vẫn được ghi
 ra `stdout` sau khi run kết thúc và có thêm `diagnostic_log_path`.
 
 Online mode gọi Generator và Verifier nên phát sinh chi phí.
+
+Cấu hình smoke online 10 mẫu, chia thành hai shard 5 mẫu:
+
+```powershell
+& '.\.venv\bin\pii-factory-parallel.exe' `
+  --config configs\run_config.online-10.json
+```
+
+Cấu hình kiểm thử online toàn diện 50 mẫu:
+
+```powershell
+# Smoke test miễn phí trước
+& '.\.venv\bin\pii-factory.exe' `
+  --offline `
+  --config configs\run_config.online-50.json
+
+# Có tính phí: chỉ chạy sau khi xác nhận model, quota và đơn giá trong .env
+& '.\.venv\bin\pii-factory-parallel.exe' `
+  --config configs\run_config.online-50.json
+```
+
+Profile này dùng 50 sample tiếng Việt, PERSON luôn xuất hiện, 13 robin labels
+được chọn 4–7 nhãn/sample với coverage tối thiểu, quota độ dài 20/50/30,
+positive/mixed-hard-negative 70/30, NoveltyGuard `enforce`, Judge/Repair bật và
+5 shard workers. Raw online output vẫn nằm trong `gen_data` và bị Git ignore.
 
 Để chạy config theo nhiều shard song song và chỉ publish khi đủ toàn bộ sample:
 
@@ -843,7 +904,9 @@ Terminal báo tiến độ shard đã hoàn tất. Thư mục `shards-<id-ngắn
 diagnostic log và output riêng của từng attempt; file `*-summary.json` giữ tổng token
 toàn phiên cùng đường dẫn các log này. Token của response provider có usage vẫn được
 cộng ngay cả khi JSON/response contract lỗi rồi phải retry; HTTP error không có usage
-được tính là 0.
+được tính là 0. Nếu một shard attempt trả summary có usage nhưng thất bại, usage đó
+được cộng vào attempt thành công kế tiếp; nếu shard hết retry, `*-failed-summary.json`
+vẫn chứa tổng usage có thể khôi phục của cả shard thành công và shard thất bại.
 
 ## 8. State và events
 

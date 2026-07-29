@@ -25,6 +25,7 @@ from ..domain.models import (
     GenerationQuery,
     GenerationTask,
     NoveltyAssessment,
+    NoveltyConfig,
     PipelineTokenUsage,
     ReflectionContext,
     Run,
@@ -37,7 +38,13 @@ from ..domain.models import (
     ValidationIssue,
     VerificationTrace,
 )
-from ..ports import CompletionClient, EventBus, RunRepository
+from ..ports import (
+    CompletionClient,
+    CompletionClientError,
+    CompletionResult,
+    EventBus,
+    RunRepository,
+)
 from .formatting import JsonDatasetWriter, OutputFormatter
 from .few_shot_similarity import FewShotImitationGuard
 from .diversity import DiversityPlanner, resolve_length_target
@@ -52,7 +59,7 @@ from .seed_generation import (
 )
 from .taxonomy_service import TaxonomyService
 from .validators import DeterministicOutputValidator, SeedPackValidator
-from .value_bank import ValueBankError
+from .value_bank import ValueBankEntityProvider, ValueBankError
 from .verification import (
     DeterministicIssueRouter,
     VerificationRoutingError,
@@ -83,8 +90,14 @@ class CostRates:
 
 
 class OutputValidationError(ValueError):
-    def __init__(self, result: DeterministicValidationResult) -> None:
+    def __init__(
+        self,
+        result: DeterministicValidationResult,
+        *,
+        token_usage: TokenUsage | None = None,
+    ) -> None:
         self.result = result
+        self.token_usage = token_usage
         scopes = {issue.scope for issue in result.issues}
         self.regeneration_scope = next(
             (scope for scope in ("SEEDS", "CONTEXT", "TEXT") if scope in scopes),
@@ -154,6 +167,7 @@ class CoverageController:
 
     def create_tasks(self, run: Run) -> List[GenerationTask]:
         rng = random.Random(run.config.random_seed)
+        robin_schedule = self._plan_robin_schedule(run.config)
         diversity_planner = DiversityPlanner(
             run.config.random_seed,
             run.config.sample_length_distribution,
@@ -205,9 +219,15 @@ class CoverageController:
                     max_focus = min(max_focus, run.config.hard_negative.max_focus_labels)
                 optional_budget = max(0, complexity_limit - max_focus - reserved_decoys)
                 optional_constraints = planned_constraints[:optional_budget]
-            focus_labels = self._select_labels(
-                run, labels, mandatory_labels, sequence_no, max_focus, rng
-            )
+            if run.config.focus_label:
+                focus_labels = [
+                    run.config.focus_label,
+                    *robin_schedule[sequence_no - 1],
+                ]
+            else:
+                focus_labels = self._select_labels(
+                    run, labels, mandatory_labels, sequence_no, max_focus, rng
+                )
             selected_robin_labels = focus_labels[1:] if run.config.focus_label else []
             sample_structure = diversity_planner.select_sample_structure()
             diversity_profile = diversity_planner.plan(
@@ -251,19 +271,6 @@ class CoverageController:
         max_focus: int,
         rng: random.Random,
     ) -> List[str]:
-        if run.config.focus_label:
-            selection = run.config.robin_selection
-            max_robin = min(
-                selection.max_per_sample,
-                len(run.config.robin_labels),
-                max(0, max_focus - 1),
-            )
-            robin_count = rng.randint(selection.min_per_sample, max_robin)
-            return [
-                run.config.focus_label,
-                *rng.sample(run.config.robin_labels, k=robin_count),
-            ]
-
         primary_label = (
             mandatory_labels[sequence_no - 1]
             if sequence_no <= len(mandatory_labels) else rng.choice(labels)
@@ -271,6 +278,56 @@ class CoverageController:
         remaining_labels = [label for label in labels if label != primary_label]
         focus_count = rng.randint(1, max_focus)
         return [primary_label, *rng.sample(remaining_labels, k=focus_count - 1)]
+
+    @staticmethod
+    def _plan_robin_schedule(config: RunConfig) -> List[List[str]]:
+        if not config.focus_label:
+            return []
+        selection = config.robin_selection
+        effective_maximum = min(
+            selection.max_per_sample,
+            len(config.robin_labels),
+        )
+        schedule: List[List[str]] = [
+            [] for _ in range(config.num_samples)
+        ]
+        rng = random.Random(f"{config.random_seed}:robin-schedule")
+
+        required = [
+            label
+            for _ in range(selection.minimum_per_label)
+            for label in config.robin_labels
+        ]
+        rng.shuffle(required)
+        for label in required:
+            candidates = [
+                index
+                for index, labels in enumerate(schedule)
+                if label not in labels and len(labels) < effective_maximum
+            ]
+            if not candidates:
+                raise ValueError(
+                    "cannot build the configured robin minimum coverage schedule"
+                )
+            minimum_size = min(len(schedule[index]) for index in candidates)
+            least_loaded = [
+                index
+                for index in candidates
+                if len(schedule[index]) == minimum_size
+            ]
+            schedule[rng.choice(least_loaded)].append(label)
+
+        for labels in schedule:
+            target = rng.randint(
+                max(selection.min_per_sample, len(labels)),
+                effective_maximum,
+            )
+            available = [
+                label for label in config.robin_labels if label not in labels
+            ]
+            labels.extend(rng.sample(available, k=target - len(labels)))
+            rng.shuffle(labels)
+        return schedule
 
 
 class DataGenerator:
@@ -306,16 +363,18 @@ class DataGenerator:
         request.task.current_attempt = request.attempt_no
         self.repository.update_task(request.task)
         started = time.perf_counter()
+        token_usage: TokenUsage | None = None
         try:
-            tagged_text, raw_entities, input_tokens, output_tokens, total_tokens = self.client.generate(
-                self._messages(request)
+            completion = CompletionResult.coerce(
+                self.client.generate(self._messages(request))
             )
-            logger.info(
-                "[sample %s attempt %s] LLM raw tagged_text:\n%s",
-                request.task.slot_no or request.task.sequence_no,
-                request.attempt_no,
-                tagged_text,
+            token_usage = self.cost_rates.calculate(
+                completion.input_tokens,
+                completion.output_tokens,
+                completion.total_tokens,
             )
+            tagged_text = completion.tagged_text
+            raw_entities = completion.entities
             tagged_text, raw_entities = replace_entity_placeholders(
                 tagged_text=tagged_text,
                 entities=raw_entities,
@@ -325,48 +384,72 @@ class DataGenerator:
                 language=request.task.language,
             )
             logger.info(
-                "[sample %s attempt %s] candidate after Value Bank binding:\n%s",
+                "[sample %s attempt %s] candidate bound hash=%s",
                 request.task.slot_no or request.task.sequence_no,
                 request.attempt_no,
-                tagged_text,
+                hashlib.sha256(tagged_text.encode("utf-8")).hexdigest()[:12],
             )
-        except ValueError as exc:
+            latency_ms = round((time.perf_counter() - started) * 1000)
+            entities = [GeneratedEntity(**entity) for entity in raw_entities]
+            candidate = GenerationCandidate(
+                task_id=request.task.task_id,
+                attempt_no=request.attempt_no,
+                seed_pack_id=request.seed_pack.seed_pack_id,
+                context_frame_id=request.seed_pack.context_frame.frame_id,
+                generation_query=GenerationQuery(
+                    language=request.task.language, focus_labels=request.task.focus_labels,
+                    focus_label=request.task.focus_label, robin_labels=request.task.robin_labels,
+                    constraints=request.task.optional_constraints, difficulty=request.task.difficulty,
+                    sample_type=request.task.sample_type, max_entities=request.task.max_entities,
+                    sample_structure=request.task.sample_structure,
+                    length_target=request.task.length_target,
+                ),
+                entities=entities,
+                tagged_text=tagged_text,
+                token_usage=token_usage,
+                latency_ms=latency_ms,
+                model=self.model,
+                prompt_version=PROMPT_VERSION,
+                output_hash=hashlib.sha256(tagged_text.encode("utf-8")).hexdigest(),
+                seed_validation=request.seed_validation,
+                diversity_profile=request.task.diversity_profile,
+                taxonomy_context_used=request.taxonomy_context,
+            )
+        except CompletionClientError as exc:
+            token_usage = self.cost_rates.calculate(*exc.raw_usage)
+            raise OutputValidationError(
+                DeterministicValidationResult(
+                    valid=False,
+                    issues=[
+                        ValidationIssue(
+                            type="invalid_output",
+                            scope="TEXT",
+                            reason=str(exc),
+                        )
+                    ],
+                ),
+                token_usage=token_usage,
+            ) from exc
+        except (TypeError, ValueError) as exc:
             logger.warning(
-                "[sample %s attempt %s] output binding failed: %s",
+                "[sample %s attempt %s] output contract failed error=%s",
                 request.task.slot_no or request.task.sequence_no,
                 request.attempt_no,
-                exc,
+                type(exc).__name__,
             )
-            raise OutputValidationError(DeterministicValidationResult(
-                valid=False,
-                issues=[ValidationIssue(type="invalid_output", scope="TEXT", reason=str(exc))],
-            )) from exc
-        latency_ms = round((time.perf_counter() - started) * 1000)
-        entities = [GeneratedEntity(**entity) for entity in raw_entities]
-        candidate = GenerationCandidate(
-            task_id=request.task.task_id,
-            attempt_no=request.attempt_no,
-            seed_pack_id=request.seed_pack.seed_pack_id,
-            context_frame_id=request.seed_pack.context_frame.frame_id,
-            generation_query=GenerationQuery(
-                language=request.task.language, focus_labels=request.task.focus_labels,
-                focus_label=request.task.focus_label, robin_labels=request.task.robin_labels,
-                constraints=request.task.optional_constraints, difficulty=request.task.difficulty,
-                sample_type=request.task.sample_type, max_entities=request.task.max_entities,
-                sample_structure=request.task.sample_structure,
-                length_target=request.task.length_target,
-            ),
-            entities=entities,
-            tagged_text=tagged_text,
-            token_usage=self.cost_rates.calculate(input_tokens, output_tokens, total_tokens),
-            latency_ms=latency_ms,
-            model=self.model,
-            prompt_version=PROMPT_VERSION,
-            output_hash=hashlib.sha256(tagged_text.encode("utf-8")).hexdigest(),
-            seed_validation=request.seed_validation,
-            diversity_profile=request.task.diversity_profile,
-            taxonomy_context_used=request.taxonomy_context,
-        )
+            raise OutputValidationError(
+                DeterministicValidationResult(
+                    valid=False,
+                    issues=[
+                        ValidationIssue(
+                            type="invalid_output",
+                            scope="TEXT",
+                            reason=str(exc),
+                        )
+                    ],
+                ),
+                token_usage=token_usage,
+            ) from exc
         self.repository.add_candidate(candidate)
         self.repository.mark_consumed(idempotency_key)
         request.task.status = TaskStatus.GENERATED
@@ -418,12 +501,36 @@ class Pipeline:
         self._reflections: Dict[str, ReflectionContext] = {}
         self._usage_calls: Dict[tuple[str, int], Dict[str, List[TokenUsage]]] = {}
         self._recorded_calls: set[tuple[str, int, str]] = set()
+        self._accepted_values_by_run: Dict[str, Dict[str, set[str]]] = {}
 
     def create_run(self, request: CreateRunRequest) -> Run:
         taxonomy = (
             self.taxonomy_service.register(request.taxonomy)
             if request.taxonomy else self.taxonomy_service.get(request.taxonomy_version_id or "")
         )
+        known_labels = {label.code for label in taxonomy.labels}
+        selected_labels = request.config.label_pool or list(known_labels)
+        missing_labels = set(selected_labels) - known_labels
+        if missing_labels:
+            raise ValueError(
+                f"focus labels absent from taxonomy: {sorted(missing_labels)}"
+            )
+        uses_positive_bank = (
+            request.config.sample_type_distribution.get("positive", 0) > 0
+            or (
+                request.config.sample_type_distribution.get("hard_negative", 0) > 0
+                and request.config.hard_negative.mode == "mixed_contrastive"
+            )
+        )
+        if uses_positive_bank:
+            ValueBankEntityProvider(
+                request.config.value_bank.path,
+                partition_index=request.config.value_bank.partition_index,
+                partition_count=request.config.value_bank.partition_count,
+            ).validate(
+                language=request.config.language,
+                required_labels=selected_labels,
+            )
         run = self.orchestrator.create_run(request, taxonomy.labels, taxonomy.version_id)
         self.coverage.create_tasks(run)
         return run
@@ -445,7 +552,14 @@ class Pipeline:
         ):
             terminal_value_bank_error = False
             try:
-                pack = router.build_seed_pack(task, taxonomy, rng)
+                pack = router.build_seed_pack(
+                    task,
+                    taxonomy,
+                    rng,
+                    excluded_values_by_label=self._accepted_entity_values(
+                        task.run_id
+                    ),
+                )
                 validation = validator.validate(pack, task.focus_labels, taxonomy)
                 if validation.valid:
                     self.event_bus.publish(EventEnvelope(
@@ -493,9 +607,6 @@ class Pipeline:
             return []
         run.status = RunStatus.RUNNING
         self.repository.update_run(run)
-        self.verifier.max_repairs_per_candidate = (
-            run.config.verifier.max_repairs_per_candidate
-        )
         taxonomy = self.taxonomy_service.get(run.taxonomy_version_id).labels
         output_validator = DeterministicOutputValidator(run.config.validation)
         effective_limit = min(limit, run.config.batch_size)
@@ -601,11 +712,11 @@ class Pipeline:
                 reflection = self._reflections.get(task.task_id)
                 if reflection is not None:
                     logger.info(
-                        "[sample %s/%s] retry feedback for attempt %s: %s",
+                        "[sample %s/%s] retry feedback for attempt %s issues=%s",
                         slot_no,
                         run.config.num_samples,
                         attempt_no,
-                        " | ".join(reflection.mandatory_repairs),
+                        len(reflection.mandatory_repairs),
                     )
                 logger.info(
                     "[sample %s/%s] generator attempt %s/%s started",
@@ -644,7 +755,11 @@ class Pipeline:
                 task.status = TaskStatus.VALIDATING
                 self.repository.update_task(task)
                 validation, novelty = self._validate_candidate(
-                    candidate, seed_pack, task, output_validator
+                    candidate,
+                    seed_pack,
+                    task,
+                    output_validator,
+                    run.config.novelty,
                 )
                 last_validation = validation
                 last_novelty = novelty
@@ -708,9 +823,16 @@ class Pipeline:
                     seed_pack=seed_pack,
                     taxonomy_context=generation_taxonomy_context,
                     revalidate=lambda repaired: self._validate_candidate(
-                        repaired, seed_pack, task, output_validator
+                        repaired,
+                        seed_pack,
+                        task,
+                        output_validator,
+                        run.config.novelty,
                     )[0],
                     deterministic_issues=deterministic_issues,
+                    max_repairs_per_candidate=(
+                        run.config.verifier.max_repairs_per_candidate
+                    ),
                 )
                 last_candidate = verified
                 last_trace = trace
@@ -722,7 +844,11 @@ class Pipeline:
                 )
                 self._record_verifier_trace(run.run_id, task, attempt_no, trace)
                 final_validation, final_novelty = self._validate_candidate(
-                    verified, seed_pack, task, output_validator
+                    verified,
+                    seed_pack,
+                    task,
+                    output_validator,
+                    run.config.novelty,
                 )
                 last_validation = final_validation
                 last_novelty = final_novelty
@@ -744,6 +870,7 @@ class Pipeline:
                         seed_pack,
                         task,
                         output_validator,
+                        run.config.novelty,
                     )
                 if exc.trace is not None:
                     last_trace = exc.trace
@@ -759,7 +886,7 @@ class Pipeline:
                 for index, issue in enumerate(exc.issues, start=1):
                     logger.warning(
                         "[sample %s/%s] verifier feedback %s/%s "
-                        "type=%s severity=%s field=%s reason=%s suggested_fix=%s",
+                        "type=%s severity=%s field=%s",
                         slot_no,
                         run.config.num_samples,
                         index,
@@ -767,8 +894,6 @@ class Pipeline:
                         issue.type,
                         issue.severity,
                         issue.field,
-                        issue.reason,
-                        issue.suggested_fix,
                     )
                 if exc.trace is not None:
                     self._record_verifier_trace(
@@ -827,19 +952,30 @@ class Pipeline:
                     exc.stage or "unknown",
                     exc,
                 )
+                usage_bucket = self._usage_bucket(
+                    run.run_id, task.slot_no or task.sequence_no
+                )
+                for category, completed_usage in exc.completed_usage:
+                    usage_bucket[category].append(completed_usage)
                 if exc.token_usage is not None:
-                    category = (
-                        "verifier_repair"
-                        if exc.stage == "repair"
-                        else "verifier_judge"
-                    )
-                    self._usage_bucket(
-                        run.run_id, task.slot_no or task.sequence_no
-                    )[category].append(exc.token_usage)
+                    category = {
+                        "repair": "verifier_repair",
+                        "rejudge": "verifier_rejudge",
+                    }.get(exc.stage or "", "verifier_judge")
+                    usage_bucket[category].append(exc.token_usage)
                 task.status = TaskStatus.VERIFYING
                 self.repository.update_task(task)
                 raise
             except OutputValidationError as exc:
+                if exc.token_usage is not None:
+                    self._record_usage(
+                        run.run_id,
+                        task.slot_no or task.sequence_no,
+                        "generator",
+                        exc.token_usage,
+                        task.task_id,
+                        attempt_no,
+                    )
                 logger.warning(
                     "[sample %s/%s] regeneration requested scope=%s issues=%s attempt=%s/%s",
                     slot_no,
@@ -866,6 +1002,9 @@ class Pipeline:
                         taxonomy=taxonomy,
                         rng=retry_rng,
                         current=seed_pack,
+                        excluded_values_by_label=self._accepted_entity_values(
+                            run.run_id
+                        ),
                     )
                     seed_validation = seed_validator.validate(
                         seed_pack, task.focus_labels, taxonomy
@@ -895,6 +1034,19 @@ class Pipeline:
             task.status = TaskStatus.GENERATING
             self.repository.update_task(task)
         return None
+
+    def _accepted_entity_values(self, run_id: str) -> Dict[str, set[str]]:
+        cached = self._accepted_values_by_run.get(run_id)
+        if cached is not None:
+            return cached
+        cached = {}
+        for result in self.repository.list_results(run_id):
+            for entity in result.entities:
+                cached.setdefault(entity.label, set()).add(
+                    entity.value.strip()
+                )
+        self._accepted_values_by_run[run_id] = cached
+        return cached
 
     def _accept_last_candidate_on_exhaustion(
         self,
@@ -986,7 +1138,7 @@ class Pipeline:
         for index, issue in enumerate(issues, start=1):
             logger.warning(
                 "[sample %s attempt %s] %s feedback %s/%s "
-                "type=%s scope=%s label=%s reason=%s",
+                "type=%s scope=%s label=%s",
                 task.slot_no or task.sequence_no,
                 attempt_no,
                 source,
@@ -995,7 +1147,6 @@ class Pipeline:
                 issue.type,
                 issue.scope,
                 issue.label or "-",
-                issue.reason,
             )
 
     def _validate_candidate(
@@ -1004,6 +1155,7 @@ class Pipeline:
         seed_pack: SeedPack,
         task: GenerationTask,
         output_validator: DeterministicOutputValidator,
+        novelty_config: NoveltyConfig,
     ) -> tuple[DeterministicValidationResult, NoveltyAssessment]:
         validation = output_validator.validate(
             tagged_text=candidate.tagged_text,
@@ -1026,26 +1178,24 @@ class Pipeline:
                     valid=False,
                     issues=[*validation.issues, imitation_issue],
                 )
-        novelty_config = output_validator.config
-        if not novelty_config.quality_checks_enabled:
+        if not novelty_config.enabled or novelty_config.mode == "off":
             return validation, NoveltyAssessment()
         novelty_guard = NoveltyGuard(
             near_duplicate_threshold=novelty_config.near_duplicate_threshold,
-            recent_window=novelty_config.novelty_recent_window,
-            max_feedback=novelty_config.max_novelty_feedback,
+            recent_window=novelty_config.recent_window,
+            max_feedback=novelty_config.max_feedback,
         )
         novelty = novelty_guard.assess(
             tagged_text=candidate.tagged_text,
             entities=candidate.entities,
             decoy_values=[decoy.value for decoy in seed_pack.decoys],
             previous_results=(
-                [] if novelty_config.novelty_mode == "off"
-                else self.repository.list_results(task.run_id)
+                self.repository.list_results(task.run_id)
             ),
         )
         if (
             validation.valid
-            and novelty_config.novelty_mode == "enforce"
+            and novelty_config.mode == "enforce"
             and not novelty.valid
         ):
             validation = DeterministicValidationResult(
@@ -1112,6 +1262,11 @@ class Pipeline:
             pipeline_token_usage=pipeline_usage,
         )
         self.repository.add_result(result)
+        accepted_values = self._accepted_entity_values(run.run_id)
+        for entity in result.entities:
+            accepted_values.setdefault(entity.label, set()).add(
+                entity.value.strip()
+            )
         self.repository.add_formatted_sample(task.task_id, formatted)
         task.status = TaskStatus.ACCEPTED
         self.repository.update_task(task)
@@ -1359,4 +1514,25 @@ class Pipeline:
 
     def _pipeline_usage(self, run_id: str, slot_no: int) -> PipelineTokenUsage:
         calls = self._usage_bucket(run_id, slot_no)
+        return PipelineTokenUsage.from_calls(**calls)
+
+    def run_usage(self, run_id: str) -> PipelineTokenUsage:
+        """Aggregate every recorded paid call, including unaccepted slots."""
+
+        self.repository.get_run(run_id)
+        categories = (
+            "generator",
+            "verifier_judge",
+            "verifier_repair",
+            "verifier_rejudge",
+        )
+        calls = {
+            category: [
+                usage
+                for (recorded_run_id, _), bucket in self._usage_calls.items()
+                if recorded_run_id == run_id
+                for usage in bucket[category]
+            ]
+            for category in categories
+        }
         return PipelineTokenUsage.from_calls(**calls)

@@ -1,5 +1,6 @@
 import json
 import unittest
+from collections import Counter
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -9,6 +10,66 @@ from pii_factory.domain.models import CreateRunRequest, RunConfig
 
 
 class DistributionRunConfigTests(unittest.TestCase):
+    def test_explicit_novelty_config_overrides_legacy_quality_flag(self) -> None:
+        config = RunConfig(
+            num_samples=1,
+            focus_labels=["PERSON"],
+            validation={"quality_checks_enabled": False},
+            novelty={
+                "enabled": True,
+                "mode": "enforce",
+                "near_duplicate_threshold": 0.88,
+            },
+        )
+
+        self.assertTrue(config.novelty.enabled)
+        self.assertEqual(config.novelty.mode, "enforce")
+        self.assertEqual(config.novelty.near_duplicate_threshold, 0.88)
+
+    def test_online_50_config_is_feasible_and_meets_planning_quotas(self) -> None:
+        config = RunConfig.parse_obj(json.loads(
+            Path("configs/run_config.online-50.json").read_text(encoding="utf-8")
+        ))
+        pipeline, repository, _ = build_pipeline(offline=True)
+        taxonomy = pipeline.taxonomy_service.import_json(
+            Path("pii_taxonomy_rules.json")
+        )
+        run = pipeline.create_run(CreateRunRequest(
+            taxonomy_version_id=taxonomy.version_id,
+            config=config,
+        ))
+        tasks = repository.list_tasks(run.run_id)
+        robin_counts = Counter(
+            label for task in tasks for label in task.robin_labels
+        )
+        length_counts = Counter(
+            task.length_target.bucket for task in tasks
+        )
+
+        self.assertEqual(len(tasks), 50)
+        self.assertTrue(config.novelty.enabled)
+        self.assertEqual(config.novelty.mode, "enforce")
+        self.assertTrue(config.verifier.enabled)
+        self.assertTrue(all(
+            robin_counts[label] >= config.robin_selection.minimum_per_label
+            for label in config.robin_labels
+        ))
+        self.assertEqual(
+            length_counts,
+            {"short": 10, "medium": 25, "long": 15},
+        )
+
+    def test_online_10_is_a_separate_valid_utf8_smoke_profile(self) -> None:
+        raw_config = Path("configs/run_config.online-10.json").read_text(
+            encoding="utf-8"
+        )
+        config = RunConfig.parse_obj(json.loads(raw_config))
+
+        self.assertEqual(config.num_samples, 10)
+        self.assertEqual(config.parallel_generation.workers, 2)
+        self.assertEqual(config.parallel_generation.shard_size, 5)
+        self.assertIn("Viết dưới dạng", raw_config)
+
     def test_sample_structure_supports_contract_chat_and_custom(self) -> None:
         contract = RunConfig(
             num_samples=1,
@@ -302,7 +363,7 @@ class DistributionRunConfigTests(unittest.TestCase):
     def test_focus_label_is_anchored_while_robin_labels_vary_reproducibly(self) -> None:
         config = RunConfig(
             num_samples=20,
-            minimum_per_label=3,
+            minimum_per_label=0,
             focus_label="TIME",
             robin_labels=["PERSON", "DATE", "EMAIL", "PHONE"],
             robin_selection={"min_per_sample": 1, "max_per_sample": 2},
@@ -331,6 +392,77 @@ class DistributionRunConfigTests(unittest.TestCase):
         self.assertTrue(all(1 <= len(item[1]) <= 2 for item in decisions[0]))
         self.assertTrue(all(set(item[1]).issubset({"PERSON", "DATE", "EMAIL", "PHONE"}) for item in decisions[0]))
         self.assertGreater(len({tuple(item[1]) for item in decisions[0]}), 1)
+
+    def test_anchor_mode_rejects_legacy_minimum_per_label(self) -> None:
+        with self.assertRaisesRegex(
+            ValidationError,
+            "minimum_per_label is only supported with focus_labels",
+        ):
+            RunConfig(
+                num_samples=20,
+                minimum_per_label=1,
+                focus_label="TIME",
+                robin_labels=["PERSON", "DATE"],
+                robin_selection={
+                    "min_per_sample": 1,
+                    "max_per_sample": 2,
+                },
+                sample_type_distribution={
+                    "positive": 1.0,
+                    "pure_negative": 0.0,
+                    "hard_negative": 0.0,
+                },
+            )
+
+    def test_robin_minimum_coverage_is_balanced_and_reproducible(self) -> None:
+        config = RunConfig(
+            num_samples=12,
+            focus_label="PERSON",
+            robin_labels=["PHONE", "EMAIL", "DATE"],
+            robin_selection={
+                "min_per_sample": 1,
+                "max_per_sample": 2,
+                "minimum_per_label": 5,
+            },
+            difficulty_distribution={
+                "easy": 0.0,
+                "medium": 1.0,
+                "hard": 0.0,
+            },
+            sample_type_distribution={
+                "positive": 1.0,
+                "pure_negative": 0.0,
+                "hard_negative": 0.0,
+            },
+            max_entities={"easy": 3, "medium": 3, "hard": 3},
+            complexity_limits={
+                "positive": 3,
+                "pure_negative": 1,
+                "hard_negative": 4,
+            },
+            random_seed=174,
+        )
+
+        schedules = []
+        for _ in range(2):
+            pipeline, repository, _ = build_pipeline(offline=True)
+            taxonomy = pipeline.taxonomy_service.import_json(
+                Path("pii_taxonomy_rules.json")
+            )
+            run = pipeline.create_run(
+                CreateRunRequest(
+                    taxonomy_version_id=taxonomy.version_id,
+                    config=config,
+                )
+            )
+            schedules.append([
+                task.robin_labels
+                for task in repository.list_tasks(run.run_id)
+            ])
+
+        counts = Counter(label for labels in schedules[0] for label in labels)
+        self.assertEqual(schedules[0], schedules[1])
+        self.assertTrue(all(counts[label] >= 5 for label in config.robin_labels))
 
     def test_legacy_chat_structure_flows_without_hidden_variants(self) -> None:
         config = RunConfig(
@@ -404,7 +536,7 @@ class DistributionRunConfigTests(unittest.TestCase):
         config = RunConfig(
             num_samples=6,
             batch_size=6,
-            minimum_per_label=3,
+            minimum_per_label=0,
             focus_label="PERSON",
             robin_labels=["PHONE", "EMAIL", "DATE"],
             robin_selection={"min_per_sample": 1, "max_per_sample": 2},

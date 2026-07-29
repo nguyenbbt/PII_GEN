@@ -5,7 +5,9 @@ import unittest
 from pii_factory.application.verification import (
     DeterministicIssueRouter,
     VerificationRoutingError,
+    VerifierInfrastructureError,
     VerifierService,
+    _JUDGE_SYSTEM_PROMPT,
 )
 from pii_factory.domain.models import (
     ContextFrame,
@@ -161,6 +163,164 @@ class FakeVerifierClient:
 
 
 class VerifierServiceTests(unittest.TestCase):
+    def test_per_call_repair_limit_does_not_mutate_shared_service(self) -> None:
+        client = FakeVerifierClient([decision("FIXABLE")])
+        service = VerifierService(client, max_repairs_per_candidate=1)
+
+        with self.assertRaises(VerificationRoutingError) as raised:
+            service.verify(
+                candidate=candidate(),
+                task=task(),
+                seed_pack=seed_pack(),
+                taxonomy_context=self.taxonomy_context,
+                revalidate=lambda _: DeterministicValidationResult(valid=True),
+                max_repairs_per_candidate=0,
+            )
+
+        self.assertEqual(raised.exception.status, "REGENERATE")
+        self.assertEqual(service.max_repairs_per_candidate, 1)
+        self.assertEqual(client.repair_messages, [])
+
+    def test_judge_prompt_uses_the_canonical_organization_label(self) -> None:
+        self.assertIn(
+            "PERSON, JOB_TITLE, ORGANIZATION,",
+            _JUDGE_SYSTEM_PROMPT,
+        )
+        self.assertNotIn("PERSON, JOB_TITLE, ORG,", _JUDGE_SYSTEM_PROMPT)
+
+    def test_semantic_annotation_issue_is_never_downgraded_to_fixable(self) -> None:
+        semantic_failure = VerifierDecision(
+            status="REGENERATE",
+            score=40,
+            issues=[VerificationIssue(
+                type="WRONG_ANNOTATION_SEMANTICS",
+                severity="high",
+                field="tagged_text",
+                reason="The tagged value has the wrong taxonomy meaning.",
+                suggested_fix="Generate a new semantically correct candidate.",
+            )],
+            edits=[],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="judge.test",
+        )
+
+        reconciled = VerifierService._reconcile_authoritative_metrics(
+            semantic_failure,
+            metrics={
+                "clean_word_count": 100,
+                "word_range_satisfied": True,
+                "chat_turn_count": None,
+                "chat_turn_range_satisfied": None,
+                "expected_entity_count": 1,
+                "actual_entity_count": 1,
+                "entity_count_satisfied": True,
+            },
+            deterministic_issues=(),
+        )
+
+        self.assertEqual(reconciled.status, "REGENERATE")
+        self.assertEqual(reconciled.issues[0].severity, "high")
+
+    def test_unknown_fixable_issue_fails_closed_to_regeneration(self) -> None:
+        unknown = VerifierDecision(
+            status="FIXABLE",
+            score=70,
+            issues=[VerificationIssue(
+                type="NEW_UNRECOGNIZED_LOCAL_PROBLEM",
+                severity="low",
+                field="tagged_text",
+                reason="The model invented an issue type.",
+                suggested_fix="Attempt a local change.",
+            )],
+            edits=[],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="judge.test",
+        )
+
+        reconciled = VerifierService._reconcile_authoritative_metrics(
+            unknown,
+            metrics={
+                "clean_word_count": 100,
+                "word_range_satisfied": True,
+                "chat_turn_count": None,
+                "chat_turn_range_satisfied": None,
+                "expected_entity_count": 1,
+                "actual_entity_count": 1,
+                "entity_count_satisfied": True,
+            },
+            deterministic_issues=(),
+        )
+
+        self.assertEqual(reconciled.status, "REGENERATE")
+        self.assertEqual(reconciled.edits, [])
+
+    def test_repair_normalization_does_not_tag_unrequested_short_substrings(
+        self,
+    ) -> None:
+        normalized_text, entities = VerifierService._normalize_repair_annotations(
+            tagged_text="An toàn dữ liệu được xác nhận bởi <PERSON>An</PERSON>.",
+        )
+
+        self.assertEqual(
+            normalized_text,
+            "An toàn dữ liệu được xác nhận bởi <PERSON>An</PERSON>.",
+        )
+        self.assertEqual(
+            entities,
+            [GeneratedEntity(label="PERSON", value="An")],
+        )
+
+    def test_missing_exact_repair_target_regenerates_with_paid_trace(self) -> None:
+        repair = RepairResult(
+            tagged_text=candidate().tagged_text,
+            entities=candidate().entities,
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        fixable = VerifierDecision(
+            status="FIXABLE",
+            score=80,
+            issues=[issue()],
+            edits=[VerificationEdit(
+                action="add_tag",
+                label="DATE",
+                value="15/05/2024",
+                occurrence=1,
+                reason="Tag the explicit appointment date.",
+            )],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="judge.test",
+        )
+        client = FakeVerifierClient([fixable], repair_result=repair)
+
+        with self.assertRaises(VerificationRoutingError) as raised:
+            VerifierService(client).verify(
+                candidate=candidate(),
+                task=task(),
+                seed_pack=seed_pack(),
+                taxonomy_context=self.taxonomy_context,
+                revalidate=lambda _: DeterministicValidationResult(valid=True),
+            )
+
+        self.assertEqual(raised.exception.status, "REGENERATE")
+        self.assertEqual(
+            raised.exception.issues[0].type,
+            "REPAIR_EDIT_TARGET_INVALID",
+        )
+        self.assertIsNotNone(raised.exception.trace)
+        self.assertEqual(
+            raised.exception.trace.repair.token_usage.total_tokens,
+            15,
+        )
+
     def setUp(self) -> None:
         self.taxonomy_context = GenerationTaxonomyContext(
             taxonomy_version_id="taxonomy-v1",
@@ -422,9 +582,11 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertEqual(len(client.repair_messages), 1)
         diagnostic_log = "\n".join(captured.output)
         self.assertIn("verifier judge feedback", diagnostic_log)
-        self.assertIn("verifier original tagged_text:", diagnostic_log)
-        self.assertIn("verifier fixed tagged_text:", diagnostic_log)
-        self.assertIn(repaired.tagged_text, diagnostic_log)
+        self.assertNotIn(issue().reason, diagnostic_log)
+        self.assertNotIn(issue().suggested_fix, diagnostic_log)
+        self.assertNotIn("verifier original tagged_text:", diagnostic_log)
+        self.assertNotIn("verifier fixed tagged_text:", diagnostic_log)
+        self.assertNotIn(repaired.tagged_text, diagnostic_log)
 
     def test_missing_context_entity_is_fixed_and_added_to_metadata(self) -> None:
         original = candidate().copy(update={
@@ -558,7 +720,7 @@ class VerifierServiceTests(unittest.TestCase):
 
         verified, trace = VerifierService(
             client,
-            max_repairs_per_candidate=2,
+            max_repairs_per_candidate=1,
         ).verify(
             candidate=original,
             task=task().copy(update={
@@ -571,6 +733,7 @@ class VerifierServiceTests(unittest.TestCase):
             seed_pack=seed_pack(),
             taxonomy_context=self.taxonomy_context,
             revalidate=lambda _: DeterministicValidationResult(valid=True),
+            max_repairs_per_candidate=2,
         )
 
         self.assertEqual(trace.outcome, "FIXED")
@@ -583,6 +746,169 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertEqual(trace.repair.token_usage.total_tokens, 30)
         self.assertEqual(trace.final_judge.token_usage.total_tokens, 30)
         self.assertEqual(trace.repair.latency_ms, 5)
+
+    def test_second_repair_applies_rejudge_edits_without_logging_content(
+        self,
+    ) -> None:
+        person = seed_pack().positive_entities[0].value
+        original = candidate().copy(update={
+            "tagged_text": (
+                f"<PERSON>{person}</PERSON> met technician at the office."
+            ),
+        })
+        first_repair = RepairResult(
+            tagged_text=original.tagged_text,
+            entities=original.entities,
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        second_repair = RepairResult(
+            tagged_text=original.tagged_text,
+            entities=original.entities,
+            token_usage=token_usage(),
+            latency_ms=3,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+        missing_job_title = VerifierDecision(
+            status="FIXABLE",
+            score=80,
+            issues=[VerificationIssue(
+                type="MISSING_ANNOTATION",
+                severity="low",
+                field="tagged_text",
+                reason="The job title is present but untagged.",
+                suggested_fix="Tag the exact requested occurrence.",
+            )],
+            edits=[VerificationEdit(
+                action="add_tag",
+                label="JOB_TITLE",
+                value="technician",
+                occurrence=1,
+                reason="Tag the job title occurrence.",
+            )],
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="judge.test",
+        )
+        client = FakeVerifierClient(
+            [decision("FIXABLE"), missing_job_title, decision("PASS")],
+            repair_result=[first_repair, second_repair],
+        )
+
+        with self.assertLogs(
+            "pii_factory.application.verification",
+            level="INFO",
+        ) as captured:
+            verified, trace = VerifierService(client).verify(
+                candidate=original,
+                task=task().copy(update={
+                    "annotation_labels": ["PERSON", "JOB_TITLE"],
+                }),
+                seed_pack=seed_pack(),
+                taxonomy_context=self.taxonomy_context,
+                revalidate=lambda _: DeterministicValidationResult(valid=True),
+                max_repairs_per_candidate=2,
+            )
+
+        self.assertEqual(trace.outcome, "FIXED")
+        self.assertIn(
+            "<JOB_TITLE>technician</JOB_TITLE>",
+            verified.tagged_text,
+        )
+        self.assertNotIn(second_repair.tagged_text, "\n".join(captured.output))
+
+    def test_second_repair_failure_carries_all_completed_usage(self) -> None:
+        first_repair = RepairResult(
+            tagged_text=candidate().tagged_text,
+            entities=candidate().entities,
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+
+        class FailSecondRepairClient(FakeVerifierClient):
+            def repair(self, messages):
+                if self.repair_messages:
+                    raise VerifierInfrastructureError(
+                        "second repair failed",
+                        stage="repair",
+                        token_usage=token_usage(),
+                    )
+                return super().repair(messages)
+
+        client = FailSecondRepairClient(
+            [decision("FIXABLE"), decision("FIXABLE")],
+            repair_result=first_repair,
+        )
+
+        with self.assertRaises(VerifierInfrastructureError) as raised:
+            VerifierService(client).verify(
+                candidate=candidate(),
+                task=task(),
+                seed_pack=seed_pack(),
+                taxonomy_context=self.taxonomy_context,
+                revalidate=lambda _: DeterministicValidationResult(valid=True),
+                max_repairs_per_candidate=2,
+            )
+
+        self.assertEqual(raised.exception.stage, "repair")
+        self.assertEqual(
+            [stage for stage, _ in raised.exception.completed_usage],
+            ["verifier_judge", "verifier_repair", "verifier_rejudge"],
+        )
+        self.assertEqual(raised.exception.token_usage.total_tokens, 15)
+
+    def test_second_rejudge_failure_carries_both_repair_rounds(self) -> None:
+        repair = RepairResult(
+            tagged_text=candidate().tagged_text,
+            entities=candidate().entities,
+            token_usage=token_usage(),
+            latency_ms=2,
+            model="offline-verifier",
+            prompt_version="repair.test",
+        )
+
+        class FailSecondRejudgeClient(FakeVerifierClient):
+            def judge(self, messages):
+                if len(self.judge_messages) == 2:
+                    raise VerifierInfrastructureError(
+                        "second rejudge failed",
+                        stage="judge",
+                        token_usage=token_usage(),
+                    )
+                return super().judge(messages)
+
+        client = FailSecondRejudgeClient(
+            [decision("FIXABLE"), decision("FIXABLE")],
+            repair_result=[repair, repair],
+        )
+
+        with self.assertRaises(VerifierInfrastructureError) as raised:
+            VerifierService(client).verify(
+                candidate=candidate(),
+                task=task(),
+                seed_pack=seed_pack(),
+                taxonomy_context=self.taxonomy_context,
+                revalidate=lambda _: DeterministicValidationResult(valid=True),
+                max_repairs_per_candidate=2,
+            )
+
+        self.assertEqual(raised.exception.stage, "rejudge")
+        self.assertEqual(
+            [stage for stage, _ in raised.exception.completed_usage],
+            [
+                "verifier_judge",
+                "verifier_repair",
+                "verifier_rejudge",
+                "verifier_repair",
+            ],
+        )
+        self.assertEqual(raised.exception.token_usage.total_tokens, 15)
 
     def test_repair_restores_every_repeated_seed_occurrence(self) -> None:
         person = seed_pack().positive_entities[0].value
@@ -612,7 +938,40 @@ class VerifierServiceTests(unittest.TestCase):
             prompt_version="repair.test",
         )
         client = FakeVerifierClient(
-            [decision("FIXABLE"), decision("PASS")],
+            [
+                VerifierDecision(
+                    status="FIXABLE",
+                    score=85,
+                    issues=[VerificationIssue(
+                        type="MISSING_ANNOTATION",
+                        severity="low",
+                        field="tagged_text",
+                        reason="Repeated PERSON occurrences lost their tags.",
+                        suggested_fix="Restore the missing PERSON tags.",
+                    )],
+                    edits=[
+                        VerificationEdit(
+                            action="add_tag",
+                            label="PERSON",
+                            value=person,
+                            occurrence=2,
+                            reason="The second occurrence is the same person.",
+                        ),
+                        VerificationEdit(
+                            action="add_tag",
+                            label="PERSON",
+                            value=person,
+                            occurrence=3,
+                            reason="The third occurrence is the same person.",
+                        ),
+                    ],
+                    token_usage=token_usage(),
+                    latency_ms=2,
+                    model="offline-verifier",
+                    prompt_version="judge.test",
+                ),
+                decision("PASS"),
+            ],
             repair_result=repaired,
         )
 

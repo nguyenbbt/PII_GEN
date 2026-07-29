@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import List, Optional, Protocol
+from dataclasses import dataclass
+from typing import Iterator, List, Optional, Protocol
 
 from .domain.models import (
     DataGenerationResult,
@@ -40,8 +41,49 @@ class EventBus(Protocol):
     def list_events(self) -> List[EventEnvelope]: ...
 
 
+@dataclass(frozen=True)
+class CompletionResult:
+    tagged_text: str
+    entities: List[dict[str, str]]
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    model: str | None = None
+    latency_ms: int | None = None
+
+    @classmethod
+    def coerce(
+        cls,
+        value: "CompletionResult | tuple[str, List[dict[str, str]], int, int, int]",
+    ) -> "CompletionResult":
+        if isinstance(value, cls):
+            return value
+        return cls(*value)
+
+    def __iter__(self) -> Iterator[object]:
+        """Keep positional unpacking compatible while callers migrate."""
+        yield self.tagged_text
+        yield self.entities
+        yield self.input_tokens
+        yield self.output_tokens
+        yield self.total_tokens
+
+
+class CompletionClientError(RuntimeError):
+    """Generator content failure that retains usage from paid HTTP responses."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        raw_usage: tuple[int, int, int],
+    ) -> None:
+        self.raw_usage = raw_usage
+        super().__init__(message)
+
+
 class CompletionClient(Protocol):
-    def generate(self, messages: List[dict[str, str]]) -> tuple[str, List[dict[str, str]], int, int, int]: ...
+    def generate(self, messages: List[dict[str, str]]) -> CompletionResult: ...
 
 
 class VerifierClient(Protocol):

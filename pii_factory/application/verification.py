@@ -7,6 +7,7 @@ import re
 from typing import Callable, Sequence
 
 from data_generator_worker.validation import (
+    TaggedSpan,
     find_template_artifacts,
     seed_realization_status,
     tagged_text_to_clean_and_spans,
@@ -20,6 +21,7 @@ from ..domain.models import (
     GenerationTaxonomyContext,
     RepairResult,
     SeedPack,
+    TokenUsage,
     VerificationEdit,
     VerificationIssue,
     VerificationTrace,
@@ -57,22 +59,17 @@ Judge only:
 1. Each tagged value has the taxonomy meaning and boundary required by its role.
    ADDRESS is street/premise detail; LOCATION is administrative geography;
    ZIP_CODE is separate.
-   For positive samples, scan the entire text for PII occurrences covered by any
-   taxonomy_context label, including contextual details invented by the generator.
-   Never PASS while a confidently classifiable PII occurrence remains untagged or is
-   absent from entities. Report each such omission as low-severity MISSING_ANNOTATION
-   with status FIXABLE; repair must add the exact boundary tag and matching metadata.
-   Multiple missing annotations remain FIXABLE. Do not use this rule to turn
-   pure-negative or decoy-only hard-negative text into a positive sample; unexpected
-   real PII in those sample types is a content-level REGENERATE issue.
-   When the same entity value appears more than once, tag every occurrence and require
-   one entities entry per tagged span. Repeated identical label/value metadata is valid
-   occurrence-level NER annotation, not a duplicate-entity error.
-   Perform a deliberate second pass over the clean text for PERSON, JOB_TITLE, ORG,
-   ADDRESS, LOCATION, PLATE, LICENSE, TICKET_ID, DATE, and TIME whenever those labels
-   are available. Use nearby nouns and verbs to classify a span; for example, a value
-   introduced by "biển số" is PLATE and a role such as "kỹ thuật viên hiện trường" is
-   JOB_TITLE. A confident omission is always local MISSING_ANNOTATION/FIXABLE.
+   In positive samples, scan the entire text for PII covered by taxonomy_context.
+   Never PASS with a confident untagged occurrence or missing metadata; report it
+   as low-severity MISSING_ANNOTATION/FIXABLE with an exact add-tag edit. Multiple
+   omissions remain FIXABLE. In pure-negative or decoy-only samples, unexpected
+   PII is a content-level REGENERATE issue.
+   Tag every repeated occurrence and keep one metadata entry per span. Repeated
+   identical label/value metadata is valid occurrence-level NER annotation.
+   Second-pass PERSON, JOB_TITLE, ORGANIZATION, ADDRESS, LOCATION, PLATE, LICENSE,
+   TICKET_ID, DATE, and TIME when available. Use nearby nouns and verbs: a value
+   after "biển số" is PLATE; a role such as "kỹ thuật viên hiện trường" is
+   JOB_TITLE. A confident omission is local MISSING_ANNOTATION/FIXABLE.
    TICKET_ID is only a support request, service incident, or customer-care case
    identifier. An order number, travel/reservation booking code, invoice number,
    document reference, contract reference, or flight number is not TICKET_ID and
@@ -93,6 +90,10 @@ Judge only:
 Do not rewrite. Return compact JSON with exactly status, score, issues, edits.
 status is PASS, FIXABLE, REGENERATE, or REJECTED; score is 0..100.
 Each issue has type, severity, field, reason, suggested_fix. Return at most 10 issues.
+Use canonical local issue types MISSING_ANNOTATION, BOUNDARY, TAG_MISMATCH,
+ENTITY_METADATA, TEMPLATE_ARTIFACT, or LOCAL_WORDING. Use content issue types
+WRONG_SEMANTICS, UNNATURAL_TEXT, INSUFFICIENT_CONTEXT, DECOY_AMBIGUOUS, or
+FEWSHOT_IMITATION. Use CREDENTIAL_RISK or REAL_PII_RISK only for critical rejection.
 suggested_fix must always be a non-empty string, never null. For REGENERATE, describe
 how the next generation should avoid the failure.
 Severity must be exactly low, medium, high, or critical; never emit minor, major,
@@ -276,13 +277,38 @@ class VerifierInfrastructureError(RuntimeError):
         *,
         stage: str | None = None,
         token_usage=None,
+        raw_usage: tuple[int, int, int] | None = None,
+        completed_usage: tuple[tuple[str, TokenUsage], ...] = (),
     ) -> None:
         self.stage = stage
         self.token_usage = token_usage
+        self.raw_usage = raw_usage
+        self.completed_usage = completed_usage
         super().__init__(message)
 
 
 class VerifierService:
+    _LOCAL_REPAIRABLE_ISSUE_TYPES = frozenset({
+        "boundary",
+        "entity_boundary_whitespace",
+        "entity_metadata",
+        "extra_entity_metadata",
+        "local_wording",
+        "malformed_tag",
+        "missing_annotation",
+        "missing_annotation_candidate",
+        "missing_entity_metadata",
+        "missing_tag",
+        "positive_seed_annotation_mismatch",
+        "span_boundary",
+        "sync_entities",
+        "tag",
+        "tag_mismatch",
+        "tagged_punctuation",
+        "template_artifact",
+        "unresolved_field",
+    })
+
     def __init__(self, client: VerifierClient, max_repairs_per_candidate: int = 1) -> None:
         self.client = client
         self.max_repairs_per_candidate = max_repairs_per_candidate
@@ -296,7 +322,13 @@ class VerifierService:
         taxonomy_context: GenerationTaxonomyContext,
         revalidate: Callable[[GenerationCandidate], DeterministicValidationResult],
         deterministic_issues: Sequence[VerificationIssue] = (),
+        max_repairs_per_candidate: int | None = None,
     ) -> tuple[GenerationCandidate, VerificationTrace]:
+        repair_limit = (
+            self.max_repairs_per_candidate
+            if max_repairs_per_candidate is None
+            else max_repairs_per_candidate
+        )
         metrics = self._quality_metrics(candidate, task, seed_pack)
         logger.info(
             "[sample %s] verifier judge request started",
@@ -333,7 +365,7 @@ class VerifierService:
                 VerificationTrace(initial_judge=initial, outcome=initial.status),
                 candidate,
             )
-        if self.max_repairs_per_candidate < 1:
+        if repair_limit < 1:
             raise VerificationRoutingError(
                 "REGENERATE",
                 initial.issues,
@@ -341,313 +373,288 @@ class VerifierService:
                 candidate,
             )
 
-        logger.info(
-            "[sample %s] verifier repair started",
-            task.slot_no or task.sequence_no,
-        )
-        logger.info(
-            "[sample %s] verifier original tagged_text:\n%s",
-            task.slot_no or task.sequence_no,
-            candidate.tagged_text,
-        )
-        repair = self.client.repair(
-            self._repair_messages(
-                candidate=candidate,
-                task=task,
-                seed_pack=seed_pack,
-                taxonomy_context=taxonomy_context,
-                issues=initial.issues,
-                edits=initial.edits,
-            )
-        )
-        logger.info(
-            "[sample %s] verifier LLM repair tagged_text:\n%s",
-            task.slot_no or task.sequence_no,
-            repair.tagged_text,
-        )
-        normalized_text, normalized_entities = self._normalize_repair_annotations(
-            tagged_text=repair.tagged_text,
-            seed_pack=seed_pack,
-            original=candidate,
-        )
-        if normalized_text != repair.tagged_text or normalized_entities != repair.entities:
-            logger.info(
-                "[sample %s] verifier code-normalized tagged_text:\n%s",
-                task.slot_no or task.sequence_no,
-                normalized_text,
-            )
-        repair = repair.copy(update={
-            "tagged_text": normalized_text,
-            "entities": normalized_entities,
-        })
-        logger.info(
-            "[sample %s] verifier repair finished; deterministic recheck started",
-            task.slot_no or task.sequence_no,
-        )
-        logger.info(
-            "[sample %s] verifier fixed tagged_text:\n%s",
-            task.slot_no or task.sequence_no,
-            repair.tagged_text,
-        )
-        repaired_candidate = candidate.copy(
-            update={
-                "tagged_text": repair.tagged_text,
-                "entities": repair.entities,
-                "output_hash": hashlib.sha256(
-                    repair.tagged_text.encode("utf-8")
-                ).hexdigest(),
-            }
-        )
-        preservation_issues = self._preservation_issues(
-            original=candidate,
-            repaired=repaired_candidate,
-            seed_pack=seed_pack,
-        )
-        if preservation_issues:
-            raise VerificationRoutingError(
-                "REGENERATE",
-                preservation_issues,
-                VerificationTrace(
-                    initial_judge=initial,
-                    repair=repair,
-                    outcome="REGENERATE",
-                ),
-                candidate,
-            )
+        current_candidate = candidate
+        current_decision = initial
+        repairs: list[RepairResult] = []
+        rejudges: list[VerifierDecision] = []
+        completed_usage: list[tuple[str, TokenUsage]] = [
+            ("verifier_judge", initial.token_usage)
+        ]
 
-        validation = revalidate(repaired_candidate)
-        if not validation.valid:
-            issues = [
-                VerificationIssue(
-                    type=item.type,
-                    severity="high",
-                    field=item.scope,
-                    reason=item.reason,
-                    suggested_fix="Regenerate the candidate using deterministic validator feedback.",
-                )
-                for item in validation.issues
-            ] or [
-                VerificationIssue(
-                    type="DETERMINISTIC_RECHECK_FAILED",
-                    severity="high",
-                    field="candidate",
-                    reason="The repaired candidate failed deterministic re-check.",
-                    suggested_fix="Regenerate the candidate.",
-                )
-            ]
-            raise VerificationRoutingError(
-                "REGENERATE",
-                issues,
-                VerificationTrace(
-                    initial_judge=initial,
-                    repair=repair,
-                    outcome="REGENERATE",
-                ),
-                repaired_candidate,
+        for repair_round in range(1, repair_limit + 1):
+            logger.info(
+                "[sample %s] verifier repair round=%s/%s started",
+                task.slot_no or task.sequence_no,
+                repair_round,
+                repair_limit,
             )
+            try:
+                repair = self.client.repair(
+                    self._repair_messages(
+                        candidate=current_candidate,
+                        task=task,
+                        seed_pack=seed_pack,
+                        taxonomy_context=taxonomy_context,
+                        issues=current_decision.issues,
+                        edits=current_decision.edits,
+                    )
+                )
+            except VerifierInfrastructureError as exc:
+                raise self._infrastructure_error_with_usage(
+                    exc,
+                    stage="repair",
+                    completed_usage=completed_usage,
+                ) from exc
+            repairs.append(repair)
+            completed_usage.append(("verifier_repair", repair.token_usage))
 
-        logger.info(
-            "[sample %s] verifier rejudge started",
-            task.slot_no or task.sequence_no,
-        )
-        final = self._reconcile_authoritative_metrics(
-            self.client.judge(
-                self._judge_messages(
-                    candidate=repaired_candidate,
-                    task=task,
-                    seed_pack=seed_pack,
-                    taxonomy_context=taxonomy_context,
-                    deterministic_issues=(),
+            try:
+                normalized_text, normalized_entities = (
+                    self._normalize_repair_annotations(
+                        tagged_text=repair.tagged_text,
+                        edits=current_decision.edits,
+                        seed_pack=seed_pack,
+                        original=current_candidate,
+                    )
                 )
-            ),
-            metrics=self._quality_metrics(
-                repaired_candidate,
-                task,
-                seed_pack,
-            ),
-            deterministic_issues=(),
-        )
-        logger.info(
-            "[sample %s] verifier rejudge status=%s score=%s issues=%s",
-            task.slot_no or task.sequence_no,
-            final.status,
-            final.score,
-            len(final.issues),
-        )
-        self._log_issue_feedback(task, "rejudge", final.issues)
-        self._log_edit_feedback(task, "rejudge", final.edits)
-        if (
-            final.status == "FIXABLE"
-            and self.max_repairs_per_candidate >= 2
-        ):
-            logger.info(
-                "[sample %s] verifier second local repair started",
-                task.slot_no or task.sequence_no,
-            )
-            second_repair = self.client.repair(
-                self._repair_messages(
-                    candidate=repaired_candidate,
-                    task=task,
-                    seed_pack=seed_pack,
-                    taxonomy_context=taxonomy_context,
-                    issues=final.issues,
-                    edits=final.edits,
-                )
-            )
-            logger.info(
-                "[sample %s] verifier second LLM repair tagged_text:\n%s",
-                task.slot_no or task.sequence_no,
-                second_repair.tagged_text,
-            )
-            second_text, second_entities = self._normalize_repair_annotations(
-                tagged_text=second_repair.tagged_text,
-                seed_pack=seed_pack,
-                original=repaired_candidate,
-            )
-            second_repair = second_repair.copy(update={
-                "tagged_text": second_text,
-                "entities": second_entities,
-            })
-            combined_repair = second_repair.copy(update={
-                "token_usage": type(second_repair.token_usage).combine([
-                    repair.token_usage,
-                    second_repair.token_usage,
-                ]),
-                "latency_ms": repair.latency_ms + second_repair.latency_ms,
-            })
-            second_candidate = repaired_candidate.copy(update={
-                "tagged_text": second_text,
-                "entities": second_entities,
-                "output_hash": hashlib.sha256(
-                    second_text.encode("utf-8")
-                ).hexdigest(),
-            })
-            logger.info(
-                "[sample %s] verifier second fixed tagged_text:\n%s",
-                task.slot_no or task.sequence_no,
-                second_candidate.tagged_text,
-            )
-            second_preservation_issues = self._preservation_issues(
-                original=repaired_candidate,
-                repaired=second_candidate,
-                seed_pack=seed_pack,
-            )
-            if second_preservation_issues:
+            except ValueError as exc:
                 raise VerificationRoutingError(
                     "REGENERATE",
-                    second_preservation_issues,
-                    VerificationTrace(
-                        initial_judge=initial,
-                        repair=combined_repair,
-                        final_judge=final,
+                    [self._invalid_edit_issue()],
+                    self._verification_trace(
+                        initial=initial,
+                        repairs=repairs,
+                        rejudges=rejudges,
+                        outcome="REGENERATE",
+                    ),
+                    current_candidate,
+                ) from exc
+
+            if (
+                normalized_text != repair.tagged_text
+                or normalized_entities != repair.entities
+            ):
+                logger.info(
+                    "[sample %s] verifier annotations normalized round=%s",
+                    task.slot_no or task.sequence_no,
+                    repair_round,
+                )
+            repair = repair.copy(update={
+                "tagged_text": normalized_text,
+                "entities": normalized_entities,
+            })
+            repairs[-1] = repair
+            repaired_candidate = current_candidate.copy(update={
+                "tagged_text": normalized_text,
+                "entities": normalized_entities,
+                "output_hash": hashlib.sha256(
+                    normalized_text.encode("utf-8")
+                ).hexdigest(),
+            })
+            logger.info(
+                "[sample %s] verifier repair round=%s finished; "
+                "deterministic recheck started",
+                task.slot_no or task.sequence_no,
+                repair_round,
+            )
+
+            preservation_issues = self._preservation_issues(
+                original=current_candidate,
+                repaired=repaired_candidate,
+                seed_pack=seed_pack,
+            )
+            if preservation_issues:
+                raise VerificationRoutingError(
+                    "REGENERATE",
+                    preservation_issues,
+                    self._verification_trace(
+                        initial=initial,
+                        repairs=repairs,
+                        rejudges=rejudges,
+                        outcome="REGENERATE",
+                    ),
+                    current_candidate,
+                )
+
+            validation = revalidate(repaired_candidate)
+            if not validation.valid:
+                raise VerificationRoutingError(
+                    "REGENERATE",
+                    self._deterministic_recheck_issues(validation),
+                    self._verification_trace(
+                        initial=initial,
+                        repairs=repairs,
+                        rejudges=rejudges,
                         outcome="REGENERATE",
                     ),
                     repaired_candidate,
                 )
-            second_validation = revalidate(second_candidate)
-            if not second_validation.valid:
-                second_issues = [
-                    VerificationIssue(
-                        type=item.type,
-                        severity="high",
-                        field=item.scope,
-                        reason=item.reason,
-                        suggested_fix=(
-                            "Regenerate the candidate using deterministic "
-                            "validator feedback."
-                        ),
-                    )
-                    for item in second_validation.issues
-                ] or [
-                    VerificationIssue(
-                        type="DETERMINISTIC_RECHECK_FAILED",
-                        severity="high",
-                        field="candidate",
-                        reason=(
-                            "The second repaired candidate failed "
-                            "deterministic re-check."
-                        ),
-                        suggested_fix="Regenerate the candidate.",
-                    )
-                ]
-                raise VerificationRoutingError(
-                    "REGENERATE",
-                    second_issues,
-                    VerificationTrace(
-                        initial_judge=initial,
-                        repair=combined_repair,
-                        final_judge=final,
-                        outcome="REGENERATE",
-                    ),
-                    second_candidate,
-                )
 
             logger.info(
-                "[sample %s] verifier second rejudge started",
+                "[sample %s] verifier rejudge round=%s started",
                 task.slot_no or task.sequence_no,
+                repair_round,
             )
-            second_final = self._reconcile_authoritative_metrics(
-                self.client.judge(
-                    self._judge_messages(
-                        candidate=second_candidate,
-                        task=task,
-                        seed_pack=seed_pack,
-                        taxonomy_context=taxonomy_context,
-                        deterministic_issues=(),
-                    )
-                ),
-                metrics=self._quality_metrics(
-                    second_candidate,
-                    task,
-                    seed_pack,
-                ),
-                deterministic_issues=(),
-            )
+            try:
+                final = self._reconcile_authoritative_metrics(
+                    self.client.judge(
+                        self._judge_messages(
+                            candidate=repaired_candidate,
+                            task=task,
+                            seed_pack=seed_pack,
+                            taxonomy_context=taxonomy_context,
+                            deterministic_issues=(),
+                        )
+                    ),
+                    metrics=self._quality_metrics(
+                        repaired_candidate,
+                        task,
+                        seed_pack,
+                    ),
+                    deterministic_issues=(),
+                )
+            except VerifierInfrastructureError as exc:
+                raise self._infrastructure_error_with_usage(
+                    exc,
+                    stage="rejudge",
+                    completed_usage=completed_usage,
+                ) from exc
+            rejudges.append(final)
+            completed_usage.append(("verifier_rejudge", final.token_usage))
             logger.info(
-                "[sample %s] verifier second rejudge status=%s "
+                "[sample %s] verifier rejudge round=%s status=%s "
                 "score=%s issues=%s",
                 task.slot_no or task.sequence_no,
-                second_final.status,
-                second_final.score,
-                len(second_final.issues),
+                repair_round,
+                final.status,
+                final.score,
+                len(final.issues),
             )
-            self._log_issue_feedback(
-                task,
-                "second rejudge",
-                second_final.issues,
+            stage = (
+                "rejudge"
+                if repair_round == 1
+                else f"rejudge round {repair_round}"
             )
-            self._log_edit_feedback(
-                task,
-                "second rejudge",
-                second_final.edits,
+            self._log_issue_feedback(task, stage, final.issues)
+            self._log_edit_feedback(task, stage, final.edits)
+
+            if final.status == "PASS":
+                return repaired_candidate, self._verification_trace(
+                    initial=initial,
+                    repairs=repairs,
+                    rejudges=rejudges,
+                    outcome="FIXED",
+                )
+
+            status = (
+                "REJECTED" if final.status == "REJECTED" else "REGENERATE"
             )
-            final = second_final.copy(update={
-                "token_usage": type(second_final.token_usage).combine([
-                    final.token_usage,
-                    second_final.token_usage,
-                ]),
-                "latency_ms": final.latency_ms + second_final.latency_ms,
-            })
-            repair = combined_repair
-            repaired_candidate = second_candidate
-        if final.status != "PASS":
-            status = "REJECTED" if final.status == "REJECTED" else "REGENERATE"
-            raise VerificationRoutingError(
-                status,
-                final.issues,
-                VerificationTrace(
-                    initial_judge=initial,
-                    repair=repair,
-                    final_judge=final,
-                    outcome=status,
+            if final.status != "FIXABLE" or repair_round >= repair_limit:
+                raise VerificationRoutingError(
+                    status,
+                    final.issues,
+                    self._verification_trace(
+                        initial=initial,
+                        repairs=repairs,
+                        rejudges=rejudges,
+                        outcome=status,
+                    ),
+                    repaired_candidate,
+                )
+
+            current_candidate = repaired_candidate
+            current_decision = final
+
+        raise RuntimeError("verifier repair loop ended without a routing decision")
+
+    @staticmethod
+    def _infrastructure_error_with_usage(
+        exc: VerifierInfrastructureError,
+        *,
+        stage: str,
+        completed_usage: Sequence[tuple[str, TokenUsage]],
+    ) -> VerifierInfrastructureError:
+        return VerifierInfrastructureError(
+            str(exc),
+            stage=stage,
+            token_usage=exc.token_usage,
+            raw_usage=exc.raw_usage,
+            completed_usage=(
+                *completed_usage,
+                *exc.completed_usage,
+            ),
+        )
+
+    @staticmethod
+    def _invalid_edit_issue() -> VerificationIssue:
+        return VerificationIssue(
+            type="REPAIR_EDIT_TARGET_INVALID",
+            severity="high",
+            field="edits",
+            reason="Repair could not apply an exact requested edit.",
+            suggested_fix=(
+                "Regenerate the candidate instead of guessing an ambiguous "
+                "or missing edit target."
+            ),
+        )
+
+    @staticmethod
+    def _deterministic_recheck_issues(
+        validation: DeterministicValidationResult,
+    ) -> list[VerificationIssue]:
+        return [
+            VerificationIssue(
+                type=item.type,
+                severity="high",
+                field=item.scope,
+                reason=item.reason,
+                suggested_fix=(
+                    "Regenerate the candidate using deterministic validator "
+                    "feedback."
                 ),
-                repaired_candidate,
             )
-        return repaired_candidate, VerificationTrace(
+            for item in validation.issues
+        ] or [
+            VerificationIssue(
+                type="DETERMINISTIC_RECHECK_FAILED",
+                severity="high",
+                field="candidate",
+                reason="The repaired candidate failed deterministic re-check.",
+                suggested_fix="Regenerate the candidate.",
+            )
+        ]
+
+    @staticmethod
+    def _verification_trace(
+        *,
+        initial: VerifierDecision,
+        repairs: Sequence[RepairResult],
+        rejudges: Sequence[VerifierDecision],
+        outcome: str,
+    ) -> VerificationTrace:
+        combined_repair = None
+        if repairs:
+            latest_repair = repairs[-1]
+            combined_repair = latest_repair.copy(update={
+                "token_usage": TokenUsage.combine(
+                    [item.token_usage for item in repairs]
+                ),
+                "latency_ms": sum(item.latency_ms for item in repairs),
+            })
+        combined_rejudge = None
+        if rejudges:
+            latest_rejudge = rejudges[-1]
+            combined_rejudge = latest_rejudge.copy(update={
+                "token_usage": TokenUsage.combine(
+                    [item.token_usage for item in rejudges]
+                ),
+                "latency_ms": sum(item.latency_ms for item in rejudges),
+            })
+        return VerificationTrace(
             initial_judge=initial,
-            repair=repair,
-            final_judge=final,
-            outcome="FIXED",
+            repair=combined_repair,
+            final_judge=combined_rejudge,
+            outcome=outcome,
         )
 
     @staticmethod
@@ -659,7 +666,7 @@ class VerifierService:
         for index, issue in enumerate(issues, start=1):
             logger.warning(
                 "[sample %s] verifier %s feedback %s/%s "
-                "type=%s severity=%s field=%s reason=%s suggested_fix=%s",
+                "type=%s severity=%s field=%s",
                 task.slot_no or task.sequence_no,
                 stage,
                 index,
@@ -667,8 +674,6 @@ class VerifierService:
                 issue.type,
                 issue.severity,
                 issue.field,
-                issue.reason,
-                issue.suggested_fix,
             )
 
     @staticmethod
@@ -679,13 +684,12 @@ class VerifierService:
     ) -> None:
         for index, edit in enumerate(edits, start=1):
             logger.info(
-                "[sample %s] verifier %s edit %s/%s action=%s reason=%s",
+                "[sample %s] verifier %s edit %s/%s action=%s",
                 task.slot_no or task.sequence_no,
                 stage,
                 index,
                 len(edits),
                 edit.action,
-                edit.reason,
             )
 
     @staticmethod
@@ -862,6 +866,16 @@ class VerifierService:
     ) -> VerifierDecision:
         if decision.status == "REJECTED":
             return decision
+        non_local_issues = [
+            issue
+            for issue in decision.issues
+            if not VerifierService._is_local_annotation_issue(issue)
+        ]
+        if decision.status == "FIXABLE" and non_local_issues:
+            return decision.copy(update={
+                "status": "REGENERATE",
+                "edits": [],
+            })
 
         if deterministic_issues:
             deterministic_types = {
@@ -876,7 +890,7 @@ class VerifierService:
                     and not VerifierService._is_local_annotation_issue(issue)
                 )
             ]
-            if decision.status == "REGENERATE" and content_issues:
+            if content_issues:
                 return decision
             combined: list[VerificationIssue] = []
             seen: set[tuple[str, str]] = set()
@@ -929,27 +943,10 @@ class VerifierService:
 
     @staticmethod
     def _is_local_annotation_issue(issue: VerificationIssue) -> bool:
-        issue_type = issue.type.strip().casefold()
-        if any(marker in issue_type for marker in (
-            "annotation",
-            "boundary",
-            "metadata",
-            "span",
-            "duplicate_entity",
-            "missing_entity",
-            "untagged_pii",
-            "template",
-            "unresolved_field",
-        )):
-            return True
-        return issue_type in {
-            "tag",
-            "tag_mismatch",
-            "missing_tag",
-            "malformed_tag",
-            "duplicate_tag",
-            "tagged_punctuation",
-        }
+        return (
+            issue.type.strip().casefold()
+            in VerifierService._LOCAL_REPAIRABLE_ISSUE_TYPES
+        )
 
     @staticmethod
     def _repair_messages(
@@ -981,20 +978,68 @@ class VerifierService:
     def _normalize_repair_annotations(
         *,
         tagged_text: str,
-        seed_pack: SeedPack,
-        original: GenerationCandidate,
+        edits: Sequence[VerificationEdit] = (),
+        seed_pack: SeedPack | None = None,
+        original: GenerationCandidate | None = None,
     ) -> tuple[str, list[GeneratedEntity]]:
-        """Restore exact repeated annotations and rebuild occurrence metadata."""
+        """Apply requested edits, restore repeated spans, and rebuild metadata."""
+        clean_text, spans = tagged_text_to_clean_and_spans(tagged_text)
+        planned_spans = list(spans)
+        for edit in edits:
+            if edit.action != "add_tag":
+                continue
+            if not edit.label or not edit.value or edit.occurrence is None:
+                raise ValueError("add_tag edit requires label, value, and occurrence")
+            occurrences = list(re.finditer(re.escape(edit.value), clean_text))
+            if edit.occurrence > len(occurrences):
+                raise ValueError("add_tag occurrence is absent from repaired text")
+            match = occurrences[edit.occurrence - 1]
+            start, end = match.span()
+            overlapping = [
+                span
+                for span in planned_spans
+                if start < span.end and end > span.start
+            ]
+            if overlapping:
+                if any(
+                    span.start == start
+                    and span.end == end
+                    and span.label == edit.label
+                    for span in overlapping
+                ):
+                    continue
+                raise ValueError("add_tag edit overlaps an existing tagged span")
+            planned_spans.append(TaggedSpan(
+                label=edit.label,
+                value=edit.value,
+                start=start,
+                end=end,
+            ))
+
+        if len(planned_spans) != len(spans):
+            chunks: list[str] = []
+            cursor = 0
+            for span in sorted(planned_spans, key=lambda item: item.start):
+                chunks.append(clean_text[cursor:span.start])
+                chunks.append(
+                    f"<{span.label}>{clean_text[span.start:span.end]}</{span.label}>"
+                )
+                cursor = span.end
+            chunks.append(clean_text[cursor:])
+            tagged_text = "".join(chunks)
+
         value_to_label: dict[str, str] = {
             match.group(2): match.group(1)
             for match in _ENTITY_TAG_PATTERN.finditer(tagged_text)
         }
-        for match in _ENTITY_TAG_PATTERN.finditer(original.tagged_text):
-            value_to_label.setdefault(match.group(2), match.group(1))
-        for seed in seed_pack.positive_entities:
-            value_to_label[seed.value] = seed.label
+        if original is not None:
+            for match in _ENTITY_TAG_PATTERN.finditer(original.tagged_text):
+                value_to_label.setdefault(match.group(2), match.group(1))
+        if seed_pack is not None:
+            for seed in seed_pack.positive_entities:
+                value_to_label[seed.value] = seed.label
 
-        if value_to_label:
+        if value_to_label and original is not None and seed_pack is not None:
             values = sorted(value_to_label, key=len, reverse=True)
             plain_seed_pattern = re.compile(
                 "|".join(re.escape(value) for value in values)
@@ -1019,11 +1064,12 @@ class VerifierService:
             chunks.append(tag_plain_segment(tagged_text[cursor:]))
             tagged_text = "".join(chunks)
 
-        tagged_text = VerifierService._remove_invalid_added_ticket_tags(
-            original=original,
-            repaired_tagged_text=tagged_text,
-            seed_pack=seed_pack,
-        )
+        if original is not None and seed_pack is not None:
+            tagged_text = VerifierService._remove_invalid_added_ticket_tags(
+                original=original,
+                repaired_tagged_text=tagged_text,
+                seed_pack=seed_pack,
+            )
         entities = [
             GeneratedEntity(label=match.group(1), value=match.group(2))
             for match in _ENTITY_TAG_PATTERN.finditer(tagged_text)

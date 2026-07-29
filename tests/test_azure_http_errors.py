@@ -13,6 +13,7 @@ from pii_factory.infrastructure.clients import (
     AzureOpenAIJsonTransport,
     AzureOpenAISettings,
 )
+from pii_factory.ports import CompletionClientError, CompletionResult
 
 
 def _successful_response() -> BytesIO:
@@ -85,6 +86,32 @@ def _wrapped_json_response() -> BytesIO:
     )
 
 
+def _reasoning_usage_response() -> BytesIO:
+    return BytesIO(
+        json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {"tagged_text": "reasoned", "entities": []}
+                            )
+                        }
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 11,
+                    "completion_tokens": 5,
+                    "total_tokens": 46,
+                    "completion_tokens_details": {
+                        "reasoning_tokens": 30,
+                    },
+                },
+            }
+        ).encode("utf-8")
+    )
+
+
 class AzureOpenAIHttpErrorTests(unittest.TestCase):
     def test_generator_defaults_to_long_form_completion_budget(self) -> None:
         settings = AzureOpenAISettings(
@@ -110,22 +137,72 @@ class AzureOpenAIHttpErrorTests(unittest.TestCase):
             ) as mocked_urlopen,
             patch("pii_factory.infrastructure.clients.time.sleep"),
         ):
+            completion = AzureOpenAICompletionClient(settings).generate(
+                [{"role": "user", "content": "Return JSON."}]
+            )
             (
                 tagged_text,
                 entities,
                 input_tokens,
                 output_tokens,
                 total_tokens,
-            ) = AzureOpenAICompletionClient(settings).generate(
-                [{"role": "user", "content": "Return JSON."}]
-            )
+            ) = completion
 
+        self.assertIsInstance(completion, CompletionResult)
+        self.assertEqual(completion.tagged_text, "test")
+        self.assertEqual(completion.entities, [])
+        self.assertEqual(completion.input_tokens, 20)
+        self.assertEqual(completion.output_tokens, 25)
+        self.assertEqual(completion.total_tokens, 45)
+        self.assertEqual(mocked_urlopen.call_count, 2)
         self.assertEqual(tagged_text, "test")
         self.assertEqual(entities, [])
-        self.assertEqual(mocked_urlopen.call_count, 2)
         self.assertEqual(input_tokens, 20)
         self.assertEqual(output_tokens, 25)
         self.assertEqual(total_tokens, 45)
+
+    def test_generator_exhaustion_preserves_every_paid_response_usage(self) -> None:
+        settings = AzureOpenAISettings(
+            api_key="top-secret-value",
+            base_url="https://gateway.example",
+            infrastructure_retries=1,
+        )
+        with (
+            patch(
+                "pii_factory.infrastructure.clients.urlopen",
+                side_effect=[
+                    _malformed_json_response(),
+                    _malformed_json_response(),
+                ],
+            ),
+            patch("pii_factory.infrastructure.clients.time.sleep"),
+        ):
+            with self.assertRaises(CompletionClientError) as raised:
+                AzureOpenAICompletionClient(settings).generate(
+                    [{"role": "user", "content": "Return JSON."}]
+                )
+
+        self.assertEqual(raised.exception.raw_usage, (20, 40, 60))
+
+    def test_generator_counts_reasoning_tokens_as_billable_output(self) -> None:
+        settings = AzureOpenAISettings(
+            api_key="top-secret-value",
+            base_url="https://gateway.example",
+            infrastructure_retries=0,
+        )
+        with patch(
+            "pii_factory.infrastructure.clients.urlopen",
+            return_value=_reasoning_usage_response(),
+        ):
+            _, _, input_tokens, output_tokens, total_tokens = (
+                AzureOpenAICompletionClient(settings).generate(
+                    [{"role": "user", "content": "Return JSON."}]
+                )
+            )
+
+        self.assertEqual(input_tokens, 11)
+        self.assertEqual(output_tokens, 35)
+        self.assertEqual(total_tokens, 46)
 
     def test_generator_accepts_json_wrapped_in_markdown_fence(self) -> None:
         settings = AzureOpenAISettings(
@@ -282,6 +359,32 @@ class AzureOpenAIHttpErrorTests(unittest.TestCase):
         request_body = json.loads(request.data.decode("utf-8"))
         self.assertEqual(request_body["model"], "gemini-2.5-pro")
 
+    def test_verifier_transport_accumulates_malformed_retry_usage(self) -> None:
+        settings = AzureOpenAISettings(
+            api_key="top-secret-value",
+            base_url="https://gateway.example",
+            infrastructure_retries=1,
+        )
+        with (
+            patch(
+                "pii_factory.infrastructure.clients.urlopen",
+                side_effect=[
+                    _malformed_json_response(),
+                    _successful_response(),
+                ],
+            ),
+            patch("pii_factory.infrastructure.clients.time.sleep"),
+        ):
+            completion = AzureOpenAIJsonTransport(settings).complete(
+                [{"role": "user", "content": "Judge JSON."}],
+                temperature=0,
+                max_tokens=1200,
+            )
+
+        self.assertEqual(completion.input_tokens, 20)
+        self.assertEqual(completion.output_tokens, 25)
+        self.assertEqual(completion.total_tokens, 45)
+
     def test_legacy_model_remains_the_fallback_for_both_roles(self) -> None:
         settings = AzureOpenAISettings(
             api_key="top-secret-value",
@@ -325,7 +428,9 @@ class AzureOpenAIHttpErrorTests(unittest.TestCase):
         )
         response_body = BytesIO(
             b'{"error":{"code":"invalid_request_error",'
-            b'"message":"Unsupported endpoint shape.","param":"model"}}'
+            b'"message":"Unsupported endpoint shape. '
+            b'received_args={\\"messages\\":[{\\"content\\":'
+            b'\\"Ho Thi An secret sample\\"}]}","param":"model"}}'
         )
         error = HTTPError(
             url="https://gateway.example",
@@ -348,6 +453,8 @@ class AzureOpenAIHttpErrorTests(unittest.TestCase):
         self.assertIn("HTTP 400", message)
         self.assertIn("invalid_request_error", message)
         self.assertIn("Unsupported endpoint shape.", message)
+        self.assertNotIn("Ho Thi An", message)
+        self.assertNotIn("received_args", message)
         self.assertNotIn(settings.api_key, message)
 
 

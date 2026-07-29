@@ -3,6 +3,7 @@ import random
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from pii_factory.application.value_bank import (
     InvalidValueBankError,
@@ -10,10 +11,59 @@ from pii_factory.application.value_bank import (
     ValueBankEmptyClassError,
     ValueBankEntityProvider,
     ValueBankLanguageError,
+    resolve_value_bank_path,
 )
 
 
 class ValueBankEntityProviderTests(unittest.TestCase):
+    def test_default_bank_path_resolves_outside_the_process_working_directory(self) -> None:
+        expected = Path(__file__).resolve().parents[1] / "PII_Value_Bank"
+        with TemporaryDirectory() as directory, patch(
+            "pii_factory.application.value_bank.Path.cwd",
+            return_value=Path(directory),
+        ):
+            resolved = resolve_value_bank_path("PII_Value_Bank")
+
+        self.assertEqual(resolved, expected)
+
+    def test_validate_required_classes_fails_before_sampling(self) -> None:
+        with TemporaryDirectory() as directory:
+            self._write_bank(
+                Path(directory) / "vi_pii_value_pools.json",
+                {"PERSON": ["Nguyễn An"]},
+            )
+
+            with self.assertRaisesRegex(ValueBankClassError, "EMAIL"):
+                ValueBankEntityProvider(directory).validate(
+                    language="vi",
+                    required_labels=["PERSON", "EMAIL"],
+                )
+
+    def test_stable_partitions_do_not_share_person_values(self) -> None:
+        full_values = set(
+            ValueBankEntityProvider("PII_Value_Bank").values_for(
+                "vi",
+                "PERSON",
+            )
+        )
+        partition_values = [
+            set(ValueBankEntityProvider(
+                "PII_Value_Bank",
+                partition_index=index,
+                partition_count=5,
+            ).values_for("vi", "PERSON"))
+            for index in range(5)
+        ]
+
+        self.assertEqual(set().union(*partition_values), full_values)
+        for left in range(len(partition_values)):
+            for right in range(left + 1, len(partition_values)):
+                self.assertTrue(
+                    partition_values[left].isdisjoint(
+                        partition_values[right]
+                    )
+                )
+
     def test_current_banks_cover_all_taxonomy_classes_in_three_languages(self) -> None:
         provider = ValueBankEntityProvider("PII_Value_Bank")
         taxonomy = json.loads(

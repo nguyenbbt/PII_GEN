@@ -32,7 +32,10 @@ from .seed_generation import HARD_NEGATIVE_STRATEGIES
 
 _EMAIL = re.compile(r"(?<![\w.+-])[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}(?![\w-])")
 _PHONE = re.compile(r"(?<!\d)(?:\+?84|0)[ .-]?(?:3|5|7|8|9)(?:[ .-]?\d){8}(?!\d)")
-_URL = re.compile(r"https?://[^\s<>]+", re.IGNORECASE)
+_URL = re.compile(
+    r"https?://[^\s<>]*[^\s<>.,;:!?\)\]\}]",
+    re.IGNORECASE,
+)
 _DATE = re.compile(
     r"(?:(?<!\d)(?:0?[1-9]|[12]\d|3[01])[/.-](?:0?[1-9]|1[0-2])[/.-](?:19|20)\d{2}(?!\d)|"
     r"(?<![A-Za-z0-9-])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])"

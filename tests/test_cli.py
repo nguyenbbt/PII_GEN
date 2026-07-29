@@ -1,5 +1,6 @@
 import io
 import json
+import os
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -23,6 +24,17 @@ class PiiFactoryCliTests(unittest.TestCase):
             ["content"]["application/json"]["schema"]["$ref"]
         )
         self.assertTrue(run_schema.endswith("/RunConfig"))
+
+    def test_api_resolves_default_taxonomy_outside_repository_cwd(self) -> None:
+        original_cwd = Path.cwd()
+        with TemporaryDirectory() as directory:
+            try:
+                os.chdir(directory)
+                app = create_app(offline=True)
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual(app.state.default_taxonomy_label_count, 44)
 
     def test_config_run_uses_default_json_taxonomy_without_path_flag(
         self,
@@ -123,8 +135,9 @@ class PiiFactoryCliTests(unittest.TestCase):
             self.assertIn("[sample 1/1] accepted progress=1/1", progress_log)
             persisted_log = diagnostic_log.read_text(encoding="utf-8")
             self.assertIn("[run] detailed diagnostic log=", persisted_log)
-            self.assertIn("LLM raw tagged_text:", persisted_log)
-            self.assertIn("candidate after Value Bank binding:", persisted_log)
+            self.assertNotIn("LLM raw tagged_text:", persisted_log)
+            self.assertNotIn("candidate after Value Bank binding:", persisted_log)
+            self.assertNotIn(payload["samples"][0]["text"], persisted_log)
             self.assertIn("[run] finished status=COMPLETED", persisted_log)
 
 

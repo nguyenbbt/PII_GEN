@@ -17,9 +17,100 @@ from pii_factory.domain.models import (
     VerificationIssue,
     VerifierDecision,
 )
+from pii_factory.ports import CompletionClientError
 
 
 class QualityFirstPipelineTests(unittest.TestCase):
+    def test_placeholder_binding_failure_keeps_generator_cost(self) -> None:
+        class InvalidPlaceholderGenerator:
+            @staticmethod
+            def generate(messages):
+                return (
+                    "<PERSON>[UNKNOWN_1]</PERSON>",
+                    [{"label": "PERSON", "value": "[UNKNOWN_1]"}],
+                    10,
+                    5,
+                    15,
+                )
+
+        with TemporaryDirectory() as directory:
+            pipeline, repository, _ = build_pipeline(
+                offline=True,
+                output_directory=Path(directory),
+            )
+            pipeline.generator.client = InvalidPlaceholderGenerator()
+            run = pipeline.create_run(self._positive_person_request(
+                max_regenerate_attempts=0,
+                max_task_replacements=0,
+            ))
+
+            self.assertEqual(pipeline.generate_pending(run.run_id, 1), [])
+
+            usage = pipeline._pipeline_usage(run.run_id, 1).generator
+            self.assertEqual(repository.get_run(run.run_id).status, "FAILED")
+            self.assertEqual(usage.input_tokens, 10)
+            self.assertEqual(usage.output_tokens, 5)
+            self.assertEqual(usage.total_tokens, 15)
+
+    def test_generator_metadata_is_synchronized_without_losing_cost(self) -> None:
+        class InvalidEntityGenerator:
+            @staticmethod
+            def generate(messages):
+                return (
+                    "<PERSON>[PERSON_1]</PERSON>",
+                    [{"label": "", "value": "[PERSON_1]"}],
+                    10,
+                    5,
+                    15,
+                )
+
+        with TemporaryDirectory() as directory:
+            pipeline, repository, _ = build_pipeline(
+                offline=True,
+                output_directory=Path(directory),
+            )
+            pipeline.generator.client = InvalidEntityGenerator()
+            run = pipeline.create_run(self._positive_person_request(
+                max_regenerate_attempts=0,
+                max_task_replacements=0,
+            ))
+
+            results = pipeline.generate_pending(run.run_id, 1)
+
+            usage = pipeline._pipeline_usage(run.run_id, 1).generator
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].entities[0].label, "PERSON")
+            self.assertEqual(repository.get_run(run.run_id).status, "COMPLETED")
+            self.assertEqual(usage.total_tokens, 15)
+
+    def test_exhausted_paid_generator_responses_keep_cost(self) -> None:
+        class ExhaustedPaidGenerator:
+            @staticmethod
+            def generate(messages):
+                raise CompletionClientError(
+                    "generator returned malformed content",
+                    raw_usage=(20, 40, 60),
+                )
+
+        with TemporaryDirectory() as directory:
+            pipeline, repository, _ = build_pipeline(
+                offline=True,
+                output_directory=Path(directory),
+            )
+            pipeline.generator.client = ExhaustedPaidGenerator()
+            run = pipeline.create_run(self._positive_person_request(
+                max_regenerate_attempts=0,
+                max_task_replacements=0,
+            ))
+
+            self.assertEqual(pipeline.generate_pending(run.run_id, 1), [])
+
+            usage = pipeline._pipeline_usage(run.run_id, 1).generator
+            self.assertEqual(repository.get_run(run.run_id).status, "FAILED")
+            self.assertEqual(usage.input_tokens, 20)
+            self.assertEqual(usage.output_tokens, 40)
+            self.assertEqual(usage.total_tokens, 60)
+
     def test_regenerate_deterministic_failure_skips_paid_verifier(self) -> None:
         class ShortGenerator:
             @staticmethod
@@ -599,6 +690,11 @@ class QualityFirstPipelineTests(unittest.TestCase):
                 len(json.loads(files[0].read_text(encoding="utf-8"))),
                 1,
             )
+            accepted_usage = results[0].pipeline_token_usage
+            run_usage = pipeline.run_usage(run.run_id)
+            self.assertEqual(accepted_usage.generator.total_tokens, 15)
+            self.assertEqual(run_usage.generator.total_tokens, 30)
+            self.assertEqual(run_usage.total.total_tokens, 30)
 
     def test_verifier_infrastructure_failure_reuses_candidate_without_consuming_attempt(self) -> None:
         class CountingGeneratorClient:
@@ -664,6 +760,96 @@ class QualityFirstPipelineTests(unittest.TestCase):
             self.assertEqual(
                 result.pipeline_token_usage.verifier_judge.total_tokens,
                 60,
+            )
+
+    def test_rejudge_failure_keeps_prior_judge_repair_and_rejudge_costs(self) -> None:
+        class FailFirstRejudgeVerifier:
+            def __init__(self) -> None:
+                self.judge_calls = 0
+
+            def judge(self, messages):
+                self.judge_calls += 1
+                if self.judge_calls == 1:
+                    return VerifierDecision(
+                        status="FIXABLE",
+                        score=80,
+                        issues=[VerificationIssue(
+                            type="LOCAL_WORDING",
+                            severity="low",
+                            field="tagged_text",
+                            reason="Local wording needs repair.",
+                            suggested_fix="Apply a local wording repair.",
+                        )],
+                        token_usage=self._usage(),
+                        latency_ms=1,
+                        model="fake-verifier",
+                        prompt_version="judge.test",
+                    )
+                if self.judge_calls == 2:
+                    raise VerifierInfrastructureError(
+                        "temporary rejudge failure",
+                        stage="judge",
+                        token_usage=self._usage(),
+                    )
+                return VerifierDecision(
+                    status="PASS",
+                    score=99,
+                    issues=[],
+                    token_usage=self._usage(),
+                    latency_ms=1,
+                    model="fake-verifier",
+                    prompt_version="judge.test",
+                )
+
+            def repair(self, messages):
+                envelope = json.loads(messages[-1]["content"])
+                current = envelope["candidate"]
+                return RepairResult(
+                    tagged_text=current["tagged_text"],
+                    entities=[
+                        GeneratedEntity(**entity)
+                        for entity in current["entities"]
+                    ],
+                    token_usage=self._usage(),
+                    latency_ms=1,
+                    model="fake-verifier",
+                    prompt_version="repair.test",
+                )
+
+            @staticmethod
+            def _usage():
+                return TokenUsage(
+                    input_tokens=20,
+                    output_tokens=10,
+                    total_tokens=30,
+                    money_cost=Decimal("0.002"),
+                )
+
+        with TemporaryDirectory() as directory:
+            pipeline, _, _ = build_pipeline(
+                offline=True,
+                output_directory=Path(directory),
+            )
+            pipeline.verifier.client = FailFirstRejudgeVerifier()
+            run = pipeline.create_run(self._positive_person_request())
+
+            with self.assertRaises(VerifierInfrastructureError) as raised:
+                pipeline.generate_pending(run.run_id, 1)
+            self.assertEqual(raised.exception.stage, "rejudge")
+
+            result = pipeline.generate_pending(run.run_id, 1)[0]
+
+            self.assertEqual(
+                result.pipeline_token_usage.verifier_judge.total_tokens,
+                60,
+            )
+            self.assertEqual(
+                result.pipeline_token_usage.verifier_repair.total_tokens,
+                30,
+            )
+            self.assertEqual(
+                result.pipeline_token_usage.verifier_rejudge.total_tokens,
+                30,
             )
 
     @staticmethod
