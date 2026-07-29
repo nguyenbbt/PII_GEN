@@ -1,7 +1,7 @@
 {
-  "run_name": "vi-value-bank-online-10",
+  "run_name": "en-value-bank-online-50",
   "num_samples": 50,
-  "language": "vi",
+  "language": "en",
   "minimum_per_label": 0,
   "batch_size": 2,
   "sample_length_distribution": {
@@ -28,19 +28,19 @@
     },
     {
       "type": "custom",
-      "custom_instruction": "Viết dưới dạng email nghiệp vụ tự nhiên."
+      "custom_instruction": "Write in the form of a natural professional email."
     },
     {
       "type": "custom",
-      "custom_instruction": "Viết dưới dạng phiếu yêu cầu hoặc ticket hỗ trợ."
+      "custom_instruction": "Write in the form of a support request or helpdesk ticket."
     },
     {
       "type": "custom",
-      "custom_instruction": "Viết dưới dạng báo cáo sự việc hoặc nhật ký vận hành."
+      "custom_instruction": "Write in the form of an incident report or operational log."
     },
     {
       "type": "custom",
-      "custom_instruction": "Viết dưới dạng ghi chú hoặc tin nhắn nội bộ tự nhiên."
+      "custom_instruction": "Write in the form of a natural internal note or workplace message."
     }
   ],
   "optional_constraint_distribution": {},
@@ -53,6 +53,11 @@
   "max_task_replacements": 2,
   "value_bank": {
     "path": "PII_Value_Bank",
+    "language_files": {
+      "vi": "vi_pii_value_pools.json",
+      "en": "en_pii_value_pools.json",
+      "de": "de_pii_value_pools.json"
+    },
     "max_seed_pack_attempts": 5,
     "allow_additional_unseeded_pii": false
   },
@@ -70,6 +75,7 @@
   },
   "validation": {
     "quality_checks_enabled": true,
+    "accept_last_candidate_on_exhaustion": true,
     "novelty_mode": "audit"
   },
   "verifier": {

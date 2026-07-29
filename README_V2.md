@@ -167,12 +167,32 @@ Run chỉ `COMPLETED` khi mỗi slot có một sample `ACCEPTED`.
 - `hard_negative/decoy_only`: chỉ có decoy không gắn tag;
 - `hard_negative/mixed_contrastive`: có positive PII và decoy dễ nhầm.
 
-`ValueBankEntityProvider` đọc lazy và cache file
-`{language}_pii_value_pools.json` trong `value_bank.path`. Ba file hiện tại là
+`ValueBankEntityProvider` đọc lazy và cache file được khai báo tại
+`value_bank.language_files[language]`. Tên file tương đối được resolve từ
+`value_bank.path`; đường dẫn tuyệt đối cũng được hỗ trợ. Mapping mặc định là
 `vi_pii_value_pools.json`, `en_pii_value_pools.json` và
-`de_pii_value_pools.json`; mỗi file phải có `version: 1`, object
+`de_pii_value_pools.json`. Mỗi file phải có `version: 1`, object
 `entity_values`, class hợp lệ, danh sách không rỗng, item `value` không rỗng và
-`locale` khớp tên file.
+`locale` khớp ngôn ngữ được yêu cầu.
+
+Ví dụ cấu hình English:
+
+```json
+{
+  "language": "en",
+  "value_bank": {
+    "path": "PII_Value_Bank",
+    "language_files": {
+      "vi": "vi_pii_value_pools.json",
+      "en": "en_pii_value_pools.json",
+      "de": "de_pii_value_pools.json"
+    }
+  }
+}
+```
+
+Thiếu key ngôn ngữ trong `language_files` là lỗi cấu hình rõ ràng, không tự suy đoán
+tên file và không fallback sang Faker.
 
 Provider dùng đúng instance `random.Random` đã seed bằng `task.random_seed`.
 Mọi entry trong file đều được giữ nguyên trong bộ nhớ, kể cả duplicate và các biến
@@ -255,16 +275,18 @@ Generator chỉ:
 Generator không quyết định candidate có được accept hay không.
 
 Few-shot chỉ dạy ngữ nghĩa label và ranh giới annotation. Prompt version
-`data-generator.v11.3.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
+`data-generator.v11.6.0` cấm sao chép hoặc paraphrase gần scenario, actor, action,
 opening phrase, clause order và sentence structure của example.
 Prompt cấm ghép seed thành danh sách dấu phẩy; mỗi entity phải có vai trò nghiệp vụ
 và được phân bố qua nhiều câu/lượt trong cùng một sự kiện.
 
 Ví dụ LLM nhìn thấy `<PERSON>[PERSON_1]</PERSON>` và
 `entities[].value="[PERSON_1]"`. LLM không nhìn thấy value thật. Python thay đồng
-bộ placeholder trong tagged text và metadata trước technical gate. Placeholder lạ
-hoặc chưa resolve bị từ chối. Validator seed/tag hiện hữu vẫn quyết định placeholder
-thiếu, lặp hoặc sai tag có hợp lệ hay không.
+bộ placeholder trong tagged text và metadata trước technical gate. Python chỉ chèn
+Value Bank value khi placeholder nằm trong đúng entity tag. Bare seed placeholder
+nằm ngoài tag và placeholder lạ do model tự tạo được đổi thành tham chiếu phi PII
+theo ngôn ngữ; metadata được dựng lại từ toàn bộ tag để bao phủ cả occurrence lặp.
+Validator seed/tag hiện hữu vẫn là cổng quyết định cuối.
 
 Output thô:
 
@@ -464,7 +486,15 @@ Output cuối:
     "text": "Chị Lò Thị Cẩy, dân tộc Cống, vay vốn tại Agribank.",
     "token_usage": {
       "input_tokens": 1240,
-      "output_tokens": 380
+      "output_tokens": 380,
+      "generator": {
+        "input_tokens": 800,
+        "output_tokens": 250
+      },
+      "verifier": {
+        "input_tokens": 440,
+        "output_tokens": 130
+      }
     }
   }
 ]
@@ -479,7 +509,15 @@ Pure-negative:
     "text": "Bộ phận kỹ thuật đã chuyển biểu mẫu sang bước tiếp theo.",
     "token_usage": {
       "input_tokens": 980,
-      "output_tokens": 215
+      "output_tokens": 215,
+      "generator": {
+        "input_tokens": 700,
+        "output_tokens": 160
+      },
+      "verifier": {
+        "input_tokens": 280,
+        "output_tokens": 55
+      }
     }
   }
 ]
@@ -500,7 +538,9 @@ Pure-negative:
   khi đủ `num_samples`.
 - mỗi sample final có `token_usage.input_tokens` và
   `token_usage.output_tokens`, tính trên toàn bộ Generator/Judge/Repair call
-  thuộc logical slot đó, kể cả retry đã phát sinh token.
+  thuộc logical slot đó, kể cả retry đã phát sinh token;
+- `token_usage.generator` giữ input/output token của model Generator;
+- `token_usage.verifier` gộp input/output token của Judge, Repair và re-Judge.
 
 Nếu replacement budget cạn:
 
@@ -546,9 +586,10 @@ pipeline_token_usage
 - final Judge call nếu phát sinh;
 - call đã trả response có schema lỗi nhưng vẫn phát sinh token.
 
-File dataset cuối chỉ bổ sung số lượng input/output token theo sample; không chứa
-diagnostic, prompt, money cost hoặc taxonomy context. Summary in trên terminal vẫn
-có tổng token của toàn run.
+File dataset cuối chỉ bổ sung số lượng input/output token theo sample và theo hai
+vai trò `generator`/`verifier`; không chứa diagnostic, prompt, money cost hoặc
+taxonomy context. Summary trên terminal và file `*-summary.json` có tổng token và
+chi phí của toàn run, đồng thời tách riêng hai vai trò.
 
 ## 5. Run config
 
@@ -576,10 +617,11 @@ Các field chính:
 | `max_entities` | Mục tiêu entity khi generate; verifier có thể bổ sung annotation bị bỏ sót |
 | `max_regenerate_attempts` | Số lần sinh lại trong cùng task |
 | `max_task_replacements` | Số task thay thế tối đa cho mỗi slot |
-| `value_bank` | `path`, seed-pack retry và unseeded-PII policy; bật `allow_additional_unseeded_pii` để verifier gắn nhãn PII phát sinh trong context |
+| `value_bank` | `path`, `language_files`, seed-pack retry và unseeded-PII policy; bật `allow_additional_unseeded_pii` để verifier gắn nhãn PII phát sinh trong context |
 | `hard_negative` | Mode, decoy count và focus limits |
 | `complexity_limits` | Complexity budget theo sample type |
 | `validation.quality_checks_enabled` | Cờ legacy cho NoveltyGuard; migrate sang Verifier nếu config không có `verifier` |
+| `validation.accept_last_candidate_on_exhaustion` | Hết Generator attempt và task replacement thì xuất candidate cuối nếu Formatter vẫn bảo đảm schema/tag/offset; summary báo `fallback_accepts` |
 | `verifier.enabled` | Bật/tắt LLM Judge/Repair; config mẫu bật |
 | `verifier.max_repairs_per_candidate` | Cho phép `0`, `1` hoặc `2`; vòng hai chỉ chạy khi re-Judge còn trả lỗi cục bộ `FIXABLE` |
 | `parallel_generation` | Số worker, kích thước shard và số lần retry mỗi shard |
@@ -663,12 +705,21 @@ LLM_TIMEOUT_SECONDS=120
 LLM_INFRA_MAX_RETRIES=3
 INPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
 OUTPUT_TOKEN_PRICE_PER_MILLION_USD=10.00
+GENERATOR_INPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
+GENERATOR_OUTPUT_TOKEN_PRICE_PER_MILLION_USD=10.00
+VERIFIER_INPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
+VERIFIER_OUTPUT_TOKEN_PRICE_PER_MILLION_USD=10.00
 GEN_DATA_DIR=gen_data
 ```
 
 `GENERATOR_MODEL` được dùng cho Data Generator. `VERIFIER_MODEL` được dùng cho
 Judge và Repair. `MODEL` là fallback tương thích khi một trong hai biến theo vai
 trò bị thiếu.
+
+Bốn biến giá theo vai trò cho phép tính chi phí chính xác khi Generator và
+Verifier dùng model khác giá. Nếu bỏ chúng, hệ thống fallback về hai biến
+`INPUT_TOKEN_PRICE_PER_MILLION_USD` và
+`OUTPUT_TOKEN_PRICE_PER_MILLION_USD` cũ để giữ tương thích.
 
 `OPENAI_API_STYLE=auto` dùng Azure deployment route và header `api-key` cho
 hostname Azure OpenAI native; với gateway tùy chỉnh, client dùng
@@ -736,15 +787,15 @@ CLI in:
 - run status;
 - output path;
 - accepted sample count;
-- input/output/total tokens;
-- `money_cost`;
+- tổng input/output/total tokens và `money_cost`;
+- input/output/total tokens và `money_cost` riêng cho `generator` và `verifier`;
 - diagnostics: candidate bị loại, deterministic/Verifier rejection, task replacement,
   verification outcome và issue-type counts;
 - các formatted sample.
 
 Ngoài JSON trên stdout, mỗi phiên còn ghi file `*-summary.json` cạnh dataset. File
-này giữ tổng `input_tokens`, `output_tokens`, `total_tokens`, chi phí, diagnostics,
-đường dẫn dataset và diagnostic log mà không thay đổi schema mảng sample.
+này giữ tổng `input_tokens`, `output_tokens`, `total_tokens`, chi phí, breakdown
+`generator`/`verifier`, diagnostics, đường dẫn dataset và diagnostic log.
 
 ### 7.4 Chạy online
 

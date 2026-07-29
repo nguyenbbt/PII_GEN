@@ -84,7 +84,36 @@ class PiiFactoryCliTests(unittest.TestCase):
             self.assertEqual(payload["diagnostics"]["task_replacements"], 0)
             self.assertEqual(
                 set(payload["samples"][0]["token_usage"]),
-                {"input_tokens", "output_tokens"},
+                {
+                    "input_tokens",
+                    "output_tokens",
+                    "generator",
+                    "verifier",
+                },
+            )
+            sample_usage = payload["samples"][0]["token_usage"]
+            self.assertEqual(
+                sample_usage["input_tokens"],
+                sample_usage["generator"]["input_tokens"]
+                + sample_usage["verifier"]["input_tokens"],
+            )
+            self.assertEqual(
+                set(payload["token_usage"]["generator"]),
+                {
+                    "input_tokens",
+                    "output_tokens",
+                    "total_tokens",
+                    "money_cost",
+                },
+            )
+            self.assertEqual(
+                set(payload["token_usage"]["verifier"]),
+                {
+                    "input_tokens",
+                    "output_tokens",
+                    "total_tokens",
+                    "money_cost",
+                },
             )
             progress_log = errors.getvalue()
             self.assertIn("[run] started", progress_log)

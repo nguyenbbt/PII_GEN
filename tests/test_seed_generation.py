@@ -2,7 +2,10 @@ import random
 import unittest
 from pathlib import Path
 
+from data_generator_worker.validation import decoy_contexts_are_valid
+from pii_factory.application.decoy_localization import localize_decoy
 from pii_factory.application.seed_generation import (
+    HARD_NEGATIVE_STRATEGIES,
     HARD_NEGATIVE_SUPPORT,
     ContextFrameSelector,
     ContextSelectionError,
@@ -17,14 +20,19 @@ from pii_factory.domain.models import (
     GenerationTask,
     HardNegativeConfig,
     SampleType,
+    SeedPack,
     TaxonomyLabel,
     ValidationConfig,
 )
 
 
-def task(sample_type: str, labels: list[str]) -> GenerationTask:
+def task(
+    sample_type: str,
+    labels: list[str],
+    language: str = "vi",
+) -> GenerationTask:
     return GenerationTask(
-        task_id=f"task-{sample_type}", run_id="run-1", sequence_no=1, language="vi",
+        task_id=f"task-{sample_type}", run_id="run-1", sequence_no=1, language=language,
         focus_labels=labels, difficulty="hard", sample_type=sample_type,
         max_entities=6, max_attempts=3, random_seed=42,
     )
@@ -115,6 +123,60 @@ class SeedGenerationTests(unittest.TestCase):
         self.assertTrue(SeedPackValidator(config, ValidationConfig()).validate(
             pack, ["DATE"], taxonomy
         ).valid)
+
+    def test_hard_negative_cues_follow_english_and_german_task_language(
+        self,
+    ) -> None:
+        taxonomy = [TaxonomyLabel(code="PASSWORD", definition="PASSWORD")]
+        strategy = next(
+            item
+            for item in HARD_NEGATIVE_STRATEGIES["PASSWORD"]
+            if item.strategy_id == "password_as_config_flag"
+        )
+        expected = {
+            "en": {"configuration key", "test configuration"},
+            "de": {"Konfigurationsschlüssel", "Testkonfiguration"},
+        }
+
+        for language, expected_cues in expected.items():
+            with self.subTest(language=language):
+                decoy = localize_decoy(
+                    strategy.build(random.Random(42)),
+                    language,
+                )
+                pack = SeedPack(
+                    task_id=f"localized-{language}",
+                    sample_type="hard_negative",
+                    hard_negative_mode="decoy_only",
+                    decoys=[decoy],
+                    context_frame=self.selector.select(
+                        ["PASSWORD"],
+                        random.Random(42),
+                    ),
+                )
+                self.assertEqual(
+                    set(decoy.required_context_cues),
+                    expected_cues,
+                )
+                self.assertNotIn("khóa cấu hình", decoy.required_context_cues)
+                text = (
+                    f"{decoy.required_context_cues[0]} {decoy.value} "
+                    "is active."
+                )
+                self.assertTrue(
+                    self.validator.validate(
+                        pack,
+                        ["PASSWORD"],
+                        taxonomy,
+                    ).valid
+                )
+                self.assertTrue(
+                    decoy_contexts_are_valid(
+                        text,
+                        decoy.value,
+                        decoy.required_context_cues,
+                    )
+                )
 
     def test_vietnamese_address_from_bank_is_reproducible(self) -> None:
         first = self.provider.generate("ADDRESS", "vi", random.Random(101))

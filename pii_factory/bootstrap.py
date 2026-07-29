@@ -18,6 +18,20 @@ from .infrastructure.clients import (
 from .infrastructure.memory import InMemoryEventBus, InMemoryRepository
 
 
+def _role_cost_rates(role: str, fallback: CostRates) -> CostRates:
+    prefix = role.upper()
+    return CostRates(
+        input_per_million_usd=Decimal(os.getenv(
+            f"{prefix}_INPUT_TOKEN_PRICE_PER_MILLION_USD",
+            str(fallback.input_per_million_usd),
+        )),
+        output_per_million_usd=Decimal(os.getenv(
+            f"{prefix}_OUTPUT_TOKEN_PRICE_PER_MILLION_USD",
+            str(fallback.output_per_million_usd),
+        )),
+    )
+
+
 def build_pipeline(
     offline: bool = False,
     output_directory: Path | str | None = None,
@@ -31,10 +45,12 @@ def build_pipeline(
         event_bus,
         taxonomy_for_run=orchestrator.taxonomy_for_run,
     )
-    rates = CostRates(
+    fallback_rates = CostRates(
         input_per_million_usd=Decimal(os.getenv("INPUT_TOKEN_PRICE_PER_MILLION_USD", "2.50")),
         output_per_million_usd=Decimal(os.getenv("OUTPUT_TOKEN_PRICE_PER_MILLION_USD", "10.00")),
     )
+    generator_rates = _role_cost_rates("generator", fallback_rates)
+    verifier_rates = _role_cost_rates("verifier", fallback_rates)
     if offline:
         client = OfflineCompletionClient()
         verifier_client = OfflineVerifierClient()
@@ -44,11 +60,17 @@ def build_pipeline(
         client = AzureOpenAICompletionClient(settings)
         verifier_client = AzureOpenAIVerifierClient(
             settings,
-            input_price_per_million=rates.input_per_million_usd,
-            output_price_per_million=rates.output_per_million_usd,
+            input_price_per_million=verifier_rates.input_per_million_usd,
+            output_price_per_million=verifier_rates.output_per_million_usd,
         )
         model = settings.effective_generator_model
-    generator = DataGenerator(repository, event_bus, client, model, rates)
+    generator = DataGenerator(
+        repository,
+        event_bus,
+        client,
+        model,
+        generator_rates,
+    )
     verifier = VerifierService(verifier_client)
     formatter = OutputFormatter()
     output_root = Path(

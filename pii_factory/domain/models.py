@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from math import isclose
+import re
 from typing import Any, Dict, List, Literal, Optional, Sequence
 from uuid import uuid4
 
@@ -104,8 +105,34 @@ class GenerationTaxonomyContext(Schema):
 
 class ValueBankConfig(Schema):
     path: str = Field(default="PII_Value_Bank", min_length=1)
+    language_files: Dict[str, str] = Field(default_factory=lambda: {
+        "vi": "vi_pii_value_pools.json",
+        "en": "en_pii_value_pools.json",
+        "de": "de_pii_value_pools.json",
+    })
     max_seed_pack_attempts: int = Field(default=5, ge=1, le=20)
     allow_additional_unseeded_pii: bool = False
+
+    @validator("language_files")
+    def validate_language_files(
+        cls,
+        value: Dict[str, str],
+    ) -> Dict[str, str]:
+        normalized: Dict[str, str] = {}
+        for raw_language, raw_path in value.items():
+            language = str(raw_language).strip().casefold()
+            file_path = str(raw_path).strip()
+            if not re.fullmatch(r"[a-z]{2}", language):
+                raise ValueError(
+                    "value_bank.language_files keys must be two-letter "
+                    "language codes"
+                )
+            if not file_path:
+                raise ValueError(
+                    "value_bank.language_files paths cannot be empty"
+                )
+            normalized[language] = file_path
+        return normalized
 
 
 class HardNegativeConfig(Schema):
@@ -163,6 +190,7 @@ class SampleStructureConfig(Schema):
 
 class ValidationConfig(Schema):
     quality_checks_enabled: bool = False
+    accept_last_candidate_on_exhaustion: bool = False
     local_context_window: int = Field(default=80, ge=20, le=500)
     reject_mixed_locale: bool = True
     pure_negative_structured_scan: bool = True
@@ -826,11 +854,30 @@ class FormattedEntity(Schema):
         return values
 
 
+class FormattedRoleTokenUsage(Schema):
+    """Input/output token counts for one LLM role."""
+
+    input_tokens: int = Field(..., ge=0)
+    output_tokens: int = Field(..., ge=0)
+
+
 class FormattedTokenUsage(Schema):
     """Token counts exposed with one accepted sample in the final dataset."""
 
     input_tokens: int = Field(..., ge=0)
     output_tokens: int = Field(..., ge=0)
+    generator: FormattedRoleTokenUsage = Field(
+        default_factory=lambda: FormattedRoleTokenUsage(
+            input_tokens=0,
+            output_tokens=0,
+        )
+    )
+    verifier: FormattedRoleTokenUsage = Field(
+        default_factory=lambda: FormattedRoleTokenUsage(
+            input_tokens=0,
+            output_tokens=0,
+        )
+    )
 
 
 class FormattedSample(Schema):
@@ -858,6 +905,17 @@ class PipelineTokenUsage(Schema):
     verifier_repair: TokenUsage = Field(default_factory=TokenUsage.zero)
     verifier_rejudge: TokenUsage = Field(default_factory=TokenUsage.zero)
     total: TokenUsage = Field(default_factory=TokenUsage.zero)
+
+    def verifier_total(self) -> TokenUsage:
+        """Combine Judge, Repair, and re-Judge calls for the verifier model."""
+
+        return TokenUsage.combine(
+            (
+                self.verifier_judge,
+                self.verifier_repair,
+                self.verifier_rejudge,
+            )
+        )
 
     @classmethod
     def from_calls(

@@ -85,6 +85,61 @@ class ValueBankEntityProviderTests(unittest.TestCase):
 
             self.assertEqual(selected, "VISA")
 
+    def test_language_file_mapping_can_override_default_filename(self) -> None:
+        with TemporaryDirectory() as directory:
+            custom_path = Path(directory) / "english-bank.json"
+            custom_path.write_text(
+                json.dumps({
+                    "version": 1,
+                    "entity_values": {
+                        "PERSON": [{
+                            "value": "Configured English Name",
+                            "locale": "en",
+                        }]
+                    },
+                }),
+                encoding="utf-8",
+            )
+            provider = ValueBankEntityProvider(
+                directory,
+                {"en": "english-bank.json"},
+            )
+
+            self.assertEqual(
+                provider.values_for("en", "PERSON"),
+                ("Configured English Name",),
+            )
+            with self.assertRaisesRegex(
+                ValueBankLanguageError,
+                "no configured file",
+            ):
+                provider.values_for("de", "PERSON")
+
+    def test_absolute_language_file_does_not_require_base_directory(self) -> None:
+        with TemporaryDirectory() as directory:
+            custom_path = Path(directory) / "english-bank.json"
+            custom_path.write_text(
+                json.dumps({
+                    "version": 1,
+                    "entity_values": {
+                        "PERSON": [{
+                            "value": "Absolute English Name",
+                            "locale": "en",
+                        }]
+                    },
+                }),
+                encoding="utf-8",
+            )
+            provider = ValueBankEntityProvider(
+                Path(directory) / "missing-base",
+                {"en": str(custom_path.resolve())},
+            )
+
+            self.assertEqual(
+                provider.values_for("en", "PERSON"),
+                ("Absolute English Name",),
+            )
+
     def test_missing_directory_language_and_class_have_explicit_errors(self) -> None:
         with TemporaryDirectory() as directory:
             missing_directory = Path(directory) / "missing"

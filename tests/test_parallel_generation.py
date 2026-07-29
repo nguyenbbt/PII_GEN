@@ -2,6 +2,7 @@ import unittest
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from pii_factory.domain.models import RunConfig
 from pii_factory.parallel import (
@@ -54,6 +55,7 @@ class ParallelGenerationTests(unittest.TestCase):
         self.assertEqual({shard.num_samples for shard in shards}, {10})
         self.assertEqual(len({shard.random_seed for shard in shards}), 10)
         self.assertEqual(len({shard.run_name for shard in shards}), 10)
+        self.assertTrue(all(len(shard.run_name) <= 25 for shard in shards))
         self.assertTrue(
             all(shard.batch_size <= shard.num_samples for shard in shards)
         )
@@ -105,6 +107,18 @@ class ParallelGenerationTests(unittest.TestCase):
                     "output_tokens": 5,
                     "total_tokens": 15,
                     "money_cost": "0.01",
+                    "generator": {
+                        "input_tokens": 6,
+                        "output_tokens": 3,
+                        "total_tokens": 9,
+                        "money_cost": "0.006",
+                    },
+                    "verifier": {
+                        "input_tokens": 4,
+                        "output_tokens": 2,
+                        "total_tokens": 6,
+                        "money_cost": "0.004",
+                    },
                 },
                 "diagnostics": {
                     "generated_candidates": 1,
@@ -127,6 +141,18 @@ class ParallelGenerationTests(unittest.TestCase):
                     "output_tokens": 8,
                     "total_tokens": 28,
                     "money_cost": "0.02",
+                    "generator": {
+                        "input_tokens": 12,
+                        "output_tokens": 5,
+                        "total_tokens": 17,
+                        "money_cost": "0.012",
+                    },
+                    "verifier": {
+                        "input_tokens": 8,
+                        "output_tokens": 3,
+                        "total_tokens": 11,
+                        "money_cost": "0.008",
+                    },
                 },
                 "diagnostics": {
                     "generated_candidates": 2,
@@ -142,6 +168,14 @@ class ParallelGenerationTests(unittest.TestCase):
         self.assertEqual(len(merged["samples"]), 2)
         self.assertEqual(merged["token_usage"]["input_tokens"], 30)
         self.assertEqual(merged["token_usage"]["money_cost"], "0.03")
+        self.assertEqual(
+            merged["token_usage"]["generator"]["input_tokens"],
+            18,
+        )
+        self.assertEqual(
+            merged["token_usage"]["verifier"]["output_tokens"],
+            5,
+        )
         self.assertEqual(
             merged["diagnostics"]["generated_candidates"],
             3,
@@ -274,9 +308,51 @@ class ParallelGenerationTests(unittest.TestCase):
                 set(sample["token_usage"]) == {
                     "input_tokens",
                     "output_tokens",
+                    "generator",
+                    "verifier",
                 }
                 for sample in dataset
             ))
+
+    def test_parallel_runner_writes_failed_summary_for_exhausted_shard(
+        self,
+    ) -> None:
+        config = RunConfig(
+            run_name="failed-parallel",
+            num_samples=1,
+            focus_labels=["PERSON"],
+            parallel_generation={
+                "workers": 1,
+                "shard_size": 1,
+                "max_shard_retries": 0,
+            },
+        )
+        with TemporaryDirectory() as directory, patch(
+            "pii_factory.parallel._run_shard",
+            side_effect=ParallelGenerationError("simulated shard failure"),
+        ):
+            output_directory = Path(directory)
+            with self.assertRaisesRegex(
+                ParallelGenerationError,
+                "1 shard\\(s\\) failed permanently",
+            ):
+                run_parallel_generation(
+                    config=config,
+                    taxonomy_path=Path("pii_taxonomy_rules.json"),
+                    output_directory=output_directory,
+                    offline=True,
+                )
+
+            summaries = list(
+                output_directory.glob("*-failed-summary.json")
+            )
+            self.assertEqual(len(summaries), 1)
+            payload = json.loads(
+                summaries[0].read_text(encoding="utf-8")
+            )
+            self.assertEqual(payload["status"], "FAILED")
+            self.assertEqual(payload["completed_shards"], 0)
+            self.assertIn("1", payload["failed_shards"])
 
 
 if __name__ == "__main__":

@@ -469,6 +469,92 @@ class DeterministicValidatorTests(unittest.TestCase):
             max_decoy_occurrences=2,
         )
 
+    def test_mixed_hard_negative_accepts_natural_decoy_repetition(self) -> None:
+        pack = SeedPack(
+            task_id="mixed-repeat",
+            sample_type="hard_negative",
+            hard_negative_mode="mixed_contrastive",
+            context_frame=frame(),
+            positive_entities=[PositiveEntitySeed(
+                label="DATE",
+                value="21/10/2026",
+                semantic_role="appointment_date",
+            )],
+            decoys=[DecoySeed(
+                strategy_id="date_as_invalid_calendar_value",
+                target_label="DATE",
+                value="32/13/2026",
+                family="invalid_value",
+                semantic_type="date_validation_test",
+                negative_labels=["DATE"],
+                required_context_cues=["test value"],
+                forbidden_context_cues=["appointment date"],
+            )],
+        )
+        text = (
+            "The appointment date is <DATE>21/10/2026</DATE>. "
+            "The test value 32/13/2026 was submitted and the same "
+            "32/13/2026 was confirmed in the validation log."
+        )
+        entities = [{"label": "DATE", "value": "21/10/2026"}]
+
+        result = self.output.validate(
+            tagged_text=text,
+            entities=entities,
+            seed_pack=pack,
+            focus_labels=["DATE"],
+            max_entities=2,
+        )
+
+        self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
+        validate_seeded_contract(
+            tagged_text=text,
+            entities=entities,
+            positive_entities=[pack.positive_entities[0].dict()],
+            decoys=[pack.decoys[0].dict()],
+            max_decoy_occurrences=3,
+        )
+
+    def test_schema_decoy_allows_field_coreference_in_later_paragraphs(self) -> None:
+        pack = SeedPack(
+            task_id="mixed-schema-repeat",
+            sample_type="hard_negative",
+            hard_negative_mode="mixed_contrastive",
+            context_frame=frame(),
+            positive_entities=[PositiveEntitySeed(
+                label="MARITAL",
+                value="Never married",
+                semantic_role="employee_marital_status",
+            )],
+            decoys=[DecoySeed(
+                strategy_id="marital_as_schema_field",
+                target_label="MARITAL",
+                value="MARITAL-STATUS-CODE-V9",
+                family="schema_field",
+                semantic_type="database_schema_field",
+                negative_labels=["MARITAL"],
+                required_context_cues=["schema field", "data field"],
+                forbidden_context_cues=["marital status"],
+            )],
+        )
+        text = (
+            "The employee status is <MARITAL>Never married</MARITAL>. "
+            "The schema field MARITAL-STATUS-CODE-V9 rejected the update."
+            "\n\nThe MARITAL-STATUS-CODE-V9 field remains under review."
+            "\n\nEngineers will patch the MARITAL-STATUS-CODE-V9 field."
+        )
+        entities = [{"label": "MARITAL", "value": "Never married"}]
+
+        result = self.output.validate(
+            tagged_text=text,
+            entities=entities,
+            seed_pack=pack,
+            focus_labels=["MARITAL"],
+            max_entities=2,
+        )
+
+        self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
+
     def test_decoy_only_rejects_excessive_or_cross_paragraph_cueless_repetition(self) -> None:
         pack = SeedPack(
             task_id="hard-repeat-invalid", sample_type="hard_negative", hard_negative_mode="decoy_only",

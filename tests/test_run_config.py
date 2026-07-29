@@ -151,6 +151,9 @@ class DistributionRunConfigTests(unittest.TestCase):
         )
 
         self.assertFalse(config.validation.quality_checks_enabled)
+        self.assertFalse(
+            config.validation.accept_last_candidate_on_exhaustion
+        )
         self.assertFalse(config.verifier.enabled)
         self.assertEqual(config.validation.novelty_mode, "enforce")
         self.assertEqual(config.validation.near_duplicate_threshold, 0.8)
@@ -242,15 +245,36 @@ class DistributionRunConfigTests(unittest.TestCase):
         )
         self.assertEqual(config.max_attempts, 3)
         self.assertEqual(config.value_bank.path, "PII_Value_Bank")
+        self.assertEqual(
+            config.value_bank.language_files["en"],
+            "en_pii_value_pools.json",
+        )
         self.assertEqual(config.hard_negative.max_decoys, 1)
         self.assertEqual(config.hard_negative.mode, "mixed_contrastive")
         self.assertNotIn("sample_structure", raw_config)
         self.assertEqual(config.sample_structure.type, "contract")
         self.assertFalse(config.validation.quality_checks_enabled)
+        self.assertFalse(
+            config.validation.accept_last_candidate_on_exhaustion
+        )
         self.assertTrue(config.verifier.enabled)
         self.assertNotIn(
             "informal_chat",
             config.optional_constraint_distribution,
+        )
+
+    def test_online_config_enables_best_effort_final_candidate_policy(self) -> None:
+        raw_config = json.loads(
+            Path("configs/run_config.online-test.local.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        config = RunConfig.parse_obj(raw_config)
+
+        self.assertEqual(config.language, "en")
+        self.assertEqual(config.num_samples, 50)
+        self.assertTrue(
+            config.validation.accept_last_candidate_on_exhaustion
         )
 
     def test_random_task_decisions_are_reproducible_and_use_selected_labels(self) -> None:

@@ -13,7 +13,7 @@ import uvicorn
 
 from .api import create_app
 from .bootstrap import build_pipeline
-from .domain.models import CreateRunRequest, RunConfig
+from .domain.models import CreateRunRequest, RunConfig, TokenUsage
 
 
 DEFAULT_TAXONOMY_PATH = Path(
@@ -148,16 +148,18 @@ def main() -> None:
             )
         final_run = repository.get_run(run.run_id)
         pipeline_usages = [
-            result.pipeline_token_usage.total
+            result.pipeline_token_usage
             for result in results
             if result.pipeline_token_usage is not None
         ]
-        total_input_tokens = sum(usage.input_tokens for usage in pipeline_usages)
-        total_output_tokens = sum(usage.output_tokens for usage in pipeline_usages)
-        total_tokens = sum(usage.total_tokens for usage in pipeline_usages)
-        total_money_cost = sum(
-            (usage.money_cost for usage in pipeline_usages),
-            start=0,
+        generator_usage = TokenUsage.combine([
+            usage.generator for usage in pipeline_usages
+        ])
+        verifier_usage = TokenUsage.combine([
+            usage.verifier_total() for usage in pipeline_usages
+        ])
+        combined_usage = TokenUsage.combine(
+            (generator_usage, verifier_usage)
         )
         run_events = [
             event
@@ -198,10 +200,22 @@ def main() -> None:
             "diagnostic_log_path": str(log_path.resolve()),
             "accepted_samples": len(results),
             "token_usage": {
-                "input_tokens": total_input_tokens,
-                "output_tokens": total_output_tokens,
-                "total_tokens": total_tokens,
-                "money_cost": str(total_money_cost),
+                "input_tokens": combined_usage.input_tokens,
+                "output_tokens": combined_usage.output_tokens,
+                "total_tokens": combined_usage.total_tokens,
+                "money_cost": str(combined_usage.money_cost),
+                "generator": {
+                    "input_tokens": generator_usage.input_tokens,
+                    "output_tokens": generator_usage.output_tokens,
+                    "total_tokens": generator_usage.total_tokens,
+                    "money_cost": str(generator_usage.money_cost),
+                },
+                "verifier": {
+                    "input_tokens": verifier_usage.input_tokens,
+                    "output_tokens": verifier_usage.output_tokens,
+                    "total_tokens": verifier_usage.total_tokens,
+                    "money_cost": str(verifier_usage.money_cost),
+                },
             },
             "diagnostics": {
                 "generated_candidates": generated_candidates,
@@ -215,6 +229,9 @@ def main() -> None:
                 "verifier_rejections": verifier_rejections,
                 "task_replacements": event_counts[
                     "generation.task.replaced"
+                ],
+                "fallback_accepts": event_counts[
+                    "sample.fallback_accepted"
                 ],
                 "verification_outcomes": dict(verification_outcomes),
                 "verifier_candidate_pass_rate": (
@@ -232,6 +249,7 @@ def main() -> None:
         else:
             summary_path = log_path.with_suffix(".summary.json")
         summary_payload["summary_path"] = str(summary_path.resolve())
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
         summary_temporary = summary_path.with_suffix(
             f"{summary_path.suffix}.tmp"
         )
@@ -247,11 +265,16 @@ def main() -> None:
         summary_temporary.replace(summary_path)
         logging.getLogger(__name__).info(
             "[run] token summary input_tokens=%s output_tokens=%s "
-            "total_tokens=%s money_cost=%s summary=%s",
-            total_input_tokens,
-            total_output_tokens,
-            total_tokens,
-            total_money_cost,
+            "total_tokens=%s generator_input=%s generator_output=%s "
+            "verifier_input=%s verifier_output=%s money_cost=%s summary=%s",
+            combined_usage.input_tokens,
+            combined_usage.output_tokens,
+            combined_usage.total_tokens,
+            generator_usage.input_tokens,
+            generator_usage.output_tokens,
+            verifier_usage.input_tokens,
+            verifier_usage.output_tokens,
+            combined_usage.money_cost,
             summary_path.resolve(),
         )
         print(json.dumps({

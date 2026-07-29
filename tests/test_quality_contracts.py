@@ -218,6 +218,10 @@ class VerifierContractTests(unittest.TestCase):
         self.assertEqual(summary.total.output_tokens, 136)
         self.assertEqual(summary.total.total_tokens, 436)
         self.assertEqual(summary.total.money_cost, Decimal("0.006"))
+        self.assertEqual(summary.generator.input_tokens, 180)
+        self.assertEqual(summary.generator.output_tokens, 90)
+        self.assertEqual(summary.verifier_total().input_tokens, 120)
+        self.assertEqual(summary.verifier_total().output_tokens, 46)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from ..domain.models import (
     DataGenerationResult,
     DeterministicValidationResult,
     EventEnvelope,
+    FormattedRoleTokenUsage,
     FormattedTokenUsage,
     GenerationCandidate,
     GeneratedEntity,
@@ -321,6 +322,7 @@ class DataGenerator:
                 positive_entities=[
                     entity.dict() for entity in request.seed_pack.positive_entities
                 ],
+                language=request.task.language,
             )
             logger.info(
                 "[sample %s attempt %s] candidate after Value Bank binding:\n%s",
@@ -589,6 +591,10 @@ class Pipeline:
             TaskStatus.REPAIRING,
         }:
             start_attempt = max(1, task.current_attempt + 1)
+        last_candidate: GenerationCandidate | None = None
+        last_validation = DeterministicValidationResult(valid=True)
+        last_novelty = NoveltyAssessment()
+        last_trace: VerificationTrace | None = None
 
         for attempt_no in range(start_attempt, task.max_attempts + 1):
             try:
@@ -620,6 +626,7 @@ class Pipeline:
                     ),
                     output_validator,
                 )
+                last_candidate = candidate
                 self._record_usage(
                     run.run_id,
                     task.slot_no or task.sequence_no,
@@ -639,6 +646,8 @@ class Pipeline:
                 validation, novelty = self._validate_candidate(
                     candidate, seed_pack, task, output_validator
                 )
+                last_validation = validation
+                last_novelty = novelty
                 deterministic_route, deterministic_issues = (
                     DeterministicIssueRouter.route(validation)
                 )
@@ -703,6 +712,8 @@ class Pipeline:
                     )[0],
                     deterministic_issues=deterministic_issues,
                 )
+                last_candidate = verified
+                last_trace = trace
                 logger.info(
                     "[sample %s/%s] verifier finished outcome=%s",
                     slot_no,
@@ -713,6 +724,8 @@ class Pipeline:
                 final_validation, final_novelty = self._validate_candidate(
                     verified, seed_pack, task, output_validator
                 )
+                last_validation = final_validation
+                last_novelty = final_novelty
                 if not final_validation.valid:
                     raise OutputValidationError(final_validation)
                 return self._accept_candidate(
@@ -724,6 +737,16 @@ class Pipeline:
                     trace=trace,
                 )
             except VerificationRoutingError as exc:
+                if exc.candidate is not None:
+                    last_candidate = exc.candidate
+                    last_validation, last_novelty = self._validate_candidate(
+                        last_candidate,
+                        seed_pack,
+                        task,
+                        output_validator,
+                    )
+                if exc.trace is not None:
+                    last_trace = exc.trace
                 logger.warning(
                     "[sample %s/%s] verifier route=%s issues=%s attempt=%s/%s",
                     slot_no,
@@ -783,6 +806,17 @@ class Pipeline:
                 )
                 self._set_reflection(task, error.result)
                 if attempt_no == task.max_attempts:
+                    fallback = self._accept_last_candidate_on_exhaustion(
+                        run=run,
+                        task=task,
+                        candidate=last_candidate,
+                        validation=last_validation,
+                        novelty=last_novelty,
+                        trace=last_trace,
+                        issues=validation_issues,
+                    )
+                    if fallback is not None:
+                        return fallback
                     self._reject_task(run, task, error.regeneration_scope, error.result.issues)
                     return None
             except VerifierInfrastructureError as exc:
@@ -843,6 +877,17 @@ class Pipeline:
                         return None
                     self._seed_states[task.task_id] = (seed_pack, seed_validation)
                 if attempt_no == task.max_attempts:
+                    fallback = self._accept_last_candidate_on_exhaustion(
+                        run=run,
+                        task=task,
+                        candidate=last_candidate,
+                        validation=last_validation,
+                        novelty=last_novelty,
+                        trace=last_trace,
+                        issues=exc.result.issues,
+                    )
+                    if fallback is not None:
+                        return fallback
                     self._reject_task(
                         run, task, exc.regeneration_scope, exc.result.issues
                     )
@@ -850,6 +895,85 @@ class Pipeline:
             task.status = TaskStatus.GENERATING
             self.repository.update_task(task)
         return None
+
+    def _accept_last_candidate_on_exhaustion(
+        self,
+        *,
+        run: Run,
+        task: GenerationTask,
+        candidate: GenerationCandidate | None,
+        validation: DeterministicValidationResult,
+        novelty: NoveltyAssessment,
+        trace: VerificationTrace | None,
+        issues: List[ValidationIssue],
+    ) -> DataGenerationResult | None:
+        """Publish the final structurally safe candidate in best-effort mode.
+
+        This policy applies only after both the per-task generation attempts and
+        the configured task-replacement budget are exhausted. Critical
+        deterministic/verifier routes never enter this method. Formatter
+        preflight remains mandatory so the final dataset cannot contain broken
+        tags, disallowed labels, overlapping spans, or invalid offsets.
+        """
+
+        if (
+            not run.config.validation.accept_last_candidate_on_exhaustion
+            or task.replacement_no < run.config.max_task_replacements
+            or candidate is None
+        ):
+            return None
+        unsafe_types = {"credential_risk", "real_pii_risk"}
+        if unsafe_types & {issue.type for issue in issues}:
+            return None
+        try:
+            self.formatter.format(
+                tagged_text=candidate.tagged_text,
+                entities=candidate.entities,
+                allowed_labels=(
+                    task.annotation_labels or task.focus_labels
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            logger.error(
+                "[sample %s/%s] final-candidate fallback refused because "
+                "formatter preflight failed: %s",
+                task.slot_no or task.sequence_no,
+                run.config.num_samples,
+                exc,
+            )
+            return None
+
+        logger.warning(
+            "[sample %s/%s] retry and replacement budgets exhausted; "
+            "accepting last structurally safe candidate with %s audited "
+            "quality issue(s)",
+            task.slot_no or task.sequence_no,
+            run.config.num_samples,
+            len(issues),
+        )
+        self.event_bus.publish(EventEnvelope(
+            event_type="sample.fallback_accepted",
+            correlation_id=run.run_id,
+            idempotency_key=(
+                f"task:{task.task_id}:fallback-accepted:"
+                f"{candidate.attempt_no}"
+            ),
+            payload={
+                "task_id": task.task_id,
+                "slot_no": task.slot_no,
+                "attempt_no": candidate.attempt_no,
+                "issues": [issue.dict() for issue in issues],
+                "output_validation": validation.dict(),
+            },
+        ))
+        return self._accept_candidate(
+            run=run,
+            task=task,
+            candidate=candidate,
+            validation=validation,
+            novelty=novelty,
+            trace=trace,
+        )
 
     @staticmethod
     def _log_validation_feedback(
@@ -963,10 +1087,19 @@ class Pipeline:
         pipeline_usage = self._pipeline_usage(
             run.run_id, task.slot_no or task.sequence_no
         )
+        verifier_usage = pipeline_usage.verifier_total()
         formatted = formatted.copy(update={
             "token_usage": FormattedTokenUsage(
                 input_tokens=pipeline_usage.total.input_tokens,
                 output_tokens=pipeline_usage.total.output_tokens,
+                generator=FormattedRoleTokenUsage(
+                    input_tokens=pipeline_usage.generator.input_tokens,
+                    output_tokens=pipeline_usage.generator.output_tokens,
+                ),
+                verifier=FormattedRoleTokenUsage(
+                    input_tokens=verifier_usage.input_tokens,
+                    output_tokens=verifier_usage.output_tokens,
+                ),
             ),
         })
         result = DataGenerationResult(

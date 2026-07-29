@@ -60,6 +60,7 @@ class DataGeneratorWorker:
             positive_entities=[
                 vars(seed) for seed in request.seed_pack.positive_entities
             ],
+            language=request.task.language,
         )
         latency_ms = round((time.perf_counter() - started) * 1000)
         token_usage = self.cost_calculator.calculate(
@@ -85,7 +86,7 @@ class DataGeneratorWorker:
             positive_entities=[vars(seed) for seed in request.seed_pack.positive_entities],
             decoys=[vars(decoy) for decoy in request.seed_pack.decoys],
             max_decoy_occurrences=(
-                3 if request.seed_pack.hard_negative_mode == "decoy_only" else 1
+                3 if request.task.sample_type == "hard_negative" else 1
             ),
         )
         query = GenerationQuery(

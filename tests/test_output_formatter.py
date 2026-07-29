@@ -5,6 +5,7 @@ import unittest
 
 from pii_factory.application.formatting import JsonDatasetWriter, OutputFormatter
 from pii_factory.domain.models import (
+    FormattedRoleTokenUsage,
     FormattedSample,
     FormattedTokenUsage,
     GeneratedEntity,
@@ -174,6 +175,14 @@ class JsonDatasetWriterTests(unittest.TestCase):
                 token_usage=FormattedTokenUsage(
                     input_tokens=120,
                     output_tokens=45,
+                    generator=FormattedRoleTokenUsage(
+                        input_tokens=80,
+                        output_tokens=30,
+                    ),
+                    verifier=FormattedRoleTokenUsage(
+                        input_tokens=40,
+                        output_tokens=15,
+                    ),
                 ),
             )
         ]
@@ -187,7 +196,18 @@ class JsonDatasetWriterTests(unittest.TestCase):
             payload = json.loads(final_path.read_text(encoding="utf-8"))
             self.assertEqual(
                 payload[0]["token_usage"],
-                {"input_tokens": 120, "output_tokens": 45},
+                {
+                    "input_tokens": 120,
+                    "output_tokens": 45,
+                    "generator": {
+                        "input_tokens": 80,
+                        "output_tokens": 30,
+                    },
+                    "verifier": {
+                        "input_tokens": 40,
+                        "output_tokens": 15,
+                    },
+                },
             )
 
 

@@ -77,6 +77,11 @@
   "max_task_replacements": 2,
   "value_bank": {
     "path": "PII_Value_Bank",
+    "language_files": {
+      "vi": "vi_pii_value_pools.json",
+      "en": "en_pii_value_pools.json",
+      "de": "de_pii_value_pools.json"
+    },
     "max_seed_pack_attempts": 5,
     "allow_additional_unseeded_pii": true
   },
@@ -93,7 +98,8 @@
     "hard_negative": 10
   },
   "validation": {
-    "quality_checks_enabled": false
+    "quality_checks_enabled": false,
+    "accept_last_candidate_on_exhaustion": false
   },
   "verifier": {
     "enabled": true,

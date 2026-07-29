@@ -39,9 +39,16 @@ def build_shard_configs(config: RunConfig) -> list[RunConfig]:
         seed = random.Random(
             config.random_seed ^ (shard_index * 0x9E37_79B1)
         ).randint(1, 2_147_483_647)
-        base_name = config.run_name[:100].rstrip("-")
+        # Child output filenames also contain a UUID and ``-summary.json.tmp``.
+        # Keep their run names deliberately short so retries remain below the
+        # legacy Windows MAX_PATH limit in deep OneDrive workspaces.
+        base_name = re.sub(
+            r"[^A-Za-z0-9._-]+",
+            "-",
+            config.run_name,
+        ).strip("._-")[:20].rstrip("-") or "pii"
         shards.append(config.copy(update={
-            "run_name": f"{base_name}-shard-{shard_index:02d}",
+            "run_name": f"{base_name}-s{shard_index:03d}",
             "num_samples": sample_count,
             "batch_size": min(config.batch_size, sample_count),
             "random_seed": seed,
@@ -59,6 +66,15 @@ def merge_shard_payloads(
     seen_texts: set[str] = set()
     input_tokens = output_tokens = total_tokens = 0
     money_cost = Decimal("0")
+    role_usage: dict[str, dict[str, int | Decimal]] = {
+        role: {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "money_cost": Decimal("0"),
+        }
+        for role in ("generator", "verifier")
+    }
     diagnostics: Counter[str] = Counter()
     nested_diagnostics: dict[str, Counter[str]] = {}
 
@@ -91,6 +107,20 @@ def merge_shard_payloads(
         output_tokens += int(usage.get("output_tokens", 0))
         total_tokens += int(usage.get("total_tokens", 0))
         money_cost += Decimal(str(usage.get("money_cost", "0")))
+        for role in ("generator", "verifier"):
+            shard_role_usage = usage.get(role) or {}
+            role_usage[role]["input_tokens"] += int(
+                shard_role_usage.get("input_tokens", 0)
+            )
+            role_usage[role]["output_tokens"] += int(
+                shard_role_usage.get("output_tokens", 0)
+            )
+            role_usage[role]["total_tokens"] += int(
+                shard_role_usage.get("total_tokens", 0)
+            )
+            role_usage[role]["money_cost"] += Decimal(
+                str(shard_role_usage.get("money_cost", "0"))
+            )
 
         for name, value in (payload.get("diagnostics") or {}).items():
             if name == "verifier_candidate_pass_rate":
@@ -139,6 +169,15 @@ def merge_shard_payloads(
             "output_tokens": output_tokens,
             "total_tokens": total_tokens,
             "money_cost": str(money_cost),
+            **{
+                role: {
+                    "input_tokens": values["input_tokens"],
+                    "output_tokens": values["output_tokens"],
+                    "total_tokens": values["total_tokens"],
+                    "money_cost": str(values["money_cost"]),
+                }
+                for role, values in role_usage.items()
+            },
         },
         "diagnostics": merged_diagnostics,
     }
@@ -156,7 +195,7 @@ def _retry_config(
         shard.random_seed ^ (attempt * 0xA11C_E5ED)
     ).randint(1, 2_147_483_647)
     return shard.copy(update={
-        "run_name": f"{shard.run_name[:108]}-retry-{attempt}",
+        "run_name": f"{shard.run_name}-r{attempt}",
         "random_seed": retry_seed,
     })
 
@@ -247,12 +286,25 @@ def _run_shard(
         ):
             logger.info(
                 "[parallel shard %s] completed attempt=%s accepted=%s "
-                "input_tokens=%s output_tokens=%s",
+                "input_tokens=%s output_tokens=%s generator_input=%s "
+                "generator_output=%s verifier_input=%s verifier_output=%s",
                 shard_index,
                 attempt + 1,
                 payload.get("accepted_samples"),
                 (payload.get("token_usage") or {}).get("input_tokens", 0),
                 (payload.get("token_usage") or {}).get("output_tokens", 0),
+                (
+                    (payload.get("token_usage") or {}).get("generator") or {}
+                ).get("input_tokens", 0),
+                (
+                    (payload.get("token_usage") or {}).get("generator") or {}
+                ).get("output_tokens", 0),
+                (
+                    (payload.get("token_usage") or {}).get("verifier") or {}
+                ).get("input_tokens", 0),
+                (
+                    (payload.get("token_usage") or {}).get("verifier") or {}
+                ).get("output_tokens", 0),
             )
             return {
                 **payload,
@@ -304,6 +356,7 @@ def run_parallel_generation(
         len(shards),
     )
     payloads_by_index: dict[int, dict[str, Any]] = {}
+    failures_by_index: dict[int, str] = {}
     logger.info(
         "[parallel] started name=%s samples=%s workers=%s shards=%s "
         "shard_size=%s artifacts=%s",
@@ -334,7 +387,16 @@ def run_parallel_generation(
             }
             for future in as_completed(futures):
                 index = futures[future]
-                payloads_by_index[index] = future.result()
+                try:
+                    payloads_by_index[index] = future.result()
+                except Exception as exc:
+                    failures_by_index[index] = str(exc)
+                    logger.error(
+                        "[parallel shard %s] permanently failed: %s",
+                        index,
+                        exc,
+                    )
+                    continue
                 logger.info(
                     "[parallel] progress completed_shards=%s/%s "
                     "accepted_samples=%s/%s",
@@ -346,6 +408,43 @@ def run_parallel_generation(
                     ),
                     config.num_samples,
                 )
+
+    if failures_by_index:
+        failed_summary_path = output_directory / (
+            f"{safe_name}-parallel-{parallel_run_id}-failed-summary.json"
+        )
+        failed_summary = {
+            "status": "FAILED",
+            "output_path": None,
+            "summary_path": str(failed_summary_path.resolve()),
+            "shard_artifact_directory": str(
+                shard_artifact_directory.resolve()
+            ),
+            "accepted_samples": sum(
+                int(payload.get("accepted_samples", 0))
+                for payload in payloads_by_index.values()
+            ),
+            "completed_shards": len(payloads_by_index),
+            "expected_shards": len(shards),
+            "failed_shards": {
+                str(index): message
+                for index, message in sorted(failures_by_index.items())
+            },
+        }
+        temporary_failed_summary = failed_summary_path.with_suffix(
+            f"{failed_summary_path.suffix}.tmp"
+        )
+        temporary_failed_summary.write_text(
+            json.dumps(failed_summary, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temporary_failed_summary.replace(failed_summary_path)
+        raise ParallelGenerationError(
+            f"{len(failures_by_index)} shard(s) failed permanently; "
+            f"completed={len(payloads_by_index)}/{len(shards)}; "
+            f"summary={failed_summary_path.resolve()}; "
+            f"artifacts={shard_artifact_directory.resolve()}"
+        )
 
     payloads = [
         payloads_by_index[index]
@@ -404,10 +503,15 @@ def run_parallel_generation(
     summary_temporary.replace(summary_path)
     logger.info(
         "[parallel] token summary input_tokens=%s output_tokens=%s "
-        "total_tokens=%s summary=%s",
+        "total_tokens=%s generator_input=%s generator_output=%s "
+        "verifier_input=%s verifier_output=%s summary=%s",
         merged["token_usage"]["input_tokens"],
         merged["token_usage"]["output_tokens"],
         merged["token_usage"]["total_tokens"],
+        merged["token_usage"]["generator"]["input_tokens"],
+        merged["token_usage"]["generator"]["output_tokens"],
+        merged["token_usage"]["verifier"]["input_tokens"],
+        merged["token_usage"]["verifier"]["output_tokens"],
         summary_path.resolve(),
     )
     logger.info(
@@ -448,12 +552,23 @@ def main() -> None:
     config = RunConfig.parse_obj(json.loads(
         args.config.read_text(encoding="utf-8-sig")
     ))
-    summary = run_parallel_generation(
-        config=config,
-        taxonomy_path=args.taxonomy_json,
-        output_directory=args.output_dir,
-        offline=args.offline,
-    )
+    try:
+        summary = run_parallel_generation(
+            config=config,
+            taxonomy_path=args.taxonomy_json,
+            output_directory=args.output_dir,
+            offline=args.offline,
+        )
+    except KeyboardInterrupt:
+        logger.error(
+            "[parallel] interrupted by user; completed shard artifacts remain "
+            "inside %s",
+            args.output_dir.resolve(),
+        )
+        raise SystemExit(130)
+    except ParallelGenerationError as exc:
+        logger.error("[parallel] failed: %s", exc)
+        raise SystemExit(1)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -8,7 +9,9 @@ from typing import Any, Mapping, Sequence
 
 _PLACEHOLDER = re.compile(r"\[([A-Z][A-Z0-9_]*)_([1-9][0-9]*)\]")
 _BARE_PLACEHOLDER = re.compile(r"[A-Z][A-Z0-9_]*_[1-9][0-9]*")
-_ENTITY_TAG = re.compile(r"<[A-Z][A-Z0-9_]*>([^<>]+)</[A-Z][A-Z0-9_]*>")
+_ENTITY_TAG = re.compile(r"<([A-Z][A-Z0-9_]*)>([^<>]+)</\1>")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,7 @@ def replace_entity_placeholders(
     tagged_text: str,
     entities: Sequence[Mapping[str, Any]],
     positive_entities: Sequence[Mapping[str, Any]],
+    language: str = "vi",
 ) -> tuple[str, list[dict[str, str]]]:
     """Insert bank values into an LLM placeholder skeleton.
 
@@ -68,45 +72,131 @@ def replace_entity_placeholders(
     """
 
     bindings = build_placeholder_bindings(positive_entities)
-    replacements = {binding.placeholder: binding.value for binding in bindings}
-
-    def replace_match(match: re.Match[str]) -> str:
-        token = match.group(0)
-        return replacements.get(token, token)
-
-    bound_text = _PLACEHOLDER.sub(replace_match, tagged_text)
-    bound_entities: list[dict[str, str]] = []
+    by_placeholder = {binding.placeholder: binding for binding in bindings}
+    by_bare_placeholder = {
+        binding.placeholder[1:-1]: binding
+        for binding in bindings
+    }
     for raw in entities:
         if not isinstance(raw, Mapping):
             raise ValueError("each generated entity must be an object")
-        raw_value = str(raw.get("value", ""))
-        bound_entities.append(
-            {
-                "label": str(raw.get("label", "")),
-                "value": _PLACEHOLDER.sub(replace_match, raw_value),
-            }
-        )
 
-    unresolved = sorted({
-        match.group(0)
-        for value in [bound_text, *(item["value"] for item in bound_entities)]
-        for match in _PLACEHOLDER.finditer(value)
-    })
-    if unresolved:
-        raise ValueError(
-            f"generated output contains unknown or unresolved entity placeholders: {unresolved}"
+    repaired_bare = 0
+    generic_references = 0
+
+    def bind_tag(match: re.Match[str]) -> str:
+        nonlocal repaired_bare, generic_references
+        label, content = match.group(1), match.group(2)
+        binding = by_placeholder.get(content)
+        if binding is None and content in by_bare_placeholder:
+            binding = by_bare_placeholder[content]
+            repaired_bare += 1
+        if binding is not None:
+            if binding.label != label:
+                raise ValueError(
+                    f"placeholder {content!r} is wrapped with {label!r}, "
+                    f"expected {binding.label!r}"
+                )
+            return f"<{label}>{binding.value}</{label}>"
+
+        unknown = _PLACEHOLDER.search(content)
+        if unknown is not None:
+            generic_references += 1
+            return _generic_reference(unknown.group(1), language)
+        return match.group(0)
+
+    bound_text = _ENTITY_TAG.sub(bind_tag, tagged_text)
+
+    def replace_remaining_placeholder(match: re.Match[str]) -> str:
+        nonlocal generic_references
+        generic_references += 1
+        return _generic_reference(match.group(1), language)
+
+    bound_text = _PLACEHOLDER.sub(
+        replace_remaining_placeholder,
+        bound_text,
+    )
+
+    def replace_remaining_bare(match: re.Match[str]) -> str:
+        nonlocal generic_references
+        token = match.group(0)
+        binding = by_bare_placeholder.get(token)
+        if binding is None:
+            return token
+        generic_references += 1
+        return _generic_reference(binding.label, language)
+
+    bound_text = _BARE_PLACEHOLDER.sub(
+        replace_remaining_bare,
+        bound_text,
+    )
+    bound_entities = [
+        {"label": match.group(1), "value": match.group(2)}
+        for match in _ENTITY_TAG.finditer(bound_text)
+    ]
+    if repaired_bare:
+        logger.warning(
+            "normalized %s known bare placeholder(s) inside entity tags",
+            repaired_bare,
         )
-    invalid_bare = sorted({
-        value
-        for value in [
-            *(match.group(1) for match in _ENTITY_TAG.finditer(bound_text)),
-            *(item["value"] for item in bound_entities),
-        ]
-        if _BARE_PLACEHOLDER.fullmatch(value)
-    })
-    if invalid_bare:
-        raise ValueError(
-            "generated output contains placeholders without required square "
-            f"brackets: {invalid_bare}"
+    if generic_references:
+        logger.warning(
+            "replaced %s untagged or unknown placeholder occurrence(s) "
+            "with generic %s references",
+            generic_references,
+            _language_code(language),
+        )
+    if len(bound_entities) != len(entities):
+        logger.warning(
+            "synchronized entity metadata from final tags old_count=%s "
+            "new_count=%s",
+            len(entities),
+            len(bound_entities),
         )
     return bound_text, bound_entities
+
+
+def _generic_reference(label: str, language: str) -> str:
+    code = _language_code(language)
+    references = {
+        "vi": {
+            "PERSON": "người liên quan",
+            "ORGANIZATION": "đơn vị liên quan",
+            "DATE": "thời điểm liên quan",
+            "ACCOUNT_ID": "một tài khoản nội bộ",
+            "STAFF_ID": "nhân viên phụ trách",
+        },
+        "en": {
+            "PERSON": "the referenced person",
+            "ORGANIZATION": "the relevant organization",
+            "DATE": "the relevant date",
+            "ACCOUNT_ID": "a specific internal account",
+            "STAFF_ID": "the responsible staff member",
+        },
+        "de": {
+            "PERSON": "die betreffende Person",
+            "ORGANIZATION": "die betreffende Organisation",
+            "DATE": "das betreffende Datum",
+            "ACCOUNT_ID": "ein bestimmtes internes Konto",
+            "STAFF_ID": "das zuständige Teammitglied",
+        },
+    }
+    defaults = {
+        "vi": "một tham chiếu nội bộ",
+        "en": "an internal reference",
+        "de": "eine interne Referenz",
+    }
+    return references.get(code, {}).get(
+        label,
+        defaults.get(code, defaults["en"]),
+    )
+
+
+def _language_code(language: str) -> str:
+    normalized = str(language).strip().casefold().replace("_", "-")
+    aliases = {
+        "vietnamese": "vi",
+        "english": "en",
+        "german": "de",
+    }
+    return aliases.get(normalized, normalized.split("-", 1)[0])

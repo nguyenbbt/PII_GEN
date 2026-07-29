@@ -5,6 +5,7 @@ from typing import Dict, List, Protocol, Sequence
 
 from .context_catalog import ALL_LABELS, compatible_context_frames
 from .content_vocabulary import build_content_seeds
+from .decoy_localization import localize_decoy
 from .value_bank import ValueBankEntityProvider
 from .hard_negative_base import DecoyStrategy, digits as _digits, strategy as _strategy
 from .hard_negative_variants import ADDITIONAL_HARD_NEGATIVE_STRATEGIES
@@ -432,7 +433,10 @@ class HardNegativeSeedFactory:
             target = rng.choice(supported)
             strategy = rng.choice(HARD_NEGATIVE_STRATEGIES[target])
             for _ in range(10):
-                decoy = strategy.build(rng)
+                decoy = localize_decoy(
+                    strategy.build(rng),
+                    task.language,
+                )
                 key = decoy.value.casefold()
                 if key not in seen:
                     seen.add(key)
@@ -480,7 +484,10 @@ def build_sample_type_router(
     hard_negative: HardNegativeConfig,
 ) -> SampleTypeRouter:
     selector = ContextFrameSelector()
-    provider = ValueBankEntityProvider(value_bank_config.path)
+    provider = ValueBankEntityProvider(
+        value_bank_config.path,
+        value_bank_config.language_files,
+    )
     return SampleTypeRouter(
         PositiveSeedFactory(provider, selector),
         PureNegativeContentFactory(selector),

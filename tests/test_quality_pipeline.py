@@ -174,6 +174,14 @@ class QualityFirstPipelineTests(unittest.TestCase):
                 result.formatted_sample.token_usage.output_tokens,
                 result.pipeline_token_usage.total.output_tokens,
             )
+            self.assertEqual(
+                result.formatted_sample.token_usage.generator.input_tokens,
+                result.pipeline_token_usage.generator.input_tokens,
+            )
+            self.assertEqual(
+                result.formatted_sample.token_usage.verifier.input_tokens,
+                result.pipeline_token_usage.verifier_total().input_tokens,
+            )
             for entity in result.formatted_sample.entities:
                 self.assertEqual(
                     result.formatted_sample.text[entity.start:entity.end],
@@ -288,7 +296,7 @@ class QualityFirstPipelineTests(unittest.TestCase):
                 result.token_usage.total_tokens + 90,
             )
 
-    def test_fixable_deterministic_metadata_issue_reaches_judge_and_repair(self) -> None:
+    def test_missing_generator_metadata_is_synchronized_before_judge(self) -> None:
         class MissingMetadataGenerator:
             @staticmethod
             def generate(messages):
@@ -364,11 +372,12 @@ class QualityFirstPipelineTests(unittest.TestCase):
 
             result = pipeline.generate_pending(run.run_id, 1)[0]
 
-            issue_types = {
-                issue["type"]
-                for issue in verifier.judge_envelopes[0]["deterministic_issues"]
-            }
-            self.assertIn("missing_entity_metadata", issue_types)
+            first_envelope = verifier.judge_envelopes[0]
+            self.assertEqual(first_envelope["deterministic_issues"], [])
+            self.assertEqual(
+                first_envelope["candidate"]["entities"],
+                [{"label": "PERSON", "value": "Nguyen An"}],
+            )
             self.assertEqual(result.verification_trace.outcome, "FIXED")
             self.assertTrue(result.output_validation.valid)
             self.assertEqual(len(result.formatted_sample.entities), 1)
@@ -453,6 +462,93 @@ class QualityFirstPipelineTests(unittest.TestCase):
             self.assertEqual(results, [])
             self.assertEqual(repository.get_run(run.run_id).status, "FAILED")
             self.assertEqual(list(Path(directory).glob("*.json")), [])
+
+    def test_best_effort_mode_accepts_last_structurally_safe_candidate(self) -> None:
+        class AlwaysSemanticallyInvalidClient:
+            @staticmethod
+            def generate(messages):
+                return "No required entity was generated.", [], 10, 5, 15
+
+        with TemporaryDirectory() as directory:
+            pipeline, repository, events = build_pipeline(
+                offline=True,
+                output_directory=Path(directory),
+            )
+            run = pipeline.create_run(
+                self._positive_person_request(
+                    max_regenerate_attempts=0,
+                    max_task_replacements=1,
+                    validation={
+                        "quality_checks_enabled": True,
+                        "accept_last_candidate_on_exhaustion": True,
+                    },
+                )
+            )
+            pipeline.generator.client = AlwaysSemanticallyInvalidClient()
+
+            results = pipeline.generate_pending(run.run_id, 1)
+
+            self.assertEqual(len(results), 1)
+            self.assertFalse(results[0].output_validation.valid)
+            self.assertEqual(
+                results[0].formatted_sample.text,
+                "No required entity was generated.",
+            )
+            self.assertEqual(repository.get_run(run.run_id).status, "COMPLETED")
+            self.assertTrue(
+                repository.get_run(run.run_id).output_path.endswith(".json")
+            )
+            event_types = [event.event_type for event in events.list_events()]
+            self.assertIn("sample.fallback_accepted", event_types)
+
+    def test_best_effort_mode_can_audit_verifier_regenerate_and_finalize(self) -> None:
+        class AlwaysRegenerateVerifier:
+            @staticmethod
+            def judge(messages):
+                return VerifierDecision(
+                    status="REGENERATE",
+                    score=40,
+                    issues=[VerificationIssue(
+                        type="CONTENT_QUALITY",
+                        severity="high",
+                        field="candidate",
+                        reason="The verifier requests another generation.",
+                        suggested_fix="Generate a more natural candidate.",
+                    )],
+                    token_usage=TokenUsage.zero(),
+                    latency_ms=1,
+                    model="fake-verifier",
+                    prompt_version="judge.test",
+                )
+
+            @staticmethod
+            def repair(messages):
+                raise AssertionError("repair must not run for REGENERATE")
+
+        with TemporaryDirectory() as directory:
+            pipeline, repository, events = build_pipeline(
+                offline=True,
+                output_directory=Path(directory),
+            )
+            pipeline.verifier.client = AlwaysRegenerateVerifier()
+            run = pipeline.create_run(self._positive_person_request(
+                max_regenerate_attempts=0,
+                max_task_replacements=0,
+                validation={
+                    "quality_checks_enabled": True,
+                    "accept_last_candidate_on_exhaustion": True,
+                },
+                verifier={"enabled": True},
+            ))
+
+            result = pipeline.generate_pending(run.run_id, 1)[0]
+
+            self.assertEqual(result.verification_trace.outcome, "REGENERATE")
+            self.assertEqual(repository.get_run(run.run_id).status, "COMPLETED")
+            self.assertIn(
+                "sample.fallback_accepted",
+                [event.event_type for event in events.list_events()],
+            )
 
     def test_failed_run_keeps_only_partial_artifact_for_accepted_slots(self) -> None:
         class AcceptFirstThenFail:

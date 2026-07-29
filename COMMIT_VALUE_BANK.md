@@ -703,3 +703,115 @@ offset không thay đổi. Terminal summary vẫn báo tổng token toàn run.
   `max_shard_retries=2`. Parallel runner lưu console/diagnostic log riêng cho từng
   shard attempt và báo progress trên terminal. Tên thư mục artifact được giữ ngắn
   (`shards-<id>/sNNN-aN`) để không vượt giới hạn đường dẫn trên Windows/OneDrive.
+
+## 23. Tách token Generator và Verifier
+
+- Giữ nguyên tổng `token_usage.input_tokens`, `output_tokens`, `total_tokens` và
+  `money_cost` trong summary để tương thích với consumer hiện tại.
+- Mỗi sample final có thêm `token_usage.generator` và `token_usage.verifier`;
+  mỗi nhánh chứa input/output token của đúng model theo vai trò.
+- Summary serial và parallel có hai nhánh cùng tên, bổ sung `total_tokens` và
+  `money_cost`. Nhánh Verifier gộp Judge, Repair và re-Judge.
+- Terminal log cuối phiên và log hoàn thành từng shard hiển thị token tách theo
+  Generator/Verifier.
+- Có thể cấu hình giá riêng bằng bốn biến:
+  `GENERATOR_INPUT_TOKEN_PRICE_PER_MILLION_USD`,
+  `GENERATOR_OUTPUT_TOKEN_PRICE_PER_MILLION_USD`,
+  `VERIFIER_INPUT_TOKEN_PRICE_PER_MILLION_USD` và
+  `VERIFIER_OUTPUT_TOKEN_PRICE_PER_MILLION_USD`.
+- Nếu không khai báo giá theo vai trò, code fallback về
+  `INPUT_TOKEN_PRICE_PER_MILLION_USD` và
+  `OUTPUT_TOKEN_PRICE_PER_MILLION_USD` cũ.
+
+## 24. Làm cứng routing contract của Verifier
+
+- Response `FIXABLE` có severity `medium`/`high` được chuẩn hóa về `low`, vì
+  `FIXABLE` đã chọn rõ route sửa cục bộ và Repair vẫn phải qua deterministic
+  recheck cùng re-Judge.
+- Response mâu thuẫn `FIXABLE` + `critical` không bị hạ severity; code chuyển an
+  toàn sang `REJECTED` và bỏ edits.
+- Alias phổ biến `target_value` trong edit được ánh xạ sang `value` hoặc
+  `source_value` phù hợp thay vì làm chết toàn shard.
+- Prompt Judge v3.4.0 yêu cầu mọi issue `FIXABLE` có severity `low` và cấm các
+  alias edit ngoài schema.
+- Các chuẩn hóa đều ghi warning để có thể audit chất lượng response của model.
+
+## 25. Cấu hình file theo ngôn ngữ và hardening English parallel run
+
+### Mapping Value Bank
+
+Run config có thêm `value_bank.language_files`. `value_bank.path` là thư mục gốc,
+còn mapping quyết định chính xác file dùng cho từng `RunConfig.language`:
+
+```json
+{
+  "language": "en",
+  "value_bank": {
+    "path": "PII_Value_Bank",
+    "language_files": {
+      "vi": "vi_pii_value_pools.json",
+      "en": "en_pii_value_pools.json",
+      "de": "de_pii_value_pools.json"
+    }
+  }
+}
+```
+
+Tên file tương đối được resolve từ `path`; đường dẫn file tuyệt đối cũng hợp lệ.
+Thiếu mapping ngôn ngữ, thiếu file, JSON sai, locale sai, thiếu class hoặc class rỗng
+đều dừng ở `value_bank_error`. Không có fallback sang Faker và không file JSON nào
+trong Value Bank bị sửa.
+
+### Nguyên nhân các lần chạy English bị lỗi
+
+Việc chọn `en_pii_value_pools.json` chỉ tác động positive seed. Hard-negative decoy
+được tạo từ strategy registry của code, và trước thay đổi này các context cue vẫn là
+tiếng Việt. Ngoài ra, model có thể tự tạo placeholder không thuộc seed, dùng seed
+placeholder ngoài tag, lặp một decoy tự nhiên hoặc lặp tag nhưng chỉ trả một metadata
+entry. Những trường hợp này làm deterministic validation thất bại lặp lại ở nhiều
+shard; đây không chỉ là một lỗi ngữ cảnh ngẫu nhiên.
+
+### Cách xử lý
+
+- Required/forbidden hard-negative cue được bản địa hóa theo `vi`, `en`, `de` trước
+  khi đưa vào prompt và validator; decoy value được giữ nguyên.
+- Hard-negative cho phép tối đa ba occurrence khi cách dùng vẫn đúng ngữ cảnh.
+- Python chỉ chèn Value Bank value vào placeholder nằm trong đúng tag.
+- Placeholder seed nằm ngoài tag và placeholder lạ do model tạo được sửa thành tham
+  chiếu phi PII theo ngôn ngữ, không làm lộ positive seed không được annotate.
+- Entity metadata được dựng lại từ tagged text sau replacement, bao gồm mọi tag lặp.
+- Prompt Generator được nâng lên `data-generator.v11.6.0`.
+- Parallel runner ghi `*-failed-summary.json` khi một hoặc nhiều shard hết retry,
+  báo rõ shard lỗi và artifact directory, không in traceback dài và không hợp nhất
+  một dataset thiếu mẫu.
+- Run name nội bộ của shard/retry được rút gọn có kiểm soát để dataset, summary và
+  file `.tmp` không vượt giới hạn đường dẫn Windows trong workspace OneDrive sâu.
+
+## 26. Mixed-contrastive retry và final-candidate fallback
+
+- Judge v3.5.0 coi `seed_contract.hard_negative_mode` là ràng buộc: mode
+  `mixed_contrastive` giữ tagged positive seed cùng untagged decoy; không được áp
+  quy tắc `decoy_only` rồi yêu cầu xóa positive seed.
+- Repair v1.4.0 giữ cùng hợp đồng để không làm mất positive seed khi sửa cục bộ.
+- Lần xuất hiện đầu của schema-code decoy vẫn phải có nguyên cue `schema field` hoặc
+  `data field`. Sau khi vai trò đã rõ, đoạn sau được phép nhắc lại chính code đó bằng
+  head noun `field`; đây là coreference tự nhiên, không còn bị
+  `decoy_context_unclear`.
+- Placeholder lạ như `ACCOUNT_ID` và `STAFF_ID` được đổi thành cụm phi PII tự nhiên
+  theo ngôn ngữ thay vì cụm chung chung `the referenced value`.
+- Config online bật:
+
+```json
+{
+  "validation": {
+    "accept_last_candidate_on_exhaustion": true
+  }
+}
+```
+
+- Policy chỉ chạy sau khi hết cả Generator attempt và task replacement. Candidate
+  cuối phải qua Formatter preflight để bảo đảm tag, label, span và offset hợp lệ.
+  Mẫu được accept kèm event `sample.fallback_accepted`; summary báo
+  `fallback_accepts`.
+- Lỗi hạ tầng, Value Bank, JSON/tag không thể format hoặc
+  `credential_risk`/`real_pii_risk` critical vẫn không được ép thành dataset.

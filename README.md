@@ -24,10 +24,11 @@ POST /api/v1/runs
 
 Hard-negative mặc định chạy theo mode `decoy_only`: hệ thống chọn ngẫu nhiên đúng một mã trong `focus_labels`, tạo decoy theo registry phủ đủ 44 mã của taxonomy, không tạo positive entity và yêu cầu output `entities: []`. Chỉ mã nhãn chính xác từ taxonomy snapshot được chấp nhận; tài liệu PDF hard-negative chỉ cung cấp nguyên tắc thiết kế ví dụ, không cung cấp label cho code.
 
-Positive entity value được lấy từ `PII_Value_Bank/{vi,en,de}_pii_value_pools.json`
-theo `RunConfig.language` và taxonomy class. LLM chỉ viết nội dung cùng placeholder
-như `[PERSON_1]`; Python chèn value trước validator và formatter. Cấu hình thư mục
-qua `value_bank.path` trong run config. Xem chi tiết tại
+Positive entity value được lấy từ file ánh xạ theo `RunConfig.language` và taxonomy
+class. Mặc định `en` dùng `PII_Value_Bank/en_pii_value_pools.json`. LLM chỉ viết nội
+dung cùng placeholder như `[PERSON_1]`; Python chèn value trước validator và
+formatter. Cấu hình thư mục qua `value_bank.path` và tên file từng ngôn ngữ qua
+`value_bank.language_files` trong run config. Xem chi tiết tại
 [README_V2.md](README_V2.md#34-value-bank-và-seed-generation).
 
 - Tài liệu kiến trúc tổng thể: [README_V2.md](README_V2.md)
@@ -59,7 +60,15 @@ python -m pii_factory.parallel `
 
 Config này dùng `workers=10`, `shard_size=1`: mỗi sample là một shard/process độc
 lập. Runner lưu log từng shard, file dataset hợp nhất và file `*-summary.json` chứa
-tổng input/output token của toàn phiên.
+tổng input/output token của toàn phiên, tách riêng Generator và Verifier. Nếu có
+shard hết retry, runner chờ các shard đang chạy kết thúc, ghi `*-failed-summary.json`
+rồi dừng mà không xuất dataset thiếu mẫu.
+
+Config online có thể bật
+`validation.accept_last_candidate_on_exhaustion=true`. Khi toàn bộ Generator attempt
+và task replacement đã hết, candidate cuối vẫn được xuất nếu Formatter xác nhận
+schema, tag và offset an toàn; summary tăng `fallback_accepts`. Lỗi hạ tầng, Value
+Bank hoặc credential/real-PII critical không bị ép thành sample.
 
 Đo độ đa dạng 100 sample mà không gọi Azure:
 

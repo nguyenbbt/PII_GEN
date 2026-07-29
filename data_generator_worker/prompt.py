@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 from .contracts import DataGenerationRequest
 from .placeholders import placeholder_entities
 
-PROMPT_VERSION = "data-generator.v11.4.0"
+PROMPT_VERSION = "data-generator.v11.6.0"
 
 SYSTEM_PROMPT = """# Role
 You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
@@ -86,7 +86,7 @@ HARD_NEGATIVE_DECOY_ONLY_RULES = [
     "Use every decoy once by default; preserve it character-for-character and leave every occurrence untagged.",
     "A decoy may appear up to three times only when the same event naturally requires a confirmation, correction, quotation, or cross-reference of the exact value.",
     "Return no XML tags and return entities as an empty array.",
-    "Use each decoy as the semantic_type stated in its metadata. Copy at least one required_context_cue unchanged into the sentence containing its first occurrence. A later occurrence may omit the cue only in the same paragraph; when it moves to another paragraph, give that occurrence its own required cue.",
+    "Use each decoy as the semantic_type stated in its metadata. Copy at least one required_context_cue unchanged into the sentence containing its first occurrence. A later occurrence may omit the cue in the same paragraph. In another paragraph, repeat the exact cue; for an already-established schema field only, the unambiguous head noun 'field' is also accepted.",
     "Make the non-PII role clear through natural business context; do not add meta explanations such as 'this is not PII'.",
     "Do not generate any positive PII, additional lookalikes, or additional identifiers.",
     "All content must form one coherent event or document; repetition must serve the event and must never be filler added merely to mention a decoy.",
@@ -95,8 +95,8 @@ HARD_NEGATIVE_DECOY_ONLY_RULES = [
 HARD_NEGATIVE_MIXED_RULES = [
     "Use and correctly tag every placeholder in positive_entities without changing any character; if repeated, tag every occurrence and repeat its metadata entry.",
     "Square brackets are mandatory in every placeholder: write [PERSON_1], never PERSON_1.",
-    "Use every decoy exactly once and leave it untagged.",
-    "Place each decoy in its semantic_type role and copy at least one required_context_cue unchanged into the same sentence.",
+    "Use every decoy once by default and leave it untagged. A natural confirmation, correction, quotation, or cross-reference may repeat the same decoy up to three times.",
+    "Place each decoy in its semantic_type role and copy at least one required_context_cue unchanged into the sentence containing its first occurrence. A later occurrence may omit the cue in the same paragraph. In another paragraph, repeat the exact cue; for an already-established schema field only, the unambiguous head noun 'field' is also accepted.",
     "The local context must clearly show that the decoy is not an entity of target_label.",
     "When a positive seed's surface form could match another taxonomy label or a non-PII sense, use nearby domain, action, and object cues to prove its assigned taxonomy label; annotation follows meaning, not spelling or capitalization alone.",
     "Apply this disambiguation principle to cases such as travel visa versus the VISA bank-card network: travel-document context must not be inferred as CARD_ISSUER, while a bank-card network requires explicit card or payment context. Do not invent a visa label, value, or entity.",
@@ -316,8 +316,10 @@ def _hard_negative_instance_rules(seed_pack: Mapping[str, Any]) -> list[str]:
             rules.append(
                 f"{shared} Integrate it as an operational cause, input, or object of the action that "
                 "also involves the positive entities. Make those values the actual record or payload processed through "
-                "this decoy, and state their operational relationship directly. Do not append a disclaimer; end with "
-                "what the workflow does or what failed."
+                "this decoy, and state their operational relationship directly. Use it once unless a later reference is "
+                "necessary; if repeated in another paragraph, repeat the exact cue (or use the head noun 'field' only "
+                "after a schema/data field has already been established). Do not append a disclaimer; end with what the "
+                "workflow does or what failed."
             )
     return rules
 

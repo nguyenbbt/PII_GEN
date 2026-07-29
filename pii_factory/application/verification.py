@@ -35,8 +35,8 @@ _ENTITY_TAG_PATTERN = re.compile(
     re.DOTALL,
 )
 
-JUDGE_PROMPT_VERSION = "verifier-judge.v3.3.0"
-REPAIR_PROMPT_VERSION = "verifier-repair.v1.3.0"
+JUDGE_PROMPT_VERSION = "verifier-judge.v3.5.0"
+REPAIR_PROMPT_VERSION = "verifier-repair.v1.4.0"
 
 _JUDGE_SYSTEM_PROMPT = f"""You judge semantic quality of synthetic PII NER data.
 Prompt version: {JUDGE_PROMPT_VERSION}
@@ -51,6 +51,9 @@ Deterministic validation runs first:
 - For contracts, judge coherence but do not invent a numeric content-unit count.
 
 Judge only:
+0. hard_negative_mode is binding: mixed_contrastive keeps tagged
+   positive seeds plus untagged decoys; never apply decoy_only rules to it.
+   decoy_only requires entities=[].
 1. Each tagged value has the taxonomy meaning and boundary required by its role.
    ADDRESS is street/premise detail; LOCATION is administrative geography;
    ZIP_CODE is separate.
@@ -74,11 +77,11 @@ Judge only:
    identifier. An order number, travel/reservation booking code, invoice number,
    document reference, contract reference, or flight number is not TICKET_ID and
    must remain untagged unless that exact value is an authoritative positive seed.
-2. The Vietnamese text is coherent and natural. Reject filler, repetitive
+2. The text uses task.language and is coherent and natural. Reject filler, repetitive
    scaffolding, unrelated clauses, unnatural seed insertion, or a comma-separated
    entity inventory.
-3. Decoys are untagged, match their non-PII semantic role and local cues, and are
-   necessary to the event.
+3. Keep decoys untagged in their stated non-PII role. Require an exact cue first;
+   an established schema/data field may later be called `field`.
 4. Focus-label few-shot examples teach semantics only. Reject recognizable copying
    of their scenario, opening, clause order, or sentence skeleton.
 5. Human-facing bracket fields such as [Tên Công ty], [Ngày], [Chức danh],
@@ -94,6 +97,9 @@ suggested_fix must always be a non-empty string, never null. For REGENERATE, des
 how the next generation should avoid the failure.
 Severity must be exactly low, medium, high, or critical; never emit minor, major,
 warning, error, or synonyms.
+Every issue in a FIXABLE decision must use severity low. Never combine FIXABLE with
+medium, high, or critical; use REGENERATE for non-local medium/high findings and
+REJECTED for critical findings.
 For PASS, REGENERATE, and REJECTED, return edits as an empty array. For FIXABLE,
 return one or more executable local edits. Every edit must contain action and a
 plain-language reason explaining the taxonomy/context evidence and why the change is
@@ -102,7 +108,8 @@ replace_template_artifact, and sync_entities. add_tag uses label, value, occurre
 split_tag uses source_label, source_value, segments; replace_template_artifact uses
 source_value and replacement. occurrence is a one-based integer: use 1 for the first
 matching value, 2 for the second, and never use 0. Never put a full rewritten
-candidate inside edits.
+candidate inside edits. Use only the documented field names; never output
+target_value, target_label, new_value, or other aliases.
 
 Error examples (examples teach decisions, never copy their prose):
 - `[Tên Công ty]` or `[Ngày]` in finished text -> TEMPLATE_ARTIFACT/FIXABLE and a
@@ -144,8 +151,12 @@ original label. Tag every positive-seed occurrence consistently; do not delete a
 natural textual repetition merely because the value repeats. Include one entities
 entry for every tagged span, including repeated label/value pairs. Preserve every decoy
 value and occurrence count untagged, and do not change the task intent, focus labels,
-or sample type. Make
-only the local repairs requested by the low-severity issues. After changing boundaries
+or sample type. When seed_contract.hard_negative_mode is mixed_contrastive, tagged
+positive seeds are mandatory and must never be removed as if the sample were
+decoy_only. Keep decoys untagged. After a schema-code decoy is introduced with
+`schema field` or `data field`, a later paragraph may refer to the same code using
+the unambiguous head noun `field`. Make only the local repairs requested by the
+low-severity issues. After changing boundaries
 or tags, synchronize entities exactly with the final tagged spans; offsets are computed
 later by deterministic code and must not be returned. Treat `edits` as the executable
 plan and each edit's `reason` as explanation only; apply the edit to the exact supplied
@@ -247,10 +258,12 @@ class VerificationRoutingError(ValueError):
         status: str,
         issues: Sequence[VerificationIssue],
         trace: VerificationTrace | None = None,
+        candidate: GenerationCandidate | None = None,
     ) -> None:
         self.status = status
         self.issues = list(issues)
         self.trace = trace
+        self.candidate = candidate
         super().__init__("; ".join(issue.reason for issue in self.issues) or status)
 
 
@@ -318,12 +331,14 @@ class VerifierService:
                 initial.status,
                 initial.issues,
                 VerificationTrace(initial_judge=initial, outcome=initial.status),
+                candidate,
             )
         if self.max_repairs_per_candidate < 1:
             raise VerificationRoutingError(
                 "REGENERATE",
                 initial.issues,
                 VerificationTrace(initial_judge=initial, outcome="REGENERATE"),
+                candidate,
             )
 
         logger.info(
@@ -397,6 +412,7 @@ class VerifierService:
                     repair=repair,
                     outcome="REGENERATE",
                 ),
+                candidate,
             )
 
         validation = revalidate(repaired_candidate)
@@ -427,6 +443,7 @@ class VerifierService:
                     repair=repair,
                     outcome="REGENERATE",
                 ),
+                repaired_candidate,
             )
 
         logger.info(
@@ -525,6 +542,7 @@ class VerifierService:
                         final_judge=final,
                         outcome="REGENERATE",
                     ),
+                    repaired_candidate,
                 )
             second_validation = revalidate(second_candidate)
             if not second_validation.valid:
@@ -561,6 +579,7 @@ class VerifierService:
                         final_judge=final,
                         outcome="REGENERATE",
                     ),
+                    second_candidate,
                 )
 
             logger.info(
@@ -622,6 +641,7 @@ class VerifierService:
                     final_judge=final,
                     outcome=status,
                 ),
+                repaired_candidate,
             )
         return repaired_candidate, VerificationTrace(
             initial_judge=initial,

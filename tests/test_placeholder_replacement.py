@@ -80,47 +80,88 @@ class PlaceholderReplacementTests(unittest.TestCase):
             ["Nguyễn An", "Lê 🧑‍💻 Bình"],
         )
 
-    def test_unknown_placeholder_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "unknown or unresolved"):
-            replace_entity_placeholders(
-                tagged_text="<PERSON>[PERSON_1]</PERSON> [EMAIL_9]",
-                entities=[{"label": "PERSON", "value": "[PERSON_1]"}],
-                positive_entities=self.positive_entities[:1],
-            )
-
-    def test_placeholder_without_square_brackets_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "without required square brackets"):
-            replace_entity_placeholders(
-                tagged_text="<PERSON>PERSON_1</PERSON>",
-                entities=[{"label": "PERSON", "value": "PERSON_1"}],
-                positive_entities=self.positive_entities[:1],
-            )
-
-    def test_existing_seed_validator_rejects_missing_or_duplicate_placeholder(self) -> None:
-        cases = (
-            (
-                "Không có người trong hồ sơ.",
-                [],
-            ),
-            (
-                "<PERSON>[PERSON_1]</PERSON> [PERSON_1]",
-                [{"label": "PERSON", "value": "[PERSON_1]"}],
-            ),
+    def test_unknown_placeholder_becomes_generic_non_pii_reference(self) -> None:
+        tagged_text, entities = replace_entity_placeholders(
+            tagged_text="<PERSON>[PERSON_1]</PERSON> [EMAIL_9]",
+            entities=[{"label": "PERSON", "value": "[PERSON_1]"}],
+            positive_entities=self.positive_entities[:1],
+            language="en",
         )
-        for tagged_text, entities in cases:
-            with self.subTest(tagged_text=tagged_text):
-                bound_text, bound_entities = replace_entity_placeholders(
-                    tagged_text=tagged_text,
-                    entities=entities,
-                    positive_entities=self.positive_entities[:1],
-                )
-                with self.assertRaises(ValueError):
-                    validate_seeded_contract(
-                        tagged_text=bound_text,
-                        entities=bound_entities,
-                        positive_entities=self.positive_entities[:1],
-                        decoys=[],
-                    )
+
+        self.assertEqual(
+            tagged_text,
+            "<PERSON>Nguyễn An</PERSON> an internal reference",
+        )
+        self.assertEqual(
+            entities,
+            [{"label": "PERSON", "value": "Nguyễn An"}],
+        )
+
+    def test_known_bare_placeholder_inside_tag_is_repaired(self) -> None:
+        tagged_text, entities = replace_entity_placeholders(
+            tagged_text="<PERSON>PERSON_1</PERSON>",
+            entities=[{"label": "PERSON", "value": "PERSON_1"}],
+            positive_entities=self.positive_entities[:1],
+        )
+
+        self.assertEqual(tagged_text, "<PERSON>Nguyễn An</PERSON>")
+        self.assertEqual(
+            entities,
+            [{"label": "PERSON", "value": "Nguyễn An"}],
+        )
+
+    def test_untagged_known_placeholder_does_not_leak_seed_value(self) -> None:
+        tagged_text, entities = replace_entity_placeholders(
+            tagged_text=(
+                "Subject: [PERSON_1]\n"
+                "Record: <PERSON>[PERSON_1]</PERSON>"
+            ),
+            entities=[{"label": "PERSON", "value": "[PERSON_1]"}],
+            positive_entities=self.positive_entities[:1],
+            language="en",
+        )
+
+        self.assertEqual(tagged_text.count("Nguyễn An"), 1)
+        self.assertIn("Subject: the referenced person", tagged_text)
+        validate_seeded_contract(
+            tagged_text=tagged_text,
+            entities=entities,
+            positive_entities=self.positive_entities[:1],
+            decoys=[],
+        )
+
+    def test_entity_metadata_is_synchronized_from_repeated_tags(self) -> None:
+        tagged_text, entities = replace_entity_placeholders(
+            tagged_text=(
+                "<PERSON>[PERSON_1]</PERSON> confirmed; "
+                "<PERSON>[PERSON_1]</PERSON> signed."
+            ),
+            entities=[{"label": "PERSON", "value": "[PERSON_1]"}],
+            positive_entities=self.positive_entities[:1],
+            language="en",
+        )
+
+        self.assertEqual(len(entities), 2)
+        validate_seeded_contract(
+            tagged_text=tagged_text,
+            entities=entities,
+            positive_entities=self.positive_entities[:1],
+            decoys=[],
+        )
+
+    def test_existing_seed_validator_still_rejects_missing_placeholder(self) -> None:
+        bound_text, bound_entities = replace_entity_placeholders(
+            tagged_text="Không có người trong hồ sơ.",
+            entities=[],
+            positive_entities=self.positive_entities[:1],
+        )
+        with self.assertRaises(ValueError):
+            validate_seeded_contract(
+                tagged_text=bound_text,
+                entities=bound_entities,
+                positive_entities=self.positive_entities[:1],
+                decoys=[],
+            )
 
 
 if __name__ == "__main__":

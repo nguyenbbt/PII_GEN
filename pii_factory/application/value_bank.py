@@ -48,9 +48,17 @@ class ValueBankEntityProvider:
     remains the source of truth for sampling probabilities.
     """
 
-    def __init__(self, value_bank_path: str | Path = "PII_Value_Bank") -> None:
+    def __init__(
+        self,
+        value_bank_path: str | Path = "PII_Value_Bank",
+        language_files: Mapping[str, str | Path] | None = None,
+    ) -> None:
         path = Path(value_bank_path).expanduser()
         self.path = path if path.is_absolute() else Path.cwd() / path
+        self.language_files = {
+            self._normalise_language(language): Path(file_path).expanduser()
+            for language, file_path in (language_files or {}).items()
+        }
         self._banks: Dict[str, Dict[str, tuple[str, ...]]] = {}
 
     def generate(
@@ -107,11 +115,23 @@ class ValueBankEntityProvider:
         cached = self._banks.get(language)
         if cached is not None:
             return cached
-        if not self.path.is_dir():
+        configured_file = self.language_files.get(language)
+        if self.language_files and configured_file is None:
             raise ValueBankLanguageError(
-                f"Value Bank directory does not exist or is not a directory: {self.path}"
+                f"Value Bank has no configured file for language {language!r}"
             )
-        file_path = self.path / f"{language}_pii_value_pools.json"
+        configured_file = configured_file or Path(
+            f"{language}_pii_value_pools.json"
+        )
+        if configured_file.is_absolute():
+            file_path = configured_file
+        else:
+            if not self.path.is_dir():
+                raise ValueBankLanguageError(
+                    "Value Bank directory does not exist or is not a "
+                    f"directory: {self.path}"
+                )
+            file_path = self.path / configured_file
         if not file_path.is_file():
             raise ValueBankLanguageError(
                 f"Value Bank has no file for language {language!r}: {file_path}"

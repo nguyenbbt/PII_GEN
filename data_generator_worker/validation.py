@@ -184,9 +184,10 @@ def decoy_contexts_are_valid(
     """Validate cue placement for repeated hard-negative decoys.
 
     The first occurrence must be explicitly introduced by a required cue.
-    A later occurrence may omit the cue only when it remains in the same
-    paragraph as the first occurrence. A later occurrence in another paragraph
-    must carry its own cue.
+    A later occurrence may omit the cue when it remains in the same paragraph.
+    In another paragraph it needs either the full cue or an unambiguous
+    established head noun. For example, after ``schema field`` introduces a
+    schema-code decoy, a later ``the ... field`` reference is natural and safe.
     """
     clean = _ANY_TAG.sub("", text)
     cues = [
@@ -216,6 +217,20 @@ def decoy_contexts_are_valid(
     if not has_cue(contexts[0]):
         return False
 
+    repeated_reference_heads = {
+        head
+        for cue in cues
+        for head in (cue.rsplit(maxsplit=1)[-1],)
+        if head in {"field", "feld"}
+    }
+
+    def has_established_short_reference(context: str) -> bool:
+        folded = context.casefold()
+        return any(
+            re.search(rf"\b{re.escape(head)}\b", folded)
+            for head in repeated_reference_heads
+        )
+
     paragraph_breaks = [
         match.start()
         for match in re.finditer(r"(?:\r?\n)\s*(?:\r?\n)", clean)
@@ -226,7 +241,9 @@ def decoy_contexts_are_valid(
 
     first_paragraph = paragraph_number(positions[0])
     return all(
-        paragraph_number(position) == first_paragraph or has_cue(context)
+        paragraph_number(position) == first_paragraph
+        or has_cue(context)
+        or has_established_short_reference(context)
         for position, context in zip(positions[1:], contexts[1:])
     )
 
@@ -323,4 +340,7 @@ def validate_seeded_contract(
                 decoy.get("required_context_cues", []),
             )
         ):
-            raise ValueError(f"a decoy occurrence has no required context cue: {value}")
+            raise ValueError(
+                "a decoy occurrence has no required context cue or valid "
+                f"established short reference: {value}"
+            )

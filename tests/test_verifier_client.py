@@ -196,6 +196,86 @@ class AzureOpenAIVerifierClientTests(unittest.TestCase):
         self.assertIn("Regenerate", decision.issues[0].suggested_fix)
         self.assertIn("missing suggested_fix", "\n".join(captured.output))
 
+    def test_judge_normalizes_fixable_severity_and_target_value_alias(self) -> None:
+        transport = FakeJsonTransport(
+            {
+                "status": "FIXABLE",
+                "score": 82,
+                "issues": [{
+                    "type": "MISSING_ANNOTATION",
+                    "severity": "high",
+                    "field": "tagged_text",
+                    "reason": "The explicit date is missing its DATE tag.",
+                    "suggested_fix": "Add the DATE tag locally.",
+                }],
+                "edits": [{
+                    "action": "add_tag",
+                    "label": "DATE",
+                    "target_value": "27/10/2023",
+                    "occurrence": 1,
+                    "reason": "The date cue makes the local label unambiguous.",
+                }],
+            }
+        )
+        client = AzureOpenAIVerifierClient(
+            settings(),
+            input_price_per_million=Decimal("2.50"),
+            output_price_per_million=Decimal("10.00"),
+            transport=transport,
+        )
+
+        with self.assertLogs(
+            "pii_factory.infrastructure.clients",
+            level="WARNING",
+        ) as captured:
+            decision = client.judge([{"role": "system", "content": "judge"}])
+
+        self.assertEqual(decision.status, "FIXABLE")
+        self.assertEqual(decision.issues[0].severity, "low")
+        self.assertEqual(decision.edits[0].value, "27/10/2023")
+        messages = "\n".join(captured.output)
+        self.assertIn("medium/high FIXABLE", messages)
+        self.assertIn("target_value", messages)
+
+    def test_judge_never_downgrades_critical_fixable_issue(self) -> None:
+        transport = FakeJsonTransport(
+            {
+                "status": "FIXABLE",
+                "score": 10,
+                "issues": [{
+                    "type": "REAL_PII_RISK",
+                    "severity": "critical",
+                    "field": "tagged_text",
+                    "reason": "The sample contains unsafe real PII.",
+                    "suggested_fix": "Reject the sample.",
+                }],
+                "edits": [{
+                    "action": "remove_tag",
+                    "label": "PERSON",
+                    "value": "Unsafe value",
+                    "occurrence": 1,
+                    "reason": "The value is unsafe.",
+                }],
+            }
+        )
+        client = AzureOpenAIVerifierClient(
+            settings(),
+            input_price_per_million=Decimal("2.50"),
+            output_price_per_million=Decimal("10.00"),
+            transport=transport,
+        )
+
+        with self.assertLogs(
+            "pii_factory.infrastructure.clients",
+            level="WARNING",
+        ) as captured:
+            decision = client.judge([{"role": "system", "content": "judge"}])
+
+        self.assertEqual(decision.status, "REJECTED")
+        self.assertEqual(decision.issues[0].severity, "critical")
+        self.assertEqual(decision.edits, [])
+        self.assertIn("critical issue to REJECTED", "\n".join(captured.output))
+
     def test_invalid_or_contradictory_llm_payload_is_infrastructure_error(self) -> None:
         payloads = (
             {"status": "PASS", "score": 90, "issues": [{"unexpected": True}]},

@@ -375,7 +375,12 @@ class DeterministicOutputValidator:
         entity_values = {str(item.get("value", "")) for item in raw_entities}
         for decoy in seed_pack.decoys:
             occurrence_count = tagged_text.count(decoy.value)
-            max_occurrences = 3 if hard_decoy_only else 1
+            max_occurrences = (
+                3
+                if SampleType(seed_pack.sample_type)
+                == SampleType.HARD_NEGATIVE
+                else 1
+            )
             if occurrence_count < 1 or occurrence_count > max_occurrences:
                 issues.append(self._decoy_issue(
                     "decoy_occurrence",
@@ -401,8 +406,10 @@ class DeterministicOutputValidator:
                     "decoy_context_unclear",
                     (
                         "the first decoy occurrence must have one of these exact "
-                        "cues; later occurrences may omit it only in the same "
-                        f"paragraph: {cues}; observed context: {observed}"
+                        "cues; later occurrences may omit it in the same "
+                        "paragraph. A later schema/data-field paragraph may use "
+                        "the established short reference 'field'; otherwise "
+                        f"repeat an exact cue: {cues}; observed context: {observed}"
                     ),
                     decoy,
                 ))

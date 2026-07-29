@@ -32,10 +32,12 @@ logger = logging.getLogger(__name__)
 
 def _normalize_judge_payload(
     payload: dict[str, Any],
-) -> tuple[dict[str, Any], int, int]:
-    """Normalize harmless verifier indexing differences without relaxing the schema."""
+) -> tuple[dict[str, Any], int, int, int, int, int]:
+    """Normalize bounded, well-understood verifier contract variations."""
     normalized = dict(payload)
     normalized_suggested_fixes = 0
+    normalized_fixable_severities = 0
+    critical_fixable_issue = False
     raw_issues = payload.get("issues")
     if isinstance(raw_issues, list):
         status = str(payload.get("status") or "").strip().upper()
@@ -59,20 +61,51 @@ def _normalize_judge_payload(
             ):
                 issue["suggested_fix"] = fallback_fix
                 normalized_suggested_fixes += 1
+            severity = str(issue.get("severity") or "").strip().lower()
+            if status == "FIXABLE" and severity in {"medium", "high"}:
+                # FIXABLE already selects the local-repair route. Medium/high here
+                # is a redundant LLM classification mismatch, not a new route.
+                issue["severity"] = "low"
+                normalized_fixable_severities += 1
+            elif status == "FIXABLE" and severity == "critical":
+                # Never downgrade a critical finding into a local edit.
+                critical_fixable_issue = True
             normalized_issues.append(issue)
         normalized["issues"] = normalized_issues
+        if critical_fixable_issue:
+            normalized["status"] = "REJECTED"
+            normalized["edits"] = []
 
-    raw_edits = payload.get("edits")
+    raw_edits = normalized.get("edits")
     if not isinstance(raw_edits, list):
-        return normalized, 0, normalized_suggested_fixes
+        return (
+            normalized,
+            0,
+            normalized_suggested_fixes,
+            normalized_fixable_severities,
+            0,
+            int(critical_fixable_issue),
+        )
 
     normalized_edits: list[Any] = []
     normalized_occurrences = 0
+    normalized_target_values = 0
     for raw_edit in raw_edits:
         if not isinstance(raw_edit, dict):
             normalized_edits.append(raw_edit)
             continue
         edit = dict(raw_edit)
+        if "target_value" in edit:
+            target_value = edit.pop("target_value")
+            action = str(edit.get("action") or "").strip().lower()
+            destination = (
+                "source_value"
+                if action == "replace_template_artifact"
+                else "value"
+            )
+            if target_value is not None and not edit.get(destination):
+                edit[destination] = target_value
+            normalized_target_values += 1
         occurrence = edit.get("occurrence")
         if not isinstance(occurrence, bool) and (
             occurrence == 0
@@ -82,7 +115,14 @@ def _normalize_judge_payload(
             normalized_occurrences += 1
         normalized_edits.append(edit)
     normalized["edits"] = normalized_edits
-    return normalized, normalized_occurrences, normalized_suggested_fixes
+    return (
+        normalized,
+        normalized_occurrences,
+        normalized_suggested_fixes,
+        normalized_fixable_severities,
+        normalized_target_values,
+        int(critical_fixable_issue),
+    )
 
 
 def _validation_error_summary(exc: Exception) -> str:
@@ -437,6 +477,9 @@ class AzureOpenAIVerifierClient:
             payload,
             normalized_occurrences,
             normalized_suggested_fixes,
+            normalized_fixable_severities,
+            normalized_target_values,
+            normalized_critical_routes,
         ) = _normalize_judge_payload(completion.payload)
         if normalized_occurrences:
             logger.warning(
@@ -449,6 +492,23 @@ class AzureOpenAIVerifierClient:
                 "[llm verifier] filled %s missing suggested_fix value(s) "
                 "without discarding their issues",
                 normalized_suggested_fixes,
+            )
+        if normalized_fixable_severities:
+            logger.warning(
+                "[llm verifier] normalized %s medium/high FIXABLE issue "
+                "severity value(s) to low",
+                normalized_fixable_severities,
+            )
+        if normalized_target_values:
+            logger.warning(
+                "[llm verifier] normalized %s edit target_value alias(es) "
+                "to the supported value field",
+                normalized_target_values,
+            )
+        if normalized_critical_routes:
+            logger.warning(
+                "[llm verifier] routed contradictory FIXABLE decision with "
+                "critical issue to REJECTED",
             )
         try:
             return VerifierDecision(
