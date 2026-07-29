@@ -151,6 +151,37 @@ class DeterministicValidatorTests(unittest.TestCase):
 
         self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
 
+    def test_accepts_complete_date_range_and_compact_time_as_exact_spans(self) -> None:
+        pack = SeedPack(
+            task_id="temporal-range",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[
+                PositiveEntitySeed(
+                    label="PERSON",
+                    value="Mai Huyền",
+                    semantic_role="requester",
+                )
+            ],
+        )
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Mai Huyền</PERSON> trực từ ngày "
+                "<DATE>01 - 31.01.2024</DATE> lúc <TIME>7h30 sáng</TIME>."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value="Mai Huyền"),
+                GeneratedEntity(label="DATE", value="01 - 31.01.2024"),
+                GeneratedEntity(label="TIME", value="7h30 sáng"),
+            ],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            allowed_labels=["PERSON", "DATE", "TIME"],
+            max_entities=1,
+        )
+
+        self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
+
     def test_temporal_tags_reject_cue_and_timezone_inside_boundary(self) -> None:
         pack = SeedPack(
             task_id="temporal-boundary",
