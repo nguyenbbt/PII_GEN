@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from decimal import Decimal
 from pathlib import Path
@@ -18,6 +19,18 @@ from .infrastructure.clients import (
 from .infrastructure.memory import InMemoryEventBus, InMemoryRepository
 
 
+logger = logging.getLogger(__name__)
+
+DEFAULT_GENERATOR_COST_RATES = CostRates(
+    input_per_million_usd=Decimal("0.30"),
+    output_per_million_usd=Decimal("2.50"),
+)
+DEFAULT_VERIFIER_COST_RATES = CostRates(
+    input_per_million_usd=Decimal("1.25"),
+    output_per_million_usd=Decimal("10.00"),
+)
+
+
 def _role_cost_rates(role: str, fallback: CostRates) -> CostRates:
     prefix = role.upper()
     return CostRates(
@@ -32,10 +45,32 @@ def _role_cost_rates(role: str, fallback: CostRates) -> CostRates:
     )
 
 
+def _configured_role_cost_rates(
+    role: str,
+    default: CostRates,
+) -> CostRates:
+    """Resolve role price, preserving explicitly configured legacy fallbacks."""
+    legacy_fallback = CostRates(
+        input_per_million_usd=Decimal(os.getenv(
+            "INPUT_TOKEN_PRICE_PER_MILLION_USD",
+            str(default.input_per_million_usd),
+        )),
+        output_per_million_usd=Decimal(os.getenv(
+            "OUTPUT_TOKEN_PRICE_PER_MILLION_USD",
+            str(default.output_per_million_usd),
+        )),
+    )
+    return _role_cost_rates(role, legacy_fallback)
+
+
 def build_pipeline(
     offline: bool = False,
     output_directory: Path | str | None = None,
 ) -> tuple[Pipeline, InMemoryRepository, InMemoryEventBus]:
+    if not offline:
+        # Price overrides live beside model settings in .env. Load them before
+        # resolving role-specific rates; from_environment() remains idempotent.
+        AzureOpenAISettings._load_dotenv()
     repository = InMemoryRepository()
     event_bus = InMemoryEventBus()
     orchestrator = RunOrchestrator(repository, event_bus)
@@ -45,12 +80,22 @@ def build_pipeline(
         event_bus,
         taxonomy_for_run=orchestrator.taxonomy_for_run,
     )
-    fallback_rates = CostRates(
-        input_per_million_usd=Decimal(os.getenv("INPUT_TOKEN_PRICE_PER_MILLION_USD", "2.50")),
-        output_per_million_usd=Decimal(os.getenv("OUTPUT_TOKEN_PRICE_PER_MILLION_USD", "10.00")),
+    generator_rates = _configured_role_cost_rates(
+        "generator",
+        DEFAULT_GENERATOR_COST_RATES,
     )
-    generator_rates = _role_cost_rates("generator", fallback_rates)
-    verifier_rates = _role_cost_rates("verifier", fallback_rates)
+    verifier_rates = _configured_role_cost_rates(
+        "verifier",
+        DEFAULT_VERIFIER_COST_RATES,
+    )
+    logger.info(
+        "[cost] USD per 1M tokens generator_input=%s generator_output=%s "
+        "verifier_input=%s verifier_output=%s",
+        generator_rates.input_per_million_usd,
+        generator_rates.output_per_million_usd,
+        verifier_rates.input_per_million_usd,
+        verifier_rates.output_per_million_usd,
+    )
     if offline:
         client = OfflineCompletionClient()
         verifier_client = OfflineVerifierClient()

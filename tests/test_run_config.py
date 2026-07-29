@@ -113,6 +113,34 @@ class DistributionRunConfigTests(unittest.TestCase):
         self.assertIn("JOB_TITLE", task.annotation_labels)
         self.assertEqual(task.diversity_profile.document_structure, "chat")
 
+    def test_temporal_labels_are_available_without_opening_full_taxonomy(self) -> None:
+        config = RunConfig(
+            num_samples=1,
+            focus_labels=["PERSON"],
+            sample_structures=[{"type": "chat"}],
+            sample_type_distribution={
+                "positive": 1.0,
+                "pure_negative": 0.0,
+                "hard_negative": 0.0,
+            },
+            value_bank={"allow_additional_unseeded_pii": False},
+        )
+        pipeline, repository, _ = build_pipeline(offline=True)
+        taxonomy = pipeline.taxonomy_service.import_json(
+            Path("pii_taxonomy_rules.json")
+        )
+        run = pipeline.create_run(
+            CreateRunRequest(
+                taxonomy_version_id=taxonomy.version_id,
+                config=config,
+            )
+        )
+        task = repository.list_tasks(run.run_id)[0]
+
+        self.assertEqual(task.focus_labels, ["PERSON"])
+        self.assertEqual(task.annotation_labels, ["PERSON", "DATE", "TIME"])
+        self.assertNotIn("PLATE", task.annotation_labels)
+
     def test_custom_structure_requires_instruction_and_presets_reject_it(self) -> None:
         with self.assertRaisesRegex(
             ValidationError,

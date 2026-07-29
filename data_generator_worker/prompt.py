@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 from .contracts import DataGenerationRequest
 from .placeholders import placeholder_entities
 
-PROMPT_VERSION = "data-generator.v11.6.0"
+PROMPT_VERSION = "data-generator.v11.7.0"
 
 SYSTEM_PROMPT = """# Role
 You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
@@ -35,6 +35,12 @@ You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
     bracket slots such as [Tên Công ty], [Ngày], [Chức danh], [Tên Tài Xế],
     [Company Name], or similar fields. Square brackets are reserved exclusively for
     the supplied canonical entity placeholders such as [PERSON_1].
+11. When DATE is allowed, tag only the date expression: write
+    `Ngày <DATE>5 tháng 7 năm 2003</DATE>` or
+    `ngày <DATE>15 tháng 7</DATE>`, never include `Ngày/ngày` or another
+    leading cue inside DATE. When TIME is allowed, include AM/PM or Vietnamese
+    dayparts such as sáng, trưa, chiều, tối in TIME, but keep `lúc`, `vào lúc`,
+    UTC, GMT, and timezone names outside: `lúc <TIME>10:30 sáng</TIME> GMT`.
 
 # Few-Shot Use Policy
 - Examples under `taxonomy_guidance.focus_label.examples` teach label meaning,
@@ -70,7 +76,7 @@ POSITIVE_RULES = [
     "If a placeholder is repeated naturally, tag every occurrence and include one entities entry for every tagged occurrence.",
     "Preserve every placeholder character-for-character; do not normalize, translate, replace, or correct it.",
     "Return the same placeholder as the matching entities[].value; never invent the final entity value.",
-    "Do not invent additional PII.",
+    "Do not invent unrelated additional PII. If natural event context contains a DATE or TIME and that label is allowed, tag its exact boundary and include matching metadata.",
     "Do not append unrelated sentences merely to include seed values.",
     "Distribute the required entities across multiple sentences or turns and give each one a necessary role in the same business process.",
 ]
@@ -273,10 +279,24 @@ def _realization_rules(task: Mapping[str, Any]) -> list[str]:
                 f"Use robin entities {', '.join(robin_labels)} only to support the same event as {focus_label}; "
                 "do not attach them through unrelated clauses."
             )
-    labels = {str(label) for label in task.get("focus_labels", [])}
+    labels = {
+        str(label)
+        for label in (
+            task.get("annotation_labels")
+            or task.get("focus_labels", [])
+        )
+    }
     if labels & {"ADDRESS", "LOCATION", "ZIP_CODE"}:
         rules.append(
             "Keep street-level ADDRESS, administrative LOCATION, and postal ZIP_CODE spans separate even when they form one full mailing address."
+        )
+    if "DATE" in labels:
+        rules.append(
+            "For DATE, tag only the calendar expression (for example `5 tháng 7 năm 2003`, `15 tháng 7`, or `15 tháng 5 năm nay`); keep cue words such as `Ngày`, `ngày`, and `vào ngày` outside."
+        )
+    if "TIME" in labels:
+        rules.append(
+            "For TIME, include AM/PM or `sáng`, `trưa`, `chiều`, `tối` with the clock value, but keep `lúc`, `vào lúc`, UTC, GMT, and timezone names outside."
         )
     return rules
 

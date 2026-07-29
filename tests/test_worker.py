@@ -20,6 +20,21 @@ class FakeLLM:
 
 
 class DataGeneratorWorkerTests(unittest.TestCase):
+    def test_worker_defaults_to_gemini_flash_token_prices(self) -> None:
+        settings = Settings(
+            api_key="not-used",
+            base_url="https://gateway.example",
+        )
+
+        self.assertEqual(
+            settings.input_token_price_per_million_usd,
+            Decimal("0.30"),
+        )
+        self.assertEqual(
+            settings.output_token_price_per_million_usd,
+            Decimal("2.50"),
+        )
+
     def test_worker_emits_idempotent_data_generated_event(self) -> None:
         settings = Settings(
             api_key="not-used",

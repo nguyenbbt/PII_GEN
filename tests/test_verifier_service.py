@@ -218,6 +218,21 @@ class VerifierServiceTests(unittest.TestCase):
                     valid=False,
                     issues=[
                         ValidationIssue(
+                            type="temporal_boundary",
+                            scope="TEXT",
+                            reason="Keep Ngày and GMT outside the temporal tag.",
+                            label="DATE",
+                        ),
+                    ],
+                ),
+                "FIXABLE",
+                "low",
+            ),
+            (
+                DeterministicValidationResult(
+                    valid=False,
+                    issues=[
+                        ValidationIssue(
                             type="missing_positive_seed",
                             scope="TEXT",
                             reason="positive seed must appear with its exact tag",
@@ -307,6 +322,8 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertIn("occurrence is a one-based integer", system_prompt)
         self.assertIn("never use 0", system_prompt)
         self.assertIn("Error examples", system_prompt)
+        self.assertIn("15 tháng 5 năm nay", system_prompt)
+        self.assertIn("UTC remains untagged", system_prompt)
         self.assertIn("low, medium, high, or critical", system_prompt)
         self.assertIn(
             "minor, major, warning, error",
@@ -320,7 +337,7 @@ class VerifierServiceTests(unittest.TestCase):
         self.assertNotIn("random_seed", user_payload["task"])
         self.assertNotIn("token_usage", user_payload["candidate"])
         self.assertNotIn("output_hash", user_payload["candidate"])
-        self.assertLess(len(system_prompt), 7000)
+        self.assertLess(len(system_prompt), 7600)
         legacy_envelope = {
             "task": task().dict(),
             "seed_pack": seed_pack().dict(),

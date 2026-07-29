@@ -259,6 +259,20 @@ def _resolved_api_style(settings: AzureOpenAISettings) -> Literal["azure", "open
     return "openai"
 
 
+def _response_model_identity(
+    raw: dict[str, Any],
+    *,
+    requested_model: str,
+) -> tuple[str, str]:
+    """Return the provider-reported model and a transparent comparison status."""
+    reported = str(raw.get("model") or "").strip()
+    if not reported:
+        return "<not-reported>", "not_reported"
+    if reported.casefold() == requested_model.strip().casefold():
+        return reported, "reported_match"
+    return reported, "reported_different"
+
+
 def _chat_completions_request(
     settings: AzureOpenAISettings,
     payload: dict[str, Any],
@@ -358,13 +372,23 @@ class AzureOpenAIJsonTransport:
         accumulated_input = 0
         accumulated_output = 0
         accumulated_total = 0
+        requested_model = self.settings.effective_verifier_model
+        api_style = _resolved_api_style(self.settings)
+        deployment = (
+            self.settings.deployment_name
+            if api_style == "azure"
+            else "<not-applicable>"
+        )
         for attempt in range(self.settings.infrastructure_retries + 1):
             started = time.perf_counter()
             logger.info(
-                "[llm verifier] request attempt=%s/%s model=%s timeout=%ss",
+                "[llm verifier] request attempt=%s/%s requested_model=%s "
+                "api_style=%s deployment=%s timeout=%ss",
                 attempt + 1,
                 self.settings.infrastructure_retries + 1,
-                self.settings.effective_verifier_model,
+                requested_model,
+                api_style,
+                deployment,
                 self.settings.timeout_seconds,
             )
             try:
@@ -389,12 +413,20 @@ class AzureOpenAIJsonTransport:
                         "Azure OpenAI verifier response must be a JSON object"
                     )
                 elapsed_ms = round((time.perf_counter() - started) * 1000)
+                response_model, model_status = _response_model_identity(
+                    raw,
+                    requested_model=requested_model,
+                )
                 logger.info(
                     "[llm verifier] response received latency_ms=%s "
-                    "tokens=%s cumulative_tokens=%s",
+                    "tokens=%s cumulative_tokens=%s requested_model=%s "
+                    "response_model=%s model_status=%s",
                     elapsed_ms,
                     response_total,
                     accumulated_total,
+                    requested_model,
+                    response_model,
+                    model_status,
                 )
                 return JsonCompletion(
                     payload=payload,
@@ -632,13 +664,23 @@ class AzureOpenAICompletionClient:
         accumulated_input = 0
         accumulated_output = 0
         accumulated_total = 0
+        requested_model = self.settings.effective_generator_model
+        api_style = _resolved_api_style(self.settings)
+        deployment = (
+            self.settings.deployment_name
+            if api_style == "azure"
+            else "<not-applicable>"
+        )
         for attempt in range(self.settings.infrastructure_retries + 1):
             started = time.perf_counter()
             logger.info(
-                "[llm generator] request attempt=%s/%s model=%s timeout=%ss",
+                "[llm generator] request attempt=%s/%s requested_model=%s "
+                "api_style=%s deployment=%s timeout=%ss",
                 attempt + 1,
                 self.settings.infrastructure_retries + 1,
-                self.settings.effective_generator_model,
+                requested_model,
+                api_style,
+                deployment,
                 self.settings.timeout_seconds,
             )
             try:
@@ -673,12 +715,20 @@ class AzureOpenAICompletionClient:
                     }
                     for entity in entities
                 ]
+                response_model, model_status = _response_model_identity(
+                    raw,
+                    requested_model=requested_model,
+                )
                 logger.info(
                     "[llm generator] response received latency_ms=%s "
-                    "tokens=%s cumulative_tokens=%s",
+                    "tokens=%s cumulative_tokens=%s requested_model=%s "
+                    "response_model=%s model_status=%s",
                     round((time.perf_counter() - started) * 1000),
                     response_total,
                     accumulated_total,
+                    requested_model,
+                    response_model,
+                    model_status,
                 )
                 return (
                     tagged_text,

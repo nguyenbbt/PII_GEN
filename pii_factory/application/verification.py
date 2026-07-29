@@ -35,8 +35,8 @@ _ENTITY_TAG_PATTERN = re.compile(
     re.DOTALL,
 )
 
-JUDGE_PROMPT_VERSION = "verifier-judge.v3.5.0"
-REPAIR_PROMPT_VERSION = "verifier-repair.v1.4.0"
+JUDGE_PROMPT_VERSION = "verifier-judge.v3.6.0"
+REPAIR_PROMPT_VERSION = "verifier-repair.v1.5.0"
 
 _JUDGE_SYSTEM_PROMPT = f"""You judge semantic quality of synthetic PII NER data.
 Prompt version: {JUDGE_PROMPT_VERSION}
@@ -77,6 +77,8 @@ Judge only:
    identifier. An order number, travel/reservation booking code, invoice number,
    document reference, contract reference, or flight number is not TICKET_ID and
    must remain untagged unless that exact value is an authoritative positive seed.
+   DATE excludes cues (`Ngày/ngày`, `vào/từ/đến ngày`). TIME includes AM/PM or
+   `sáng/trưa/chiều/tối`, but excludes `lúc/vào lúc`, UTC/GMT, and timezones.
 2. The text uses task.language and is coherent and natural. Reject filler, repetitive
    scaffolding, unrelated clauses, unnatural seed insertion, or a comma-separated
    entity inventory.
@@ -127,6 +129,10 @@ Error examples (examples teach decisions, never copy their prose):
   `Ba Đình, Hà Nội`; reason explains street detail versus administrative geography.
 - `<PERSON> Mai Huyền </PERSON>` -> BOUNDARY/FIXABLE with adjust_tag_boundary;
   retain the exact clean value and move surrounding whitespace outside the tag.
+- Temporal examples: `Ngày <DATE>5 tháng 7 năm 2003</DATE>`,
+  `ngày <DATE>15 tháng 5 năm nay</DATE>`, and
+  `lúc <TIME>10:30 sáng</TIME> GMT`; missing tags or larger boundaries are
+  FIXABLE with add_tag/adjust_tag_boundary, and UTC remains untagged.
 - An absent positive seed, incoherent filler, or a hard negative that literally says
   `đây không phải PII` -> REGENERATE with no edits; these are not safe local repairs.
 
@@ -169,6 +175,12 @@ Only use TICKET_ID for an explicit support request, service incident, or
 customer-care case. Never convert an order number, booking/reservation code, invoice
 number, document/contract reference, or flight number into TICKET_ID unless it is an
 authoritative positive seed.
+For DATE repairs, tag only the calendar expression and leave leading cues such as
+`Ngày`, `ngày`, or `vào ngày` outside. For TIME repairs, keep AM/PM or Vietnamese
+dayparts (`sáng`, `trưa`, `chiều`, `tối`) inside the tag, while leaving `lúc`,
+`vào lúc`, UTC, GMT, and timezone names outside. A temporal boundary issue is always
+a local repair: adjust or add the exact tag and then synchronize entities; never
+rewrite the sentence or normalize the temporal value.
 For every TEMPLATE_ARTIFACT, replace only that bracket field with finished, natural,
 generic non-PII wording or remove the redundant field label. Never fill it with an
 invented person, company, date, title, address, identifier, or other PII. The repaired
@@ -187,6 +199,7 @@ class DeterministicIssueRouter:
         "entity_boundary_whitespace",
         "positive_seed_annotation_mismatch",
         "missing_annotation_candidate",
+        "temporal_boundary",
         "template_artifact",
     })
     _GENERIC_TYPES = frozenset({"invalid_output"})

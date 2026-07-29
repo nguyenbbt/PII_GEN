@@ -7,6 +7,7 @@ from unittest.mock import patch
 from pii_factory.domain.models import RunConfig
 from pii_factory.parallel import (
     ParallelGenerationError,
+    _model_identity_summary,
     build_shard_configs,
     merge_shard_payloads,
     run_parallel_generation,
@@ -14,6 +15,36 @@ from pii_factory.parallel import (
 
 
 class ParallelGenerationTests(unittest.TestCase):
+    def test_summarizes_generator_and_verifier_model_identity_logs(self) -> None:
+        console_output = "\n".join([
+            (
+                "10:00:00 | INFO | [llm generator] response received "
+                "latency_ms=10 tokens=20 cumulative_tokens=20 "
+                "requested_model=gemini-2.5-flash "
+                "response_model=gemini-2.5-flash "
+                "model_status=reported_match"
+            ),
+            (
+                "10:00:01 | INFO | [llm verifier] response received "
+                "latency_ms=10 tokens=20 cumulative_tokens=20 "
+                "requested_model=gemini-2.5-pro "
+                "response_model=gateway-fallback "
+                "model_status=reported_different"
+            ),
+        ])
+
+        self.assertEqual(
+            _model_identity_summary(console_output),
+            {
+                "generator": [
+                    "gemini-2.5-flash->gemini-2.5-flash(reported_match)"
+                ],
+                "verifier": [
+                    "gemini-2.5-pro->gateway-fallback(reported_different)"
+                ],
+            },
+        )
+
     def test_builds_unique_seeded_shards_covering_exact_target(self) -> None:
         config = RunConfig(
             run_name="parallel-100",

@@ -705,9 +705,9 @@ LLM_TIMEOUT_SECONDS=120
 LLM_INFRA_MAX_RETRIES=3
 INPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
 OUTPUT_TOKEN_PRICE_PER_MILLION_USD=10.00
-GENERATOR_INPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
-GENERATOR_OUTPUT_TOKEN_PRICE_PER_MILLION_USD=10.00
-VERIFIER_INPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
+GENERATOR_INPUT_TOKEN_PRICE_PER_MILLION_USD=0.30
+GENERATOR_OUTPUT_TOKEN_PRICE_PER_MILLION_USD=2.50
+VERIFIER_INPUT_TOKEN_PRICE_PER_MILLION_USD=1.25
 VERIFIER_OUTPUT_TOKEN_PRICE_PER_MILLION_USD=10.00
 GEN_DATA_DIR=gen_data
 ```
@@ -716,10 +716,13 @@ GEN_DATA_DIR=gen_data
 Judge và Repair. `MODEL` là fallback tương thích khi một trong hai biến theo vai
 trò bị thiếu.
 
-Bốn biến giá theo vai trò cho phép tính chi phí chính xác khi Generator và
-Verifier dùng model khác giá. Nếu bỏ chúng, hệ thống fallback về hai biến
+Bốn biến giá theo vai trò mặc định theo Gemini 2.5 Flash cho Generator
+($0.30 input, $2.50 output) và Gemini 2.5 Pro cho Verifier
+($1.25 input, $10.00 output), tính trên mỗi 1.000.000 token. Công thức cộng
+chi phí của cả bốn thành phần. Nếu khai báo hai biến
 `INPUT_TOKEN_PRICE_PER_MILLION_USD` và
-`OUTPUT_TOKEN_PRICE_PER_MILLION_USD` cũ để giữ tương thích.
+`OUTPUT_TOKEN_PRICE_PER_MILLION_USD` cũ, chúng vẫn là fallback tương thích;
+bốn biến theo vai trò luôn có độ ưu tiên cao hơn.
 
 `OPENAI_API_STYLE=auto` dùng Azure deployment route và header `api-key` cho
 hostname Azure OpenAI native; với gateway tùy chỉnh, client dùng
