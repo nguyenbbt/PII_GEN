@@ -29,6 +29,16 @@ class JsonTaxonomyParserTests(unittest.TestCase):
             api_key.examples.positive[0].id,
             "api_key_positive_1",
         )
+        date = next(
+            label for label in taxonomy.labels if label.code == "DATE"
+        )
+        time = next(
+            label for label in taxonomy.labels if label.code == "TIME"
+        )
+        self.assertIn("15 tháng 5 năm nay", date.definition)
+        self.assertIn("Exclude leading cue words", date.rules[0])
+        self.assertIn("sáng", time.definition)
+        self.assertIn("Always exclude UTC, GMT", time.rules[0])
 
     def test_rejects_duplicate_labels(self) -> None:
         source = json.loads(

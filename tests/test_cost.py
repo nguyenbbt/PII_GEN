@@ -11,6 +11,46 @@ from pii_factory.bootstrap import _cost_rates, _role_cost_rates, build_pipeline
 
 
 class CostCalculatorTests(unittest.TestCase):
+    def test_default_role_rates_match_flash_and_pro_pricing(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            generator_rates = _cost_rates("GENERATOR")
+            verifier_rates = _cost_rates("VERIFIER")
+
+        self.assertEqual(
+            (
+                generator_rates.input_per_million_usd,
+                generator_rates.output_per_million_usd,
+            ),
+            (Decimal("0.30"), Decimal("2.50")),
+        )
+        self.assertEqual(
+            (
+                verifier_rates.input_per_million_usd,
+                verifier_rates.output_per_million_usd,
+            ),
+            (Decimal("1.25"), Decimal("10.00")),
+        )
+
+    def test_combined_role_cost_uses_addition_for_all_four_components(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            generator = _cost_rates("GENERATOR").calculate(
+                input_tokens=1_000_000,
+                output_tokens=500_000,
+                total_tokens=1_500_000,
+            )
+            verifier = _cost_rates("VERIFIER").calculate(
+                input_tokens=200_000,
+                output_tokens=100_000,
+                total_tokens=300_000,
+            )
+
+        self.assertEqual(generator.money_cost, Decimal("1.55000000"))
+        self.assertEqual(verifier.money_cost, Decimal("1.25000000"))
+        self.assertEqual(
+            generator.money_cost + verifier.money_cost,
+            Decimal("2.80000000"),
+        )
+
     def test_calculates_input_output_total_and_money_cost(self) -> None:
         usage = CostCalculator(Decimal("2.50"), Decimal("10.00")).calculate(1_000_000, 500_000)
 

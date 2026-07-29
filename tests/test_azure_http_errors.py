@@ -16,26 +16,27 @@ from pii_factory.infrastructure.clients import (
 from pii_factory.ports import CompletionClientError, CompletionResult
 
 
-def _successful_response() -> BytesIO:
-    return BytesIO(
-        json.dumps(
+def _successful_response(model: str | None = None) -> BytesIO:
+    payload = {
+        "choices": [
             {
-                "choices": [
-                    {
-                        "message": {
-                            "content": json.dumps(
-                                {"tagged_text": "test", "entities": []}
-                            )
-                        }
-                    }
-                ],
-                "usage": {
-                    "prompt_tokens": 10,
-                    "completion_tokens": 5,
-                    "total_tokens": 15,
-                },
+                "message": {
+                    "content": json.dumps(
+                        {"tagged_text": "test", "entities": []}
+                    )
+                }
             }
-        ).encode("utf-8")
+        ],
+        "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+        },
+    }
+    if model is not None:
+        payload["model"] = model
+    return BytesIO(
+        json.dumps(payload).encode("utf-8")
     )
 
 
@@ -384,6 +385,85 @@ class AzureOpenAIHttpErrorTests(unittest.TestCase):
         self.assertEqual(completion.input_tokens, 20)
         self.assertEqual(completion.output_tokens, 25)
         self.assertEqual(completion.total_tokens, 45)
+
+    def test_generator_logs_provider_reported_model_identity(self) -> None:
+        settings = AzureOpenAISettings(
+            api_key="top-secret-value",
+            base_url="https://gateway.example",
+            generator_model="gemini-2.5-flash",
+            infrastructure_retries=0,
+        )
+        with (
+            patch(
+                "pii_factory.infrastructure.clients.urlopen",
+                return_value=_successful_response("gemini-2.5-flash"),
+            ),
+            self.assertLogs(
+                "pii_factory.infrastructure.clients",
+                level="INFO",
+            ) as captured,
+        ):
+            AzureOpenAICompletionClient(settings).generate(
+                [{"role": "user", "content": "Return JSON."}]
+            )
+
+        output = "\n".join(captured.output)
+        self.assertIn("requested_model=gemini-2.5-flash", output)
+        self.assertIn("response_model=gemini-2.5-flash", output)
+        self.assertIn("model_status=reported_match", output)
+
+    def test_verifier_logs_when_gateway_reports_a_different_model(self) -> None:
+        settings = AzureOpenAISettings(
+            api_key="top-secret-value",
+            base_url="https://gateway.example",
+            verifier_model="gemini-2.5-pro",
+            infrastructure_retries=0,
+        )
+        with (
+            patch(
+                "pii_factory.infrastructure.clients.urlopen",
+                return_value=_successful_response("gateway-fallback-model"),
+            ),
+            self.assertLogs(
+                "pii_factory.infrastructure.clients",
+                level="INFO",
+            ) as captured,
+        ):
+            AzureOpenAIJsonTransport(settings).complete(
+                [{"role": "user", "content": "Judge JSON."}],
+                temperature=0.0,
+                max_tokens=1200,
+            )
+
+        output = "\n".join(captured.output)
+        self.assertIn("requested_model=gemini-2.5-pro", output)
+        self.assertIn("response_model=gateway-fallback-model", output)
+        self.assertIn("model_status=reported_different", output)
+
+    def test_logs_when_gateway_does_not_report_serving_model(self) -> None:
+        settings = AzureOpenAISettings(
+            api_key="top-secret-value",
+            base_url="https://gateway.example",
+            generator_model="gemini-2.5-flash",
+            infrastructure_retries=0,
+        )
+        with (
+            patch(
+                "pii_factory.infrastructure.clients.urlopen",
+                return_value=_successful_response(),
+            ),
+            self.assertLogs(
+                "pii_factory.infrastructure.clients",
+                level="INFO",
+            ) as captured,
+        ):
+            AzureOpenAICompletionClient(settings).generate(
+                [{"role": "user", "content": "Return JSON."}]
+            )
+
+        output = "\n".join(captured.output)
+        self.assertIn("response_model=<not-reported>", output)
+        self.assertIn("model_status=not_reported", output)
 
     def test_legacy_model_remains_the_fallback_for_both_roles(self) -> None:
         settings = AzureOpenAISettings(

@@ -177,13 +177,16 @@ class CoverageController:
         tasks: List[GenerationTask] = []
         labels = run.config.label_pool or []
         annotation_labels = labels
-        if (
-            run.config.value_bank.allow_additional_unseeded_pii
-            and self.taxonomy_for_run is not None
-        ):
-            annotation_labels = [
-                label.code for label in self.taxonomy_for_run(run.run_id)
-            ]
+        taxonomy_codes = (
+            [label.code for label in self.taxonomy_for_run(run.run_id)]
+            if self.taxonomy_for_run is not None
+            else list(labels)
+        )
+        temporal_annotation_labels = [
+            label for label in ("DATE", "TIME") if label in taxonomy_codes
+        ]
+        if run.config.value_bank.allow_additional_unseeded_pii:
+            annotation_labels = taxonomy_codes
         mandatory_labels = (
             [] if run.config.focus_label
             else [label for label in labels for _ in range(run.config.minimum_per_label)]
@@ -241,7 +244,10 @@ class CoverageController:
                 annotation_labels=(
                     annotation_labels
                     if run.config.value_bank.allow_additional_unseeded_pii
-                    else focus_labels
+                    else list(dict.fromkeys([
+                        *focus_labels,
+                        *temporal_annotation_labels,
+                    ]))
                 ),
                 difficulty=difficulty, sample_type=sample_type,
                 sample_structure=sample_structure,

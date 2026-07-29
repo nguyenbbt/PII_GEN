@@ -82,6 +82,38 @@ class OutputFormatterTests(unittest.TestCase):
                 entity.text,
             )
 
+    def test_temporal_boundaries_keep_cues_and_timezone_outside_offsets(self) -> None:
+        sample = self.formatter.format(
+            tagged_text=(
+                "Ngày <DATE>5 tháng 7 năm 2003</DATE> lúc "
+                "<TIME>10:30 sáng</TIME> GMT."
+            ),
+            entities=[
+                GeneratedEntity(label="DATE", value="5 tháng 7 năm 2003"),
+                GeneratedEntity(label="TIME", value="10:30 sáng"),
+            ],
+            allowed_labels=["DATE", "TIME"],
+        )
+
+        self.assertEqual(
+            [entity.dict() for entity in sample.entities],
+            [
+                {
+                    "label": "DATE",
+                    "start": 5,
+                    "end": 23,
+                    "text": "5 tháng 7 năm 2003",
+                },
+                {
+                    "label": "TIME",
+                    "start": 28,
+                    "end": 38,
+                    "text": "10:30 sáng",
+                },
+            ],
+        )
+        self.assertEqual(sample.text, "Ngày 5 tháng 7 năm 2003 lúc 10:30 sáng GMT.")
+
     def test_repeated_value_produces_one_span_per_occurrence(self) -> None:
         sample = self.formatter.format(
             tagged_text=(

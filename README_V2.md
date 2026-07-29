@@ -756,6 +756,10 @@ trò bị thiếu.
 generic chỉ là fallback cho config cũ. Các giá trị ví dụ không phải báo giá của
 gateway; phải thay bằng giá thực trong tài khoản/hợp đồng trước khi dùng
 `money_cost` làm số liệu tài chính.
+Mặc định hiện tại dùng $0.30 input / $2.50 output cho Generator và $1.25
+input / $10.00 output cho Verifier, tính trên mỗi 1.000.000 token. Tổng chi
+phí là tổng của cả bốn thành phần. Hãy thay các giá trị này theo hợp đồng thực
+tế của gateway trước khi dùng `money_cost` làm số liệu tài chính.
 
 `OPENAI_API_STYLE=auto` dùng Azure deployment route và header `api-key` cho
 hostname Azure OpenAI native; với gateway tùy chỉnh, client dùng

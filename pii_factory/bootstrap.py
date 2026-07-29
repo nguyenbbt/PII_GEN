@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from decimal import Decimal
 from pathlib import Path
@@ -29,6 +30,7 @@ _DEFAULT_MODEL_RATES = {
         output_per_million_usd=Decimal("10.00"),
     ),
 }
+logger = logging.getLogger(__name__)
 
 
 def _role_cost_rates(role: str, fallback: CostRates) -> CostRates:
@@ -77,6 +79,14 @@ def build_pipeline(
     )
     generator_rates = _cost_rates("GENERATOR")
     verifier_rates = _cost_rates("VERIFIER")
+    logger.info(
+        "[cost] USD per 1M tokens generator_input=%s generator_output=%s "
+        "verifier_input=%s verifier_output=%s",
+        generator_rates.input_per_million_usd,
+        generator_rates.output_per_million_usd,
+        verifier_rates.input_per_million_usd,
+        verifier_rates.output_per_million_usd,
+    )
     if offline:
         client = OfflineCompletionClient()
         verifier_client = OfflineVerifierClient()

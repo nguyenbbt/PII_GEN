@@ -33,8 +33,8 @@ class Settings:
     timeout_seconds: float = 120
     infrastructure_retries: int = 3
     api_style: Literal["auto", "azure", "openai"] = "auto"
-    input_token_price_per_million_usd: Decimal = Decimal("2.50")
-    output_token_price_per_million_usd: Decimal = Decimal("10.00")
+    input_token_price_per_million_usd: Decimal = Decimal("0.30")
+    output_token_price_per_million_usd: Decimal = Decimal("2.50")
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -63,10 +63,16 @@ class Settings:
             infrastructure_retries=int(os.getenv("LLM_INFRA_MAX_RETRIES", "3")),
             api_style=api_style,
             input_token_price_per_million_usd=Decimal(
-                os.getenv("INPUT_TOKEN_PRICE_PER_MILLION_USD", "2.50")
+                os.getenv(
+                    "GENERATOR_INPUT_TOKEN_PRICE_PER_MILLION_USD",
+                    os.getenv("INPUT_TOKEN_PRICE_PER_MILLION_USD", "0.30"),
+                )
             ),
             output_token_price_per_million_usd=Decimal(
-                os.getenv("OUTPUT_TOKEN_PRICE_PER_MILLION_USD", "10.00")
+                os.getenv(
+                    "GENERATOR_OUTPUT_TOKEN_PRICE_PER_MILLION_USD",
+                    os.getenv("OUTPUT_TOKEN_PRICE_PER_MILLION_USD", "2.50"),
+                )
             ),
         )
 

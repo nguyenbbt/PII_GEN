@@ -2031,14 +2031,14 @@
   },
   {
     "LABEL": "DATE",
-    "DEFINITION": "A calendar date associated with an event, appointment, transaction, record, or other non-birth related context.",
-    "RULE": "Label the complete calendar date associated with an event, appointment, transaction, or record that is not birth-related. Do not label a birth date; use BIRTHDATE. Do not label a date-like string when the context identifies it as a build code, version, or identifier.",
+    "DEFINITION": "A calendar date associated with an event, appointment, transaction, record, or other non-birth related context, including numeric dates and natural-language forms such as 5 tháng 7 năm 2003, 15 tháng 7, or 15 tháng 5 năm nay.",
+    "RULE": "Label only the calendar expression associated with an event, appointment, transaction, or record that is not birth-related. Exclude leading cue words such as Ngày, ngày, vào ngày, từ ngày, and đến ngày from the DATE span. Do not label a birth date; use BIRTHDATE. Do not label a date-like string when the context identifies it as a build code, version, or identifier.",
     "EXAMPLES": {
       "POSITIVE": [
         {
           "id": "date_positive_1",
-          "expected_tagged_text": "Cuộc họp diễn ra ngày <DATE>12/05/2026</DATE>.",
-          "rationale": "12/05/2026 xác định ngày diễn ra một sự kiện nên thuộc DATE. Ranh giới chỉ lấy đúng giá trị mang vai trò DATE, không gộp các từ mô tả hoặc nhãn lân cận."
+          "expected_tagged_text": "Cuộc họp diễn ra Ngày <DATE>5 tháng 7 năm 2003</DATE>.",
+          "rationale": "5 tháng 7 năm 2003 xác định ngày diễn ra một sự kiện nên thuộc DATE. Từ dẫn Ngày nằm ngoài span; ranh giới chỉ lấy đúng biểu thức lịch."
         },
         {
           "id": "date_positive_2",
@@ -2089,8 +2089,8 @@
   },
   {
     "LABEL": "TIME",
-    "DEFINITION": "A specific time of day expressed in 12-hour or 24-hour format, optionally including timezone information.",
-    "RULE": "Label the portion that represents a specific time of day in 12-hour or 24-hour format. Include AM or PM when it appears with the time. Do not label UTC, GMT, or a timezone name when it appears only as standalone timezone information; label only the time and its AM or PM marker as required.",
+    "DEFINITION": "A specific time of day expressed in 12-hour or 24-hour format, optionally including AM, PM, or a Vietnamese daypart such as sáng, trưa, chiều, or tối.",
+    "RULE": "Label only the portion that represents a specific time of day. Include AM, PM, sáng, trưa, chiều, or tối when it appears with the time. Exclude leading cue words such as lúc or vào lúc. Always exclude UTC, GMT, and timezone names from the TIME span.",
     "EXAMPLES": {
       "POSITIVE": [
         {
@@ -2100,8 +2100,8 @@
         },
         {
           "id": "time_positive_2",
-          "expected_tagged_text": "<PERSON>Trần Hải Yến</PERSON> gặp đơn vị vận chuyển lúc <TIME>11:45</TIME> GMT ngày <DATE>19/10/2026</DATE>.",
-          "rationale": "11:45 là giờ hẹn nên thuộc TIME. GMT chỉ múi giờ và phải nằm ngoài span, còn ngày được gán DATE. Ranh giới chỉ lấy đúng giá trị mang vai trò TIME, không gộp các từ mô tả hoặc nhãn lân cận."
+          "expected_tagged_text": "<PERSON>Trần Hải Yến</PERSON> gặp đơn vị vận chuyển lúc <TIME>11:45 PM</TIME> GMT ngày <DATE>19/10/2026</DATE>.",
+          "rationale": "11:45 PM là giờ hẹn nên thuộc TIME và PM nằm trong span. Từ dẫn lúc và GMT phải nằm ngoài span, còn ngày được gán DATE."
         },
         {
           "id": "time_positive_3",

@@ -24,6 +24,12 @@ from .domain.models import FormattedSample, RunConfig
 
 
 logger = logging.getLogger(__name__)
+_MODEL_IDENTITY_LOG = re.compile(
+    r"\[llm\s+(?P<role>generator|verifier)\]\s+response received.*?"
+    r"requested_model=(?P<requested>\S+)\s+"
+    r"response_model=(?P<response>\S+)\s+"
+    r"model_status=(?P<status>\S+)"
+)
 
 
 class ParallelGenerationError(RuntimeError):
@@ -91,6 +97,21 @@ def _combine_usage_payloads(
             for role, values in role_totals.items()
         },
     }
+
+
+def _model_identity_summary(console_output: str) -> dict[str, list[str]]:
+    """Collect unique provider-reported model mappings from a child shard."""
+    identities: dict[str, list[str]] = {}
+    for match in _MODEL_IDENTITY_LOG.finditer(console_output):
+        role = match.group("role")
+        identity = (
+            f"{match.group('requested')}->{match.group('response')}"
+            f"({match.group('status')})"
+        )
+        values = identities.setdefault(role, [])
+        if identity not in values:
+            values.append(identity)
+    return identities
 
 
 def build_shard_configs(config: RunConfig) -> list[RunConfig]:
@@ -400,6 +421,15 @@ def _run_shard(
             and payload.get("accepted_samples")
             == attempt_config.num_samples
         ):
+            model_identities = _model_identity_summary(completed.stderr)
+            logger.info(
+                "[parallel shard %s] model identity generator=%s verifier=%s",
+                shard_index,
+                ",".join(model_identities.get("generator", []))
+                or "<not-observed>",
+                ",".join(model_identities.get("verifier", []))
+                or "<not-observed>",
+            )
             logger.info(
                 "[parallel shard %s] completed attempt=%s accepted=%s "
                 "input_tokens=%s output_tokens=%s generator_input=%s "

@@ -85,6 +85,136 @@ class DeterministicValidatorTests(unittest.TestCase):
         self.assertFalse(result.valid)
         self.assertIn("missing_positive_seed", {issue.type for issue in result.issues})
 
+    def test_detects_untagged_vietnamese_date_and_time_boundaries(self) -> None:
+        pack = SeedPack(
+            task_id="temporal-missing",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[
+                PositiveEntitySeed(
+                    label="PERSON",
+                    value="Mai Huyền",
+                    semantic_role="requester",
+                )
+            ],
+        )
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Mai Huyền</PERSON> hẹn Ngày 5 tháng 7 năm 2003 "
+                "lúc 10:30 sáng GMT, rồi dời sang ngày 15 tháng 7."
+            ),
+            entities=[GeneratedEntity(label="PERSON", value="Mai Huyền")],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            allowed_labels=["PERSON", "DATE", "TIME"],
+            max_entities=1,
+        )
+
+        missing = {
+            (issue.label, issue.value)
+            for issue in result.issues
+            if issue.type == "missing_annotation_candidate"
+        }
+        self.assertIn(("DATE", "5 tháng 7 năm 2003"), missing)
+        self.assertIn(("DATE", "15 tháng 7"), missing)
+        self.assertIn(("TIME", "10:30 sáng"), missing)
+
+    def test_accepts_exact_temporal_boundaries_and_extra_temporal_entities(self) -> None:
+        pack = SeedPack(
+            task_id="temporal-exact",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[
+                PositiveEntitySeed(
+                    label="PERSON",
+                    value="Mai Huyền",
+                    semantic_role="requester",
+                )
+            ],
+        )
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Mai Huyền</PERSON> hẹn Ngày "
+                "<DATE>15 tháng 5 năm nay</DATE> lúc "
+                "<TIME>10:30 sáng</TIME> GMT."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value="Mai Huyền"),
+                GeneratedEntity(label="DATE", value="15 tháng 5 năm nay"),
+                GeneratedEntity(label="TIME", value="10:30 sáng"),
+            ],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            allowed_labels=["PERSON", "DATE", "TIME"],
+            max_entities=1,
+        )
+
+        self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
+
+    def test_temporal_tags_reject_cue_and_timezone_inside_boundary(self) -> None:
+        pack = SeedPack(
+            task_id="temporal-boundary",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[
+                PositiveEntitySeed(
+                    label="PERSON",
+                    value="Mai Huyền",
+                    semantic_role="requester",
+                )
+            ],
+        )
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Mai Huyền</PERSON> hẹn "
+                "<DATE>Ngày 5 tháng 7 năm 2003</DATE> và "
+                "<TIME>lúc 11:45 PM UTC</TIME>."
+            ),
+            entities=[
+                GeneratedEntity(label="PERSON", value="Mai Huyền"),
+                GeneratedEntity(label="DATE", value="Ngày 5 tháng 7 năm 2003"),
+                GeneratedEntity(label="TIME", value="lúc 11:45 PM UTC"),
+            ],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            allowed_labels=["PERSON", "DATE", "TIME"],
+            max_entities=1,
+        )
+
+        boundary_issues = [
+            issue for issue in result.issues
+            if issue.type == "temporal_boundary"
+        ]
+        self.assertEqual(len(boundary_issues), 2)
+        self.assertIn("5 tháng 7 năm 2003", boundary_issues[0].reason)
+        self.assertIn("11:45 PM", boundary_issues[1].reason)
+
+    def test_time_detector_ignores_duration_without_time_of_day_context(self) -> None:
+        pack = SeedPack(
+            task_id="duration-not-time",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[
+                PositiveEntitySeed(
+                    label="PERSON",
+                    value="Mai Huyền",
+                    semantic_role="requester",
+                )
+            ],
+        )
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Mai Huyền</PERSON> gửi bản ghi có thời lượng 08:30."
+            ),
+            entities=[GeneratedEntity(label="PERSON", value="Mai Huyền")],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            allowed_labels=["PERSON", "DATE", "TIME"],
+            max_entities=1,
+        )
+
+        self.assertTrue(result.valid, [issue.dict() for issue in result.issues])
+
     def test_output_rejects_clean_text_outside_numeric_length_target(self) -> None:
         pack = SeedPack(
             task_id="short-positive",

@@ -39,9 +39,20 @@ _URL = re.compile(
 _DATE = re.compile(
     r"(?:(?<!\d)(?:0?[1-9]|[12]\d|3[01])[/.-](?:0?[1-9]|1[0-2])[/.-](?:19|20)\d{2}(?!\d)|"
     r"(?<![A-Za-z0-9-])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])"
-    r"(?![A-Za-z0-9-]))"
+    r"(?![A-Za-z0-9-])|"
+    r"(?<!\d)(?:0?[1-9]|[12]\d|3[01])\s+tháng\s+(?:0?[1-9]|1[0-2])"
+    r"(?:\s+năm\s+(?:(?:19|20)\d{2}|nay))?(?![\w]))",
+    re.IGNORECASE,
 )
-_TIME = re.compile(r"(?<!\d)(?:(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?|(?:0?[1-9]|1[0-2]):[0-5]\d\s?(?:AM|PM))(?!\d)", re.IGNORECASE)
+_TIME = re.compile(
+    r"(?<!\d)(?:"
+    r"(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?"
+    r"|(?:[01]?\d|2[0-3])\s*giờ(?:\s*[0-5]?\d(?:\s*phút)?)?"
+    r")"
+    r"(?:\s*(?:AM|PM|sáng|trưa|chiều|tối))?"
+    r"(?![\w])",
+    re.IGNORECASE,
+)
 _IP = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 _IDENTIFIER = re.compile(r"\b(?:ACC|USR|EMP|INC|BH)-[A-Z0-9]{5,}\b", re.IGNORECASE)
 _PLATE_WITH_CONTEXT = re.compile(
@@ -63,6 +74,20 @@ _ADDRESS = re.compile(r"(?=.*\d)(?=.*[^\W\d_]).*\s+.*", re.UNICODE)
 _TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9_]*>")
 _ENTITY_PAIR = re.compile(r"<([A-Z][A-Z0-9_]*)>(.*?)</\1>", re.DOTALL)
 _MIXED_LOCALE = re.compile(r"JaneHuyện|JohnQuận|SmithPhường|\b(?:County|Street|Avenue|undefined|null|N/A|xxx)\b", re.IGNORECASE)
+_BIRTHDATE_CONTEXT = re.compile(
+    r"(?:ngày\s+sinh|sinh\s+ngày|chào\s+đời)(?:\s+(?:là|vào))?\s*$",
+    re.IGNORECASE,
+)
+_TIME_CONTEXT = re.compile(
+    r"(?:lúc|vào\s+lúc|bắt\s+đầu(?:\s+lúc)?|kết\s+thúc(?:\s+lúc)?|"
+    r"từ|đến|thời\s+điểm|khoảng)\s*$",
+    re.IGNORECASE,
+)
+_NON_TIME_CONTEXT = re.compile(
+    r"(?:thời\s+lượng|kéo\s+dài|trong\s+vòng|sau|tỷ\s+lệ|tỉ\s+lệ)\s*$",
+    re.IGNORECASE,
+)
+_TIME_DAYPART = re.compile(r"(?:AM|PM|sáng|trưa|chiều|tối)\s*$", re.IGNORECASE)
 
 
 def extract_local_context(text: str, value: str, window: int = 80) -> str:
@@ -282,6 +307,21 @@ class DeterministicOutputValidator:
     ) -> DeterministicValidationResult:
         issues: list[ValidationIssue] = []
         raw_entities = [entity.dict() if isinstance(entity, GeneratedEntity) else entity for entity in entities]
+        seeded_entity_counts = Counter(
+            (seed.label, seed.value)
+            for seed in seed_pack.positive_entities
+        )
+        observed_seed_counts: Counter[tuple[str, str]] = Counter()
+        additional_temporal_entities = 0
+        for entity in raw_entities:
+            pair = (
+                str(entity.get("label", "")).strip(),
+                str(entity.get("value", "")).strip(),
+            )
+            if observed_seed_counts[pair] < seeded_entity_counts[pair]:
+                observed_seed_counts[pair] += 1
+            elif pair[0] in {"DATE", "TIME"}:
+                additional_temporal_entities += 1
         hard_decoy_only = (
             SampleType(seed_pack.sample_type) == SampleType.HARD_NEGATIVE
             and seed_pack.hard_negative_mode == "decoy_only"
@@ -293,7 +333,10 @@ class DeterministicOutputValidator:
                 allowed_labels=(allowed_labels or focus_labels),
                 required_labels=focus_labels,
                 sample_type="pure_negative" if hard_decoy_only else str(seed_pack.sample_type),
-                max_entities=max_entities,
+                # DATE/TIME values naturally introduced as event context must be
+                # annotated, even though they were not part of the planned
+                # Value Bank seed budget.
+                max_entities=max_entities + additional_temporal_entities,
             )
         except ValueError as exc:
             reason = str(exc)
@@ -374,6 +417,7 @@ class DeterministicOutputValidator:
                 allowed_labels=(allowed_labels or focus_labels),
                 excluded_values={decoy.value for decoy in seed_pack.decoys},
             ))
+            issues.extend(self._temporal_boundary_issues(tagged_text))
 
         entity_values = {str(item.get("value", "")) for item in raw_entities}
         for decoy in seed_pack.decoys:
@@ -521,6 +565,20 @@ class DeterministicOutputValidator:
             if label not in allowed:
                 continue
             for match in pattern.finditer(clean):
+                if (
+                    label == "DATE"
+                    and _BIRTHDATE_CONTEXT.search(clean[max(0, match.start() - 35):match.start()])
+                ):
+                    continue
+                if (
+                    label == "TIME"
+                    and not DeterministicOutputValidator._is_specific_time_context(
+                        clean,
+                        match.start(),
+                        match.end(),
+                    )
+                ):
+                    continue
                 candidates.append((label, match.group(0), match.start(), match.end()))
         for label, pattern in (
             ("PLATE", _PLATE_WITH_CONTEXT),
@@ -552,6 +610,53 @@ class DeterministicOutputValidator:
                 ),
                 label=label,
                 value=value,
+            ))
+        return issues
+
+    @staticmethod
+    def _is_specific_time_context(text: str, start: int, end: int) -> bool:
+        value = text[start:end]
+        if _TIME_DAYPART.search(value):
+            return True
+        preceding = text[max(0, start - 35):start]
+        if _NON_TIME_CONTEXT.search(preceding):
+            return False
+        return bool(_TIME_CONTEXT.search(preceding))
+
+    @staticmethod
+    def _temporal_boundary_issues(
+        tagged_text: str,
+    ) -> list[ValidationIssue]:
+        """Require DATE/TIME tags to contain only the temporal value surface."""
+        _, spans = tagged_text_to_clean_and_spans(tagged_text)
+        patterns = {"DATE": _DATE, "TIME": _TIME}
+        issues: list[ValidationIssue] = []
+        for span in spans:
+            pattern = patterns.get(span.label)
+            if pattern is None:
+                continue
+            matches = list(pattern.finditer(span.value))
+            if not matches:
+                continue
+            exact_single_match = (
+                len(matches) == 1
+                and matches[0].start() == 0
+                and matches[0].end() == len(span.value)
+            )
+            if exact_single_match:
+                continue
+            expected = [match.group(0) for match in matches]
+            issues.append(ValidationIssue(
+                type="temporal_boundary",
+                scope="TEXT",
+                reason=(
+                    f"{span.label} span {span.value!r} has an invalid boundary; "
+                    f"tag only the temporal value(s) {expected!r}. Keep leading "
+                    "cue words and UTC/GMT/timezone text outside the tag, and "
+                    "use separate tags when multiple temporal values appear."
+                ),
+                label=span.label,
+                value=span.value,
             ))
         return issues
 
