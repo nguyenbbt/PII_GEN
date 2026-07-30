@@ -169,7 +169,14 @@ class ValueBankConfig(Schema):
         "de": "de_pii_value_pools.json",
     })
     max_seed_pack_attempts: int = Field(default=5, ge=1, le=20)
-    allow_additional_unseeded_pii: bool = False
+    allow_additional_unseeded_pii: bool = Field(
+        default=False,
+        description=(
+            "Deprecated generation hint retained for config compatibility. "
+            "The annotation/verification pool always covers the full taxonomy "
+            "so incidental PII can be tagged safely."
+        ),
+    )
     partition_index: int = Field(default=0, ge=0, le=99_999)
     partition_count: int = Field(default=1, ge=1, le=100_000)
 

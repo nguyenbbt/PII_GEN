@@ -177,10 +177,7 @@ class CoverageController:
         tasks: List[GenerationTask] = []
         labels = run.config.label_pool or []
         annotation_labels = labels
-        if (
-            run.config.value_bank.allow_additional_unseeded_pii
-            and self.taxonomy_for_run is not None
-        ):
+        if self.taxonomy_for_run is not None:
             annotation_labels = [
                 label.code for label in self.taxonomy_for_run(run.run_id)
             ]
@@ -246,11 +243,7 @@ class CoverageController:
                     else None
                 ),
                 focus_labels=focus_labels,
-                annotation_labels=(
-                    annotation_labels
-                    if run.config.value_bank.allow_additional_unseeded_pii
-                    else focus_labels
-                ),
+                annotation_labels=annotation_labels,
                 difficulty=difficulty, sample_type=sample_type,
                 sample_structure=sample_structure,
                 focus_label=run.config.focus_label, robin_labels=selected_robin_labels,
@@ -1103,8 +1096,31 @@ class Pipeline:
             or candidate is None
         ):
             return None
-        unsafe_types = {"credential_risk", "real_pii_risk"}
-        if unsafe_types & {issue.type for issue in issues}:
+        soft_quality_types = {
+            "content_quality",
+            "local_wording",
+            "unnatural_text",
+            "unnatural_language",
+            "incoherent_text",
+            "unrealistic_scenario",
+            "fewshot_imitation",
+        }
+        audited_issues = [
+            *validation.issues,
+            *issues,
+        ]
+        issue_types = {
+            issue.type.strip().casefold()
+            for issue in audited_issues
+        }
+        if issue_types - soft_quality_types:
+            logger.error(
+                "[sample %s/%s] final-candidate fallback refused because "
+                "non-quality issues remain: %s",
+                task.slot_no or task.sequence_no,
+                run.config.num_samples,
+                ",".join(sorted(issue_types - soft_quality_types)),
+            )
             return None
         try:
             self.formatter.format(
@@ -1130,7 +1146,7 @@ class Pipeline:
             "quality issue(s)",
             task.slot_no or task.sequence_no,
             run.config.num_samples,
-            len(issues),
+            len(audited_issues),
         )
         self.event_bus.publish(EventEnvelope(
             event_type="sample.fallback_accepted",
@@ -1143,7 +1159,7 @@ class Pipeline:
                 "task_id": task.task_id,
                 "slot_no": task.slot_no,
                 "attempt_no": candidate.attempt_no,
-                "issues": [issue.dict() for issue in issues],
+                "issues": [issue.dict() for issue in audited_issues],
                 "output_validation": validation.dict(),
             },
         ))

@@ -44,6 +44,16 @@ _DATE = re.compile(
 _TIME = re.compile(r"(?<!\d)(?:(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?|(?:0?[1-9]|1[0-2]):[0-5]\d\s?(?:AM|PM))(?!\d)", re.IGNORECASE)
 _IP = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 _IDENTIFIER = re.compile(r"\b(?:ACC|USR|EMP|INC|BH)-[A-Z0-9]{5,}\b", re.IGNORECASE)
+_BANK_NAME = re.compile(
+    r"(?<![\w])(?:"
+    r"Vietcombank|VietinBank|Agribank|Techcombank|Sacombank|"
+    r"VPBank|TPBank|HDBank|Nam\s+A\s+Bank|MB\s*Bank|MBBank|"
+    r"Eximbank|SeABank|PVcomBank|KienlongBank|Saigonbank|"
+    r"BaoViet\s+Bank|Bac\s+A\s+Bank|ABBank|BIDV|ACB|VIB|"
+    r"SHB|OCB|MSB"
+    r")(?![\w])",
+    re.IGNORECASE,
+)
 _PLATE_WITH_CONTEXT = re.compile(
     r"(?i)(?:biển(?:\s+số)?(?:\s+xe)?|biển\s+kiểm\s+soát)"
     r"\s*(?:là|số|:)?\s*"
@@ -79,6 +89,7 @@ _HARD_NEGATIVE_META = re.compile(
 _ADDRESS = re.compile(r"(?=.*\d)(?=.*[^\W\d_]).*\s+.*", re.UNICODE)
 _TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9_]*>")
 _ENTITY_PAIR = re.compile(r"<([A-Z][A-Z0-9_]*)>(.*?)</\1>", re.DOTALL)
+_RESIDUAL_ANGLE_MARKUP = re.compile(r"<[^<>\r\n]{1,120}>")
 _MIXED_LOCALE = re.compile(r"JaneHuyện|JohnQuận|SmithPhường|\b(?:County|Street|Avenue|undefined|null|N/A|xxx)\b", re.IGNORECASE)
 
 
@@ -625,6 +636,24 @@ class DeterministicOutputValidator:
                 issues.append(ValidationIssue(type="invalid_output", scope="TEXT", reason=reason))
 
         clean_text = _TAG.sub("", tagged_text).strip()
+        text_without_entity_pairs = _ENTITY_PAIR.sub(
+            lambda match: match.group(2),
+            tagged_text,
+        )
+        residual_markup = _RESIDUAL_ANGLE_MARKUP.search(
+            text_without_entity_pairs
+        )
+        if residual_markup:
+            issues.append(ValidationIssue(
+                type="invalid_output",
+                scope="TEXT",
+                reason=(
+                    "clean text contains residual angle-bracket markup "
+                    f"{residual_markup.group(0)!r}; only valid taxonomy entity "
+                    "tags may use angle brackets"
+                ),
+                value=residual_markup.group(0),
+            ))
         for _, _, artifact in find_template_artifacts(tagged_text):
             issues.append(ValidationIssue(
                 type="template_artifact",
@@ -801,7 +830,8 @@ class DeterministicOutputValidator:
     @staticmethod
     def _structured_detectors() -> Iterable[tuple[str, re.Pattern[str]]]:
         return (("EMAIL", _EMAIL), ("PHONE", _PHONE), ("URL", _URL), ("DATE", _DATE),
-                ("TIME", _TIME), ("IP", _IP), ("ACCOUNT_ID", _IDENTIFIER))
+                ("TIME", _TIME), ("IP", _IP), ("ACCOUNT_ID", _IDENTIFIER),
+                ("CARD_ISSUER", _BANK_NAME))
 
     @staticmethod
     def _missing_repeated_annotations(
@@ -878,15 +908,31 @@ class DeterministicOutputValidator:
         for label, value, start, end in candidates:
             if value in excluded_values:
                 continue
-            if any(span.start <= start and span.end >= end for span in spans):
+            covering_spans = [
+                span
+                for span in spans
+                if span.start <= start and span.end >= end
+            ]
+            if any(span.label == label for span in covering_spans):
                 continue
             context = clean[max(0, start - 45):min(len(clean), end + 45)].strip()
+            existing_label = (
+                covering_spans[0].label
+                if covering_spans
+                else None
+            )
             issues.append(ValidationIssue(
                 type="missing_annotation_candidate",
                 scope="TEXT",
                 reason=(
-                    f"clear contextual {label} candidate {value!r} is untagged; "
-                    f"local context: {context!r}"
+                    f"clear contextual {label} candidate {value!r} is "
+                    + (
+                        f"incorrectly covered by {existing_label}; relabel the "
+                        "exact candidate boundary; "
+                        if existing_label
+                        else "untagged; "
+                    )
+                    + f"local context: {context!r}"
                 ),
                 label=label,
                 value=value,

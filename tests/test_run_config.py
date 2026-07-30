@@ -144,7 +144,7 @@ class DistributionRunConfigTests(unittest.TestCase):
             [tuple((item["type"], item.get("custom_instruction"))) for item in pool] * 5,
         )
 
-    def test_additional_unseeded_pii_uses_full_taxonomy_annotation_pool(self) -> None:
+    def test_annotation_pool_always_covers_full_taxonomy_for_incidental_pii(self) -> None:
         config = RunConfig(
             num_samples=1,
             focus_labels=["PERSON"],
@@ -154,7 +154,7 @@ class DistributionRunConfigTests(unittest.TestCase):
                 "pure_negative": 0.0,
                 "hard_negative": 0.0,
             },
-            value_bank={"allow_additional_unseeded_pii": True},
+            value_bank={"allow_additional_unseeded_pii": False},
         )
         pipeline, repository, _ = build_pipeline(offline=True)
         taxonomy = pipeline.taxonomy_service.import_json(

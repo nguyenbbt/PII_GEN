@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 from .contracts import DataGenerationRequest
 from .placeholders import placeholder_entities
 
-PROMPT_VERSION = "data-generator.v12.0.0"
+PROMPT_VERSION = "data-generator.v12.1.0"
 
 SYSTEM_PROMPT = """# Role
 You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
@@ -35,6 +35,19 @@ You are the Data Generator for a synthetic PII Named Entity Recognition dataset.
     bracket slots such as [Tên Công ty], [Ngày], [Chức danh], [Tên Tài Xế],
     [Company Name], or similar fields. Square brackets are reserved exclusively for
     the supplied canonical entity placeholders such as [PERSON_1].
+11. Every explicit bank name is CARD_ISSUER under this project's taxonomy,
+    regardless of whether the bank is issuing a card in that sentence. Never tag a
+    bank name as ORGANIZATION. Inside a longer campaign, product, or program name,
+    tag only the exact bank-name substring, for example
+    `<CARD_ISSUER>Vietcombank</CARD_ISSUER> Xanh`.
+12. All headings, field captions, subject labels, and speaker labels must use the
+    requested language. `Speaker A`, `Speaker B`, and `Subject:` are English-only;
+    for Vietnamese use natural Vietnamese labels or business roles.
+13. Use PREFIX only as a natural title or direct form of address, normally next to
+    a person mention. Never force a prefix into an unnatural phrase such as a
+    detached demographic description.
+14. Angle brackets are reserved exclusively for valid taxonomy tags. Never wrap a
+    raw value, code, status, or phrase in `<...>`.
 
 # Few-Shot Use Policy
 - Examples under `taxonomy_guidance.focus_label.examples` teach label meaning,

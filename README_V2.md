@@ -698,13 +698,13 @@ Các field chính:
 | `max_entities` | Mục tiêu entity khi generate; verifier có thể bổ sung annotation bị bỏ sót |
 | `max_regenerate_attempts` | Số lần sinh lại trong cùng task |
 | `max_task_replacements` | Số task thay thế tối đa cho mỗi slot |
-| `value_bank` | `path`, `language_files`, seed-pack retry và unseeded-PII policy; bật `allow_additional_unseeded_pii` để verifier gắn nhãn PII phát sinh trong context |
+| `value_bank` | `path`, `language_files`, seed-pack retry và partition. `allow_additional_unseeded_pii` chỉ còn được parse để tương thích config cũ; annotation/verifier luôn nhận toàn bộ taxonomy để sửa PII phát sinh ngoài ý muốn |
 | `hard_negative` | Mode, decoy count, focus limits, technical hard cap và context/integration policy |
 | `complexity_limits` | Complexity budget theo sample type |
 | `validation` | Technical validator settings; technical validation luôn chạy |
 | `validation.quality_checks_enabled` | Cờ legacy; chỉ migrate sang `novelty.enabled`/`verifier.enabled` khi section mới tương ứng chưa khai báo |
 | `novelty` | Bật/tắt, `off/audit/enforce`, similarity threshold, recent window và feedback limit |
-| `validation.accept_last_candidate_on_exhaustion` | Hết Generator attempt và task replacement thì xuất candidate cuối nếu Formatter vẫn bảo đảm schema/tag/offset; summary báo `fallback_accepts` |
+| `validation.accept_last_candidate_on_exhaustion` | Hết Generator attempt và task replacement thì chỉ xuất candidate cuối khi còn lỗi chất lượng mềm (wording/naturalness/coherence). Không fallback nếu còn lỗi seed, entity, tag, markup, decoy, schema hoặc offset; summary báo `fallback_accepts` |
 | `verifier.enabled` | Bật/tắt LLM Judge/Repair; config mẫu bật |
 | `verifier.max_repairs_per_candidate` | Cho phép `0`, `1` hoặc `2`; vòng hai chỉ chạy khi re-Judge còn trả lỗi cục bộ `FIXABLE` |
 | `parallel_generation` | Số worker, kích thước shard và số lần retry mỗi shard |
@@ -743,10 +743,21 @@ Ví dụ:
 Path tuyệt đối được dùng nguyên trạng. Với CLI, path tương đối được thử từ thư
 mục chứa config, working directory, rồi project root; taxonomy JSON mặc định và
 Value Bank mặc định vì vậy vẫn chạy khi entry point được gọi ngoài repo root.
+Khi chạy song song, mỗi shard ưu tiên partition riêng. Nếu một class không có
+value trong partition đó, provider ghi warning và lấy từ full pool của đúng
+ngôn ngữ/class bằng cùng RNG seed. Nếu các value trong partition đã dùng hết
+trong sample, provider cũng fallback sang phần chưa dùng của full pool. Cơ chế
+này tránh shard chết với class nhỏ nhưng vẫn tái lập được; file Value Bank
+không bị chỉnh sửa.
 Config `faker`/`seed_generation` cũ được parse như alias migration sang
 `value_bank`; `locale` cũ bị bỏ qua và không còn runtime Faker. Ba Value Bank
 `vi/en/de` là runtime artifact local-only, không được version-control và được
 validate fail-fast trước khi tạo task.
+
+Project override cho taxonomy: mọi tên ngân hàng rõ ràng đều được gán
+`CARD_ISSUER` trong mọi ngữ cảnh, không dùng `ORGANIZATION`. Nếu tên ngân hàng
+nằm trong tên chiến dịch/sản phẩm dài hơn thì chỉ tag đúng substring tên ngân
+hàng, ví dụ `<CARD_ISSUER>Vietcombank</CARD_ISSUER> Xanh`.
 
 `value_bank.partition_index`/`partition_count` là setting nội bộ của parallel
 runner. Runner tự gán partition hash ổn định, không giao nhau cho từng shard để

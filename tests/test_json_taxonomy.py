@@ -42,6 +42,37 @@ class JsonTaxonomyParserTests(unittest.TestCase):
             for blueprint in api_key.decoy_blueprints
         ))
 
+    def test_card_issuer_policy_tags_bank_names_in_every_context(self) -> None:
+        taxonomy = JsonTaxonomyParser().parse_file(
+            Path("pii_taxonomy_rules.json")
+        )
+        card_issuer = next(
+            label
+            for label in taxonomy.labels
+            if label.code == "CARD_ISSUER"
+        )
+        example = next(
+            item
+            for item in card_issuer.examples.hard_negative
+            if item.id == "card_issuer_3"
+        )
+
+        self.assertIn("every explicit bank name", card_issuer.rules[0])
+        self.assertEqual(
+            example.expected_tagged_text.count(
+                "<CARD_ISSUER>Vietcombank</CARD_ISSUER>"
+            ),
+            2,
+        )
+        self.assertNotIn(
+            "Vietcombank Xanh",
+            {
+                surface
+                for blueprint in card_issuer.decoy_blueprints
+                for surface in blueprint.surface_templates
+            },
+        )
+
     def test_rejects_duplicate_labels(self) -> None:
         source = json.loads(
             Path("pii_taxonomy_rules.json").read_text(encoding="utf-8")

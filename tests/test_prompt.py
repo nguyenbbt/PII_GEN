@@ -50,7 +50,7 @@ class DataGeneratorPromptTests(unittest.TestCase):
 
         messages = build_messages(request)
 
-        self.assertEqual(PROMPT_VERSION, "data-generator.v12.0.0")
+        self.assertEqual(PROMPT_VERSION, "data-generator.v12.1.0")
         self.assertEqual(messages[0], {"role": "system", "content": SYSTEM_PROMPT})
         self.assertNotIn("task-1", messages[0]["content"])
         self.assertIn("# Generation Request", messages[1]["content"])
@@ -64,6 +64,14 @@ class DataGeneratorPromptTests(unittest.TestCase):
         self.assertIn("Do not copy or closely paraphrase", messages[0]["content"])
         self.assertIn("sentence structure", messages[0]["content"])
         self.assertIn("Never serialize entity seeds as a comma-separated list", messages[0]["content"])
+        self.assertIn(
+            "Every explicit bank name is CARD_ISSUER",
+            messages[0]["content"],
+        )
+        self.assertIn(
+            "Speaker A",
+            messages[0]["content"],
+        )
         envelope = json.loads(messages[1]["content"].split("```json\n", 1)[1].split("\n```", 1)[0])
         self.assertEqual(
             envelope["taxonomy_guidance"]["focus_label"]["label"],

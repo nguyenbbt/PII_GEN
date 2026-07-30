@@ -64,6 +64,93 @@ class ValueBankEntityProviderTests(unittest.TestCase):
                     )
                 )
 
+    def test_empty_partition_falls_back_to_the_full_class_pool(self) -> None:
+        with TemporaryDirectory() as directory:
+            self._write_bank(
+                Path(directory) / "vi_pii_value_pools.json",
+                {"PREFIX": ["Ông"]},
+            )
+            provider = ValueBankEntityProvider(
+                directory,
+                partition_index=9,
+                partition_count=10,
+            )
+
+            self.assertEqual(provider.values_for("vi", "PREFIX"), ("Ông",))
+            self.assertEqual(
+                provider.generate("PREFIX", "vi", random.Random(174)),
+                "Ông",
+            )
+
+    def test_partition_exhaustion_uses_unused_values_from_the_full_pool(self) -> None:
+        with TemporaryDirectory() as directory:
+            self._write_bank(
+                Path(directory) / "vi_pii_value_pools.json",
+                {"PERSON": ["An", "Em", "Bình"]},
+            )
+            provider = ValueBankEntityProvider(
+                directory,
+                partition_index=0,
+                partition_count=2,
+            )
+            partition_values = tuple(provider.values_for("vi", "PERSON"))
+            self.assertTrue(partition_values)
+            excluded = set(partition_values)
+
+            selected = provider.generate(
+                "PERSON",
+                "vi",
+                random.Random(174),
+                excluded_values=excluded,
+            )
+
+            self.assertIn(selected, {"An", "Em", "Bình"} - excluded)
+
+    def test_partition_fallback_is_reproducible(self) -> None:
+        with TemporaryDirectory() as directory:
+            self._write_bank(
+                Path(directory) / "vi_pii_value_pools.json",
+                {"ETHNICITY": ["Kinh", "Tày"]},
+            )
+            provider = ValueBankEntityProvider(
+                directory,
+                partition_index=7,
+                partition_count=10,
+            )
+
+            first = provider.generate(
+                "ETHNICITY",
+                "vi",
+                random.Random(174),
+            )
+            repeated = provider.generate(
+                "ETHNICITY",
+                "vi",
+                random.Random(174),
+            )
+
+            self.assertEqual(first, repeated)
+
+    def test_mixed_spelled_and_numeric_pin_or_cvv_values_are_filtered(self) -> None:
+        with TemporaryDirectory() as directory:
+            self._write_bank(
+                Path(directory) / "vi_pii_value_pools.json",
+                {
+                    "PIN": ["một tám 42", "0-1-3-7", "một tám bốn hai"],
+                    "CVV": ["tám 013", "9 0 3", "chín không ba"],
+                },
+            )
+            provider = ValueBankEntityProvider(directory)
+
+            self.assertEqual(
+                provider.values_for("vi", "PIN"),
+                ("0-1-3-7", "một tám bốn hai"),
+            )
+            self.assertEqual(
+                provider.values_for("vi", "CVV"),
+                ("9 0 3", "chín không ba"),
+            )
+
     def test_current_banks_cover_all_taxonomy_classes_in_three_languages(self) -> None:
         provider = ValueBankEntityProvider("PII_Value_Bank")
         taxonomy = json.loads(
@@ -79,6 +166,34 @@ class ValueBankEntityProviderTests(unittest.TestCase):
                     if provider.values_for(language, label)
                 }
                 self.assertEqual(available, expected_classes)
+
+    def test_small_real_classes_are_available_in_all_ten_shards(self) -> None:
+        for label in ("PREFIX", "ETHNICITY"):
+            for partition_index in range(10):
+                with self.subTest(
+                    label=label,
+                    partition_index=partition_index,
+                ):
+                    provider = ValueBankEntityProvider(
+                        "PII_Value_Bank",
+                        partition_index=partition_index,
+                        partition_count=10,
+                    )
+                    values = provider.values_for("vi", label)
+                    first = provider.generate(
+                        label,
+                        "vi",
+                        random.Random(174),
+                    )
+                    repeated = provider.generate(
+                        label,
+                        "vi",
+                        random.Random(174),
+                    )
+
+                    self.assertTrue(values)
+                    self.assertIn(first, values)
+                    self.assertEqual(first, repeated)
 
     def test_sampling_is_reproducible_and_uses_requested_language_and_class(self) -> None:
         provider = ValueBankEntityProvider("PII_Value_Bank")

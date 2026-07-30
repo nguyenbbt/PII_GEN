@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import random
 import re
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ _CLASS_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _LANGUAGE = re.compile(r"^[a-z]{2}$")
 _SUPPORTED_VERSION = 1
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
+logger = logging.getLogger(__name__)
 
 
 def resolve_value_bank_path(
@@ -127,6 +129,22 @@ class ValueBankEntityProvider:
         values = self.values_for(language, label)
         excluded = {str(value) for value in excluded_values}
         available = [value for value in values if value not in excluded]
+        if not available and self.partition_count > 1:
+            source_values = self._source_values_for(language, label)
+            available = [
+                value
+                for value in source_values
+                if value not in excluded
+            ]
+            if available:
+                logger.warning(
+                    "Value Bank partition %s/%s for language=%s class=%s "
+                    "has no unused value; falling back to the full class pool",
+                    self.partition_index + 1,
+                    self.partition_count,
+                    self._normalise_language(language),
+                    str(label).strip().upper(),
+                )
         if not available:
             raise ValueBankEmptyClassError(
                 f"Value Bank class {label!r} for language {language!r} "
@@ -135,6 +153,31 @@ class ValueBankEntityProvider:
         return GeneratedEntityValue(rng.choice(available))
 
     def values_for(self, language: str, label: str) -> Sequence[str]:
+        source_values = self._source_values_for(language, label)
+        normalised_language = self._normalise_language(language)
+        normalised_label = str(label).strip().upper()
+        values = tuple(
+            value
+            for value in source_values
+            if self._belongs_to_partition(value)
+        )
+        if not values:
+            logger.warning(
+                "Value Bank partition %s/%s is empty for language=%s "
+                "class=%s; falling back to the full class pool",
+                self.partition_index + 1,
+                self.partition_count,
+                normalised_language,
+                normalised_label,
+            )
+            return source_values
+        return values
+
+    def _source_values_for(
+        self,
+        language: str,
+        label: str,
+    ) -> tuple[str, ...]:
         normalised_language = self._normalise_language(language)
         normalised_label = str(label).strip().upper()
         bank = self._load_language(normalised_language)
@@ -153,17 +196,26 @@ class ValueBankEntityProvider:
                     bank.get("LOCATION", ()),
                 )
             )
-        values = tuple(
+        source_values = tuple(
             value
             for value in source_values
-            if self._belongs_to_partition(value)
+            if self._is_usable_value(normalised_label, value)
         )
-        if not values:
+        if not source_values:
             raise ValueBankEmptyClassError(
                 f"Value Bank class {normalised_label!r} for language "
-                f"{normalised_language!r} has no values"
+                f"{normalised_language!r} has no usable values"
             )
-        return values
+        return source_values
+
+    @staticmethod
+    def _is_usable_value(label: str, value: str) -> bool:
+        """Reject ambiguous code surfaces without modifying the source bank."""
+        if label not in {"PIN", "CVV"}:
+            return True
+        has_digit = any(character.isdigit() for character in value)
+        has_letter = any(character.isalpha() for character in value)
+        return (has_digit or has_letter) and not (has_digit and has_letter)
 
     @staticmethod
     def _contains_location_suffix(

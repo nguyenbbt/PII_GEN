@@ -554,7 +554,7 @@ class QualityFirstPipelineTests(unittest.TestCase):
             self.assertEqual(repository.get_run(run.run_id).status, "FAILED")
             self.assertEqual(list(Path(directory).glob("*.json")), [])
 
-    def test_best_effort_mode_accepts_last_structurally_safe_candidate(self) -> None:
+    def test_best_effort_mode_refuses_missing_required_entity(self) -> None:
         class AlwaysSemanticallyInvalidClient:
             @staticmethod
             def generate(messages):
@@ -579,18 +579,10 @@ class QualityFirstPipelineTests(unittest.TestCase):
 
             results = pipeline.generate_pending(run.run_id, 1)
 
-            self.assertEqual(len(results), 1)
-            self.assertFalse(results[0].output_validation.valid)
-            self.assertEqual(
-                results[0].formatted_sample.text,
-                "No required entity was generated.",
-            )
-            self.assertEqual(repository.get_run(run.run_id).status, "COMPLETED")
-            self.assertTrue(
-                repository.get_run(run.run_id).output_path.endswith(".json")
-            )
+            self.assertEqual(results, [])
+            self.assertEqual(repository.get_run(run.run_id).status, "FAILED")
             event_types = [event.event_type for event in events.list_events()]
-            self.assertIn("sample.fallback_accepted", event_types)
+            self.assertNotIn("sample.fallback_accepted", event_types)
 
     def test_best_effort_mode_can_audit_verifier_regenerate_and_finalize(self) -> None:
         class AlwaysRegenerateVerifier:

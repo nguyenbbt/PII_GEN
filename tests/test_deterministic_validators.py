@@ -326,6 +326,76 @@ class DeterministicValidatorTests(unittest.TestCase):
             findings,
         )
 
+    def test_residual_angle_bracket_markup_is_invalid_output(self) -> None:
+        pack = SeedPack(
+            task_id="angle-artifact",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[PositiveEntitySeed(
+                label="PERSON",
+                value="Mai Huyền",
+                semantic_role="requester",
+            )],
+        )
+
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Mai Huyền</PERSON> gửi mã hồ sơ <TMA24F5204> "
+                "và trạng thái <Chưa vợ>."
+            ),
+            entities=[GeneratedEntity(label="PERSON", value="Mai Huyền")],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            allowed_labels=["PERSON"],
+            max_entities=2,
+        )
+
+        self.assertIn(
+            "invalid_output",
+            {issue.type for issue in result.issues},
+        )
+        self.assertTrue(any(
+            "angle-bracket" in issue.reason
+            for issue in result.issues
+        ))
+
+    def test_untagged_bank_name_is_card_issuer_in_every_context(self) -> None:
+        pack = SeedPack(
+            task_id="bank-name",
+            sample_type="positive",
+            context_frame=frame(),
+            positive_entities=[PositiveEntitySeed(
+                label="PERSON",
+                value="Mai Huyền",
+                semantic_role="requester",
+            )],
+        )
+
+        result = self.output.validate(
+            tagged_text=(
+                "<PERSON>Mai Huyền</PERSON> tham gia chiến dịch "
+                "Vietcombank Xanh."
+            ),
+            entities=[GeneratedEntity(label="PERSON", value="Mai Huyền")],
+            seed_pack=pack,
+            focus_labels=["PERSON"],
+            allowed_labels=["PERSON", "CARD_ISSUER"],
+            max_entities=2,
+        )
+
+        findings = {
+            (issue.type, issue.label, issue.value)
+            for issue in result.issues
+        }
+        self.assertIn(
+            (
+                "missing_annotation_candidate",
+                "CARD_ISSUER",
+                "Vietcombank",
+            ),
+            findings,
+        )
+
     def test_tagged_url_followed_by_sentence_punctuation_is_not_missing(self) -> None:
         value = "https://portal.example.vn/case?id=42"
         pack = SeedPack(

@@ -167,6 +167,17 @@ class FakeVerifierClient:
 
 
 class VerifierServiceTests(unittest.TestCase):
+    def test_prompt_enforces_bank_override_language_labels_and_angle_markup(self) -> None:
+        self.assertIn(
+            "every explicit bank name is CARD_ISSUER",
+            _JUDGE_SYSTEM_PROMPT,
+        )
+        self.assertIn("Speaker A", _JUDGE_SYSTEM_PROMPT)
+        self.assertIn(
+            "Angle brackets may contain only valid taxonomy entity tags",
+            _JUDGE_SYSTEM_PROMPT,
+        )
+
     def test_per_call_repair_limit_does_not_mutate_shared_service(self) -> None:
         client = FakeVerifierClient([decision("FIXABLE")])
         service = VerifierService(client, max_repairs_per_candidate=1)

@@ -2919,8 +2919,8 @@
   },
   {
     "LABEL": "CARD_ISSUER",
-    "DEFINITION": "The brand, network, or issuing institution associated with a payment card.",
-    "RULE": "Label the brand, network, or institution that issues a payment card. Do not label a bank name in a context unrelated to card issuance or a generic card type that does not identify an issuer.",
+    "DEFINITION": "The brand or network associated with a payment card, plus every explicit bank name under the project's bank-name override.",
+    "RULE": "Label a payment-card brand or network when its context has that meaning. Project override: label every explicit bank name as CARD_ISSUER in every context, never as ORGANIZATION. Inside a longer campaign, product, or program name, tag only the exact bank-name substring. A non-bank surface that also names a card brand remains context-sensitive.",
     "EXAMPLES": {
       "POSITIVE": [
         {
@@ -2969,8 +2969,8 @@
         },
         {
           "id": "card_issuer_3",
-          "expected_tagged_text": "<CARD_ISSUER>Vietcombank</CARD_ISSUER> phát hành thẻ doanh nghiệp dùng để thanh toán <MONEY>2.000.000 đồng</MONEY>. Trong cùng tài liệu, “Vietcombank Xanh” là tên một chiến dịch truyền thông và không phải một occurrence riêng của tổ chức phát hành. Theo rule project, tên ngân hàng trong vai trò ngân hàng vẫn dùng CARD_ISSUER chứ không gán ORGANIZATION.",
-          "rationale": "Vietcombank đầu tiên là ngân hàng phát hành thẻ và theo policy của project phải được gán CARD_ISSUER. Cụm “Vietcombank Xanh” là tên chiến dịch, nên không được tách riêng substring Vietcombank thành một entity khác nếu toàn cụm chỉ đóng vai trò tên chương trình. Case này kiểm tra cả project override và boundary của tên riêng chứa thương hiệu ngân hàng."
+          "expected_tagged_text": "Ứng dụng có tính năng “Discover” để khám phá ưu đãi; thẻ doanh nghiệp do <CARD_ISSUER>Vietcombank</CARD_ISSUER> phát hành. Trong chiến dịch “<CARD_ISSUER>Vietcombank</CARD_ISSUER> Xanh”, chỉ đúng tên ngân hàng được gán nhãn.",
+          "rationale": "Discover ở đây là tên một tính năng khám phá ưu đãi, không mang nghĩa mạng thẻ. Cả hai lần xuất hiện của Vietcombank đều là tên ngân hàng nên theo project override phải được gán CARD_ISSUER bất kể ngữ cảnh; hậu tố Xanh nằm ngoài span."
         }
       ]
     },
@@ -3033,12 +3033,12 @@
           "card_issuer_3"
         ],
         "family": "business_reference",
-        "contrast_principle": "In a new event, use 'Vietcombank Xanh' only as tên chiến dịch; it must not carry CARD_ISSUER meaning merely because its surface resembles that label.",
+        "contrast_principle": "In a new event, use 'Discover' only as a product discovery feature; it must not carry CARD_ISSUER meaning merely because its surface resembles a card brand.",
         "surface_templates": [
-          "Vietcombank Xanh"
+          "Discover"
         ],
         "evidence_cues": [
-          "tên chiến dịch"
+          "tính năng khám phá ưu đãi"
         ],
         "forbidden_cues": [],
         "compatible_domains": [],
